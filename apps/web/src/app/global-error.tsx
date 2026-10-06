@@ -4,7 +4,7 @@ import { useEffect } from "react";
 import { reportClientError } from "@/lib/report-client-error";
 
 /** Last-resort error page, used when the root layout itself fails. It can't rely on the app's styles. */
-export default function GlobalError({ error, reset }: { error: Error & { digest?: string }; reset: () => void }) {
+export default function GlobalError({ error, retry }: { error: Error & { digest?: string }; retry: () => void }) {
   useEffect(() => {
     if (!error.digest) reportClientError(error);
   }, [error]);
@@ -18,7 +18,7 @@ export default function GlobalError({ error, reset }: { error: Error & { digest?
             We&apos;ve been notified. Please try again.
             {error.digest ? <span style={{ display: "block", fontFamily: "monospace", fontSize: 12, marginTop: 4 }}>Reference: {error.digest}</span> : null}
           </p>
-          <button type="button" onClick={reset} style={{ padding: "6px 14px", fontSize: 14, cursor: "pointer" }}>
+          <button type="button" onClick={() => retry()} style={{ padding: "6px 14px", fontSize: 14, cursor: "pointer" }}>
             Try again
           </button>
         </main>
