@@ -5,12 +5,14 @@ import { Worker } from "bullmq";
 import { createDefaultRegistry } from "@autoapply/ats-adapters";
 import { prisma } from "@autoapply/database";
 import { getStorage } from "@autoapply/documents";
+import { captureException, flushErrorReports, initErrorReporting, installProcessHandlers } from "@autoapply/ops";
 import { createApplicationQueue, createRedis, parseControlMessage, type ApplicationJobData } from "@autoapply/queue";
 import { CONTROL_CHANNEL, QUEUE_NAMES } from "@autoapply/shared";
 import { BrowserPool } from "./browser";
 import { loadConfig } from "./config";
 import { ABORT_REASONS, ApplicationEngine } from "./engine";
 import { startHeartbeat } from "./heartbeat";
+import { startMaintenance } from "./maintenance";
 import { createProcessor, type ActiveRun } from "./processor";
 import { Scheduler } from "./scheduler";
 
@@ -21,6 +23,9 @@ import { Scheduler } from "./scheduler";
  */
 const rootEnv = resolve(import.meta.dirname, "../../../.env");
 if (existsSync(rootEnv)) process.loadEnvFile(rootEnv);
+
+initErrorReporting("worker");
+installProcessHandlers();
 
 const config = loadConfig();
 const workerId = `${hostname()}:${process.pid}`;
@@ -41,7 +46,12 @@ const worker = new Worker<ApplicationJobData>(QUEUE_NAMES.applications, createPr
   // Our own lease handles crashed workers; BullMQ's stalled check is a second net.
   lockDuration: 60_000,
 });
-worker.on("failed", (job, error) => console.error(`[worker] job ${job?.id} errored`, error));
+// Applications that fail on an employer's site are recorded on the application; this is the processor itself crashing.
+worker.on("failed", (job, error) => {
+  console.error(`[worker] job ${job?.id} errored`, error);
+  captureException(error, { tags: { queue: QUEUE_NAMES.applications }, extra: { applicationId: job?.data.applicationId }, userId: job?.data.userId });
+});
+worker.on("error", (error) => captureException(error, { tags: { queue: QUEUE_NAMES.applications, kind: "worker-error" } }));
 
 await subscriber.subscribe(CONTROL_CHANNEL);
 subscriber.on("message", (_channel, raw) => {
@@ -56,6 +66,11 @@ subscriber.on("message", (_channel, raw) => {
 
 const heartbeat = startHeartbeat(publisher, { adapters: () => registry.list().map((a) => a.platform), activeJobs: () => active.size, interactive: () => browsers.interactive });
 scheduler.start();
+const maintenance = await startMaintenance(config.redisUrl).catch((error: unknown) => {
+  console.error("[worker] could not start backups", error);
+  captureException(error, { tags: { component: "maintenance" } });
+  return null;
+});
 console.warn(
   `[worker] ${workerId} running: concurrency ${config.concurrency}, ${config.headless ? "headless" : "visible"} browser, ` +
     (config.allowAllHosts ? "all public sites allowed" : `sites limited to ${config.allowedHosts.join(", ")}`),
@@ -69,11 +84,13 @@ async function shutdown(signal: string) {
   scheduler.stop();
   for (const run of active.values()) run.controller.abort(ABORT_REASONS.shutdown);
   await worker.close().catch(() => undefined);
+  await maintenance?.close();
   await heartbeat.stop().catch(() => undefined);
   await browsers.close();
   await queue.close().catch(() => undefined);
   for (const r of [connection, publisher, subscriber]) r.disconnect();
   await prisma.$disconnect();
+  await flushErrorReports(2000);
   process.exit(0);
 }
 process.on("SIGINT", () => void shutdown("SIGINT"));

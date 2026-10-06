@@ -15,7 +15,8 @@
     "db:generate": "pnpm --filter @autoapply/database generate",
     "db:migrate": "pnpm --filter @autoapply/database migrate:dev",
     "db:deploy": "pnpm --filter @autoapply/database migrate:deploy",
-    "db:studio": "pnpm --filter @autoapply/database studio"
+    "db:studio": "pnpm --filter @autoapply/database studio",
+    "ops": "pnpm --silent --filter @autoapply/ops ops"
   },
   "devDependencies": {
     "@eslint/js": "^9.39.0",
