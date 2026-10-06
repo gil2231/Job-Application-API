@@ -45,5 +45,8 @@ export const LIMITS = {
   signIn: { limit: relaxed ? 200 : 10, windowMs: 15 * 60_000 },
   signUp: { limit: relaxed ? 500 : 5, windowMs: 60 * 60_000 },
   upload: { limit: 30, windowMs: 60 * 60_000 },
+  /** Imports and posting lookups fetch other sites, so they're limited separately. */
+  jobImport: { limit: relaxed ? 500 : 30, windowMs: 60 * 60_000 },
+  postingLookup: { limit: relaxed ? 500 : 60, windowMs: 60 * 60_000 },
   mutation: { limit: 120, windowMs: 60_000 },
 } as const;

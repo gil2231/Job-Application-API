@@ -253,6 +253,25 @@ export const manualJobSchema = z.object({
 });
 export type ManualJobInput = z.infer<typeof manualJobSchema>;
 
+/** Editing a stored job's details (the URL identifies the job and can't change). */
+export const jobDetailsSchema = manualJobSchema.omit({ url: true });
+export type JobDetailsFormInput = z.infer<typeof jobDetailsSchema>;
+
+export const importUrlsSchema = z.object({
+  text: z.string().trim().min(1, "Paste at least one job URL").max(100_000, "That's too much text. Paste up to 100 URLs at a time."),
+});
+
+export const AI_PROVIDER_OPTIONS = ["anthropic"] as const;
+export const aiSettingsSchema = z.object({
+  aiProvider: z
+    .string()
+    .trim()
+    .transform((v) => (v === "" || v === "none" ? null : v))
+    .refine((v) => v === null || (AI_PROVIDER_OPTIONS as readonly string[]).includes(v), "Unknown AI provider"),
+  aiModel: optionalText(100),
+});
+export type AiSettingsInput = z.infer<typeof aiSettingsSchema>;
+
 const csvEnum = <T extends readonly [string, ...string[]]>(values: T) =>
   z
     .string()

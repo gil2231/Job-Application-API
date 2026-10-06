@@ -17,8 +17,8 @@ const securityHeaders = [
 ];
 
 const nextConfig: NextConfig = {
-  transpilePackages: ["@autoapply/shared", "@autoapply/database", "@autoapply/documents", "@autoapply/ats-adapters", "@autoapply/automation"],
-  serverExternalPackages: ["@prisma/client", "@node-rs/argon2", "ioredis"],
+  transpilePackages: ["@autoapply/shared", "@autoapply/database", "@autoapply/documents", "@autoapply/ats-adapters", "@autoapply/automation", "@autoapply/ai", "@autoapply/matching", "@autoapply/ingestion"],
+  serverExternalPackages: ["@prisma/client", "@node-rs/argon2", "ioredis", "undici"],
   poweredByHeader: false,
   experimental: {
     serverActions: { bodySizeLimit: "11mb" },

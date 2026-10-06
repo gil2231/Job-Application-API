@@ -4,5 +4,7 @@ export * from "./url";
 export * from "./answers";
 export * from "./profile-fields";
 export * from "./match-weights";
+export * from "./analysis";
+export * from "./skills";
 export * from "./schemas";
 export * from "./queue";

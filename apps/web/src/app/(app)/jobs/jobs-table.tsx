@@ -2,9 +2,10 @@
 
 import Link from "next/link";
 import { useState } from "react";
-import { Briefcase, ExternalLink, Eye, MoreHorizontal, RotateCcw, Send, SkipForward, Trash2 } from "lucide-react";
+import { Briefcase, ExternalLink, Eye, MoreHorizontal, RefreshCw, RotateCcw, Send, SkipForward, Trash2 } from "lucide-react";
 import type { JobListRow } from "@autoapply/database";
 import { enumLabel } from "@autoapply/shared";
+import { reanalyzeJobsAction } from "@/actions/ingestion";
 import { applyToJobsAction, deleteJobsAction, retryJobsAction, skipJobsAction } from "@/actions/jobs";
 import { useServerAction } from "@/components/action-button";
 import { Pagination, SortableHead } from "@/components/data-table";
@@ -50,7 +51,7 @@ export function JobsTable({ data, hasFilters }: { data: { rows: Row[]; total: nu
         <EmptyState
           icon={Briefcase}
           title={hasFilters ? "No jobs match these filters" : "No jobs yet"}
-          description={hasFilters ? "Try removing a filter." : "Paste a job URL with Add job. LinkedIn saved-job import arrives with the ingestion phase."}
+          description={hasFilters ? "Try removing a filter." : "Import your LinkedIn saved jobs or paste job URLs with Import, or add one job with Add job."}
         />
       </div>
     );
@@ -166,6 +167,11 @@ export function JobsTable({ data, hasFilters }: { data: { rows: Row[]; total: nu
                           <Eye /> Review
                         </Link>
                       </DropdownMenuItem>
+                      {!r.application && r.status !== "ANALYZING" && (
+                        <DropdownMenuItem disabled={pending} onSelect={() => run(() => reanalyzeJobsAction([r.id]))}>
+                          <RefreshCw /> Re-analyze
+                        </DropdownMenuItem>
+                      )}
                       {canRetry(r) && (
                         <DropdownMenuItem disabled={pending} onSelect={() => run(() => retryJobsAction([r.id]))}>
                           <RotateCcw /> Retry

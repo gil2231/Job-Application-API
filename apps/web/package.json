@@ -12,9 +12,12 @@
     "test:e2e": "playwright test"
   },
   "dependencies": {
+    "@autoapply/ai": "workspace:*",
     "@autoapply/ats-adapters": "workspace:*",
     "@autoapply/database": "workspace:*",
     "@autoapply/documents": "workspace:*",
+    "@autoapply/ingestion": "workspace:*",
+    "@autoapply/matching": "workspace:*",
     "@autoapply/shared": "workspace:*",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",

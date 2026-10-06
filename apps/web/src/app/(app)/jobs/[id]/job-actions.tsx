@@ -2,8 +2,9 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Eye, RotateCcw, Send, SkipForward, Trash2 } from "lucide-react";
+import { Eye, Loader2, RefreshCw, RotateCcw, Send, SkipForward, Trash2 } from "lucide-react";
 import type { ApplicationStatus, JobStatus } from "@autoapply/shared";
+import { reanalyzeJobsAction } from "@/actions/ingestion";
 import { applyToJobsAction, deleteJobsAction, retryJobsAction, skipJobsAction } from "@/actions/jobs";
 import { useServerAction } from "@/components/action-button";
 import {
@@ -78,5 +79,14 @@ export function JobActions({
         </AlertDialog>
       )}
     </>
+  );
+}
+
+export function ReanalyzeButton({ jobId }: { jobId: string }) {
+  const { pending, run } = useServerAction();
+  return (
+    <Button size="sm" variant="outline" disabled={pending} onClick={() => run(() => reanalyzeJobsAction([jobId]))}>
+      {pending ? <Loader2 className="animate-spin" /> : <RefreshCw />} Re-analyze
+    </Button>
   );
 }

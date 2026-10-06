@@ -143,7 +143,7 @@ export class DuplicateJobError extends ConflictError {
  * LinkedIn job id), including jobs the user deleted, so a removed posting is not
  * silently re-added.
  */
-export async function createManualJob(userId: string, input: ManualJobInput, platform: Platform) {
+export async function createManualJob(userId: string, input: ManualJobInput, platform: Platform, options: { fingerprint?: string | null } = {}) {
   const canonicalUrl = canonicalizeJobUrl(input.url);
   const linkedInId = extractLinkedInJobId(input.url);
   const existing = await prisma.job.findFirst({
@@ -183,6 +183,7 @@ export async function createManualJob(userId: string, input: ManualJobInput, pla
         salaryCurrency: salary?.currency ?? null,
         salaryPeriod: salary?.period ?? null,
         salaryAnnualMax: salary?.annualMax ?? null,
+        fingerprint: options.fingerprint ?? null,
       },
     });
   } catch (error) {

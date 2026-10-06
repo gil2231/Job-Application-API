@@ -14,8 +14,10 @@ import {
   skipJobs,
 } from "@autoapply/database";
 import { detectPlatformFromUrl } from "@autoapply/ats-adapters";
+import { jobFingerprint } from "@autoapply/ingestion";
 import { manualJobSchema, type AutomationMode } from "@autoapply/shared";
 import { authedAction, formToObject, parseIds, validationFailed, type ActionResult } from "@/lib/action";
+import { analyzeInBackground } from "@/lib/pipeline";
 
 function refresh() {
   revalidatePath("/jobs");
@@ -31,8 +33,9 @@ export async function addJobAction(_prev: ActionResult<{ jobId: string; deleted?
     if (!parsed.success) return validationFailed(parsed.error);
     const detection = detectPlatformFromUrl(parsed.data.applicationUrl ?? parsed.data.url);
     try {
-      const job = await createManualJob(user.id, parsed.data, detection.platform);
+      const job = await createManualJob(user.id, parsed.data, detection.platform, { fingerprint: jobFingerprint(parsed.data.company, parsed.data.title) });
       await audit(user.id, "job.added", { entityType: "Job", entityId: job.id, metadata: { platform: job.platform } });
+      analyzeInBackground(user.id);
       refresh();
       return { ok: true, message: `Added ${job.title} at ${job.company}`, data: { jobId: job.id } };
     } catch (error) {

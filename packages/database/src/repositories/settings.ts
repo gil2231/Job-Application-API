@@ -1,4 +1,4 @@
-import type { UserSettingsInput } from "@autoapply/shared";
+import type { AiSettingsInput, UserSettingsInput } from "@autoapply/shared";
 import { prisma } from "../client";
 
 export async function getUserSettings(userId: string) {
@@ -42,4 +42,8 @@ export async function setQueueState(userId: string, command: QueueCommand) {
       }
     }
   });
+}
+
+export async function saveAiSettings(userId: string, input: AiSettingsInput) {
+  await prisma.userSetting.upsert({ where: { userId }, update: input, create: { userId, ...input } });
 }

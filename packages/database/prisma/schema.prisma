@@ -22,6 +22,8 @@ datasource db {
 enum JobStatus {
   IMPORTED
   ANALYZING
+  /// Analyzed without a description, so it can't be qualified until the user adds one.
+  NEEDS_DETAILS
   QUALIFIED
   NOT_QUALIFIED
   SKIPPED
@@ -240,6 +242,7 @@ model User {
   coverLetters    CoverLetter[]
   answers         ApplicationAnswer[]
   jobSources      JobSource[]
+  jobImports      JobImport[]
   jobs            Job[]
   applications    Application[]
   events          ApplicationEvent[]
@@ -492,16 +495,51 @@ model JobSource {
   createdAt    DateTime      @default(now())
   updatedAt    DateTime      @updatedAt
 
-  user User  @relation(fields: [userId], references: [id], onDelete: Cascade)
-  jobs Job[]
+  user    User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  jobs    Job[]
+  imports JobImport[]
 
   @@unique([userId, type, name])
+}
+
+enum JobImportStatus {
+  RUNNING
+  COMPLETED
+  FAILED
+}
+
+/// One run of a job source (a file upload, a pasted URL list). Kept as import history.
+model JobImport {
+  id             String          @id @default(cuid())
+  userId         String
+  sourceId       String
+  status         JobImportStatus @default(RUNNING)
+  /// Uploaded file name, or null for pasted input.
+  fileName       String?
+  totalCount     Int             @default(0)
+  createdCount   Int             @default(0)
+  duplicateCount Int             @default(0)
+  /// Rows matching a job the user deleted or already processed.
+  skippedCount   Int             @default(0)
+  failedCount    Int             @default(0)
+  /// ImportIssue[]: per-row problems shown to the user (capped).
+  issues         Json?
+  error          String?
+  createdAt      DateTime        @default(now())
+  completedAt    DateTime?
+
+  user   User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  source JobSource @relation(fields: [sourceId], references: [id], onDelete: Cascade)
+  jobs   Job[]
+
+  @@index([userId, createdAt])
 }
 
 model Job {
   id             String          @id @default(cuid())
   userId         String
   sourceId       String?
+  importId       String?
   sourceType     JobSourceType
   /// Source-specific id (e.g. LinkedIn job id). Unique per user and source.
   externalId     String?
@@ -544,6 +582,11 @@ model Job {
   matchScore              Int?
   /// MatchBreakdownItem[] explaining the score.
   matchBreakdown          Json?
+  /// QualificationResult: every rule checked and its outcome.
+  qualification           Json?
+  scoredAt                DateTime?
+  /// Normalized company + title, used to catch the same posting saved from two places.
+  fingerprint             String?
 
   /// Set once the job has been through the pipeline, so re-imports skip it.
   processedAt DateTime?
@@ -554,6 +597,7 @@ model Job {
 
   user         User          @relation(fields: [userId], references: [id], onDelete: Cascade)
   source       JobSource?    @relation(fields: [sourceId], references: [id], onDelete: SetNull)
+  import       JobImport?    @relation(fields: [importId], references: [id], onDelete: SetNull)
   application  Application?
   resumes      Resume[]
   coverLetters CoverLetter[]
@@ -565,6 +609,7 @@ model Job {
   @@index([userId, matchScore])
   @@index([userId, company])
   @@index([userId, platform])
+  @@index([userId, fingerprint])
 }
 
 // ─── Applications ───────────────────────────────────────────────────────────
