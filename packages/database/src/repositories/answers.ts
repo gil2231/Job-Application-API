@@ -83,3 +83,41 @@ export async function getAnswerSuggestions(userId: string) {
   }));
 }
 export type AnswerSuggestion = Awaited<ReturnType<typeof getAnswerSuggestions>>[number];
+
+/**
+ * Save an answer the user approved on an application to their Answer Library,
+ * so the same question is answered without asking next time. The user chose
+ * to remember it, so it may be submitted without another review.
+ */
+export async function rememberApprovedAnswer(userId: string, questionId: string, questionKey: string) {
+  const question = await prisma.applicationQuestion.findFirst({
+    where: { id: questionId, application: { userId }, status: "APPROVED" },
+    select: { label: true, fieldType: true, answer: { select: { value: true } } },
+  });
+  if (!question?.answer || question.fieldType === "FILE") return false;
+  await rememberAnswer(userId, { questionKey, question: question.label, answer: decryptString(question.answer.value) });
+  return true;
+}
+
+export async function rememberAnswer(userId: string, input: { questionKey: string; question: string; answer: string }) {
+  const standard = STANDARD_QUESTIONS.find((q) => q.key === input.questionKey);
+  const category = standard?.category ?? "OTHER";
+  const isSensitive = SENSITIVE_ANSWER_CATEGORIES.includes(category);
+  const answer = isSensitive ? encryptString(input.answer) : input.answer;
+  await prisma.applicationAnswer.upsert({
+    where: { userId_questionKey: { userId, questionKey: input.questionKey } },
+    update: { answer, source: "USER", confidence: 100, autoSubmitAllowed: true, requiresHumanReview: false, isSensitive },
+    create: {
+      userId,
+      questionKey: input.questionKey,
+      question: (standard?.question ?? input.question).slice(0, 500),
+      answer,
+      category,
+      source: "USER",
+      confidence: 100,
+      autoSubmitAllowed: true,
+      requiresHumanReview: false,
+      isSensitive,
+    },
+  });
+}

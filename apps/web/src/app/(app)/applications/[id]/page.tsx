@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { AlertTriangle, ArrowLeft, Check, Circle, ExternalLink, FileText, ImageIcon } from "lucide-react";
+import { AlertTriangle, ArrowLeft, Check, Circle, ExternalLink, FileText } from "lucide-react";
 import { getApplicationDetail, NotFoundError } from "@autoapply/database";
 import { enumLabel, type ApplicationEventType } from "@autoapply/shared";
 import { requireUser } from "@/lib/auth";
@@ -12,6 +12,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { cn } from "@/lib/utils";
+import { LiveProgressCard } from "@/components/live-progress";
 import { ApplicationActions, NoteForm } from "./application-actions";
 
 export const metadata: Metadata = { title: "Application" };
@@ -46,7 +47,7 @@ export default async function ApplicationPage({ params }: { params: Promise<{ id
 
   const eventAt = (type: ApplicationEventType) => app.events.find((e) => e.type === type)?.createdAt ?? null;
   const timeline = TIMELINE.map((step) => {
-    const at = step.key === "imported" ? job.createdAt : step.key === "analyzed" ? job.analyzedAt : step.event === "MATCH_CALCULATED" ? (eventAt("MATCH_CALCULATED") ?? (job.matchScore != null ? job.analyzedAt : null)) : eventAt(step.event!);
+    const at = step.key === "imported" ? job.createdAt : step.key === "analyzed" ? job.analyzedAt : step.event === "MATCH_CALCULATED" ? (eventAt("MATCH_CALCULATED") ?? (job.matchScore != null ? job.analyzedAt : null)) : step.event === "QUESTIONS_ANSWERED" ? (eventAt("QUESTIONS_ANSWERED") ?? eventAt("FIELDS_MAPPED")) : eventAt(step.event!);
     return { ...step, at };
   });
   const screenshots = app.attempts.flatMap((a) => ((Array.isArray(a.screenshots) ? a.screenshots : []) as unknown as Screenshot[]).map((s) => ({ ...s, attempt: a.attemptNumber })));
@@ -76,7 +77,14 @@ export default async function ApplicationPage({ params }: { params: Promise<{ id
             <MatchScore score={app.matchScore} className="ml-1" />
           </div>
         </div>
-        <ApplicationActions applicationId={app.id} status={app.status} outcome={app.outcome} jobUrl={job.applicationUrl ?? job.url} />
+        <ApplicationActions
+          applicationId={app.id}
+          status={app.status}
+          outcome={app.outcome}
+          jobUrl={job.applicationUrl ?? job.url}
+          attentionReason={app.attentionReason}
+          hasOpenQuestions={app.questions.some((q) => q.status === "NEEDS_REVIEW")}
+        />
       </div>
 
       {app.attentionDetail && (
@@ -90,6 +98,8 @@ export default async function ApplicationPage({ params }: { params: Promise<{ id
           </div>
         </div>
       )}
+
+      <LiveProgressCard applicationId={app.id} />
 
       <div className="grid gap-4 lg:grid-cols-3">
         <div className="grid content-start gap-4 lg:col-span-2">
@@ -119,6 +129,7 @@ export default async function ApplicationPage({ params }: { params: Promise<{ id
                           {q.label}
                           {q.required && <span className="text-destructive"> *</span>}
                           {q.mappedField && <span className="text-muted-foreground block font-mono text-[11px]">{q.mappedField}</span>}
+                          {q.status === "NEEDS_REVIEW" && q.reviewReason && <span className="text-muted-foreground block text-[12px]">{q.reviewReason}</span>}
                         </TableCell>
                         <TableCell className="max-w-72 whitespace-normal text-[13px]">
                           {q.answer ? (q.answer.sensitive ? <span className="text-muted-foreground italic">Hidden (sensitive)</span> : q.answer.value) : "—"}
@@ -160,9 +171,8 @@ export default async function ApplicationPage({ params }: { params: Promise<{ id
                 <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
                   {screenshots.map((s) => (
                     <a key={s.key} href={`/api/files?key=${encodeURIComponent(s.key)}`} target="_blank" rel="noopener noreferrer" className="group rounded-lg border p-2">
-                      <div className="bg-muted text-muted-foreground grid aspect-video place-items-center rounded">
-                        <ImageIcon className="size-5" />
-                      </div>
+                      {/* eslint-disable-next-line @next/next/no-img-element -- private, auth-gated file route */}
+                      <img src={`/api/files?key=${encodeURIComponent(s.key)}`} alt={s.caption ?? "Screenshot"} loading="lazy" className="bg-muted aspect-video w-full rounded object-cover object-top" />
                       <p className="mt-1.5 truncate text-xs font-medium">{s.caption ?? "Screenshot"}</p>
                       <p className="text-muted-foreground text-[11px]">Attempt {s.attempt}</p>
                     </a>

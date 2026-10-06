@@ -3,17 +3,24 @@
 import { revalidatePath } from "next/cache";
 import {
   addApplicationNote,
+  approveForSubmission,
   approveQuestionAnswer,
   audit,
   markHumanStepComplete,
   markSubmittedByUser,
+  prisma,
+  recheckQuestion,
+  rememberApprovedAnswer,
   retryApplications,
+  revokeBrowserSession,
   setApplicationOutcome,
   skipApplication,
   skipQuestion,
 } from "@autoapply/database";
+import { matchStandardQuestion } from "@autoapply/automation";
 import { applicationOutcomeSchema } from "@autoapply/shared";
 import { authedAction, parseIds, type ActionResult } from "@/lib/action";
+import { notifyWorker } from "@/lib/worker-queue";
 
 function refresh(applicationId?: string) {
   revalidatePath("/applications");
@@ -29,6 +36,7 @@ export async function retryApplicationsAction(ids: string[]): Promise<ActionResu
   return authedAction(async (user) => {
     const result = await retryApplications(user.id, parseIds(ids));
     await audit(user.id, "application.retried", { metadata: { ids, ...result } });
+    if (result.retried) await notifyWorker(user.id);
     refresh();
     return result.retried ? { ok: true, message: `Requeued ${result.retried} application${result.retried === 1 ? "" : "s"}` } : { ok: false, message: "Only failed applications can be retried." };
   });
@@ -68,15 +76,23 @@ export async function addNoteAction(id: string, note: string): Promise<ActionRes
   });
 }
 
-export async function approveAnswerAction(questionId: string, editedValue?: string): Promise<ActionResult> {
+/** Approve a suggested answer, optionally after editing it, and optionally save it to the Answer Library. */
+export async function approveAnswerAction(questionId: string, editedValue?: string, remember = false): Promise<ActionResult> {
   return authedAction(async (user) => {
     const qid = one(questionId);
     if (!qid) return { ok: false, message: "Invalid id" };
     if (editedValue != null && (typeof editedValue !== "string" || editedValue.length > 10_000)) return { ok: false, message: "Answer is too long" };
     await approveQuestionAnswer(user.id, qid, editedValue);
     await audit(user.id, editedValue != null ? "attention.answer_edited" : "attention.answer_approved", { entityType: "ApplicationQuestion", entityId: qid });
+    if (remember === true) {
+      const question = await prisma.applicationQuestion.findFirst({ where: { id: qid, application: { userId: user.id } }, select: { label: true, normalizedKey: true } });
+      if (question && (await rememberApprovedAnswer(user.id, qid, matchStandardQuestion(question.label) ?? question.normalizedKey))) {
+        await audit(user.id, "answer.remembered", { entityType: "ApplicationQuestion", entityId: qid });
+      }
+    }
+    await notifyWorker(user.id);
     refresh();
-    return { ok: true, message: "Answer approved" };
+    return { ok: true, message: remember ? "Answer approved and saved to your Answer Library" : "Answer approved" };
   });
 }
 
@@ -86,8 +102,21 @@ export async function skipQuestionAction(questionId: string): Promise<ActionResu
     if (!qid) return { ok: false, message: "Invalid id" };
     await skipQuestion(user.id, qid);
     await audit(user.id, "attention.question_skipped", { entityType: "ApplicationQuestion", entityId: qid });
+    await notifyWorker(user.id);
     refresh();
     return { ok: true, message: "Question skipped" };
+  });
+}
+
+export async function recheckQuestionAction(questionId: string): Promise<ActionResult> {
+  return authedAction(async (user) => {
+    const qid = one(questionId);
+    if (!qid) return { ok: false, message: "Invalid id" };
+    await recheckQuestion(user.id, qid);
+    await audit(user.id, "attention.question_rechecked", { entityType: "ApplicationQuestion", entityId: qid });
+    await notifyWorker(user.id);
+    refresh();
+    return { ok: true, message: "AutoApply will check it again" };
   });
 }
 
@@ -97,8 +126,22 @@ export async function completeHumanStepAction(applicationId: string): Promise<Ac
     if (!appId) return { ok: false, message: "Invalid id" };
     await markHumanStepComplete(user.id, appId);
     await audit(user.id, "attention.step_completed", { entityType: "Application", entityId: appId });
+    await notifyWorker(user.id);
     refresh(appId);
     return { ok: true, message: "Thanks. The application is back in the queue and will resume." };
+  });
+}
+
+/** Review mode's final step: let AutoApply submit the filled application. */
+export async function approveSubmissionAction(applicationId: string): Promise<ActionResult> {
+  return authedAction(async (user) => {
+    const appId = one(applicationId);
+    if (!appId) return { ok: false, message: "Invalid id" };
+    await approveForSubmission(user.id, appId);
+    await audit(user.id, "application.submission_approved", { entityType: "Application", entityId: appId });
+    await notifyWorker(user.id);
+    refresh(appId);
+    return { ok: true, message: "Approved. AutoApply will submit it next." };
   });
 }
 
@@ -110,5 +153,15 @@ export async function markSubmittedAction(applicationId: string): Promise<Action
     await audit(user.id, "application.marked_submitted", { entityType: "Application", entityId: appId });
     refresh(appId);
     return { ok: true, message: "Marked as submitted" };
+  });
+}
+
+export async function revokeBrowserSessionAction(id: string): Promise<ActionResult> {
+  return authedAction(async (user) => {
+    const sessionId = one(id);
+    if (!sessionId || !(await revokeBrowserSession(user.id, sessionId))) return { ok: false, message: "Session not found" };
+    await audit(user.id, "browser_session.revoked", { entityType: "BrowserSession", entityId: sessionId });
+    revalidatePath("/settings");
+    return { ok: true, message: "Saved session removed. AutoApply will ask you to sign in again on that site." };
   });
 }

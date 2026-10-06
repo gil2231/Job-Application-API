@@ -15,9 +15,10 @@ import {
 } from "@autoapply/database";
 import { detectPlatformFromUrl } from "@autoapply/ats-adapters";
 import { jobFingerprint } from "@autoapply/ingestion";
-import { manualJobSchema, type AutomationMode } from "@autoapply/shared";
+import { AUTOMATION_MODES, manualJobSchema, type AutomationMode } from "@autoapply/shared";
 import { authedAction, formToObject, parseIds, validationFailed, type ActionResult } from "@/lib/action";
 import { analyzeInBackground } from "@/lib/pipeline";
+import { notifyWorker } from "@/lib/worker-queue";
 
 function refresh() {
   revalidatePath("/jobs");
@@ -56,8 +57,10 @@ export async function applyToJobsAction(jobIds: string[], mode?: AutomationMode)
   return authedAction(async (user) => {
     const ids = parseIds(jobIds);
     if (!ids.length) return { ok: false, message: "Select at least one job" };
+    if (mode != null && !AUTOMATION_MODES.includes(mode)) return { ok: false, message: "Unknown mode" };
     const result = await queueApplications(user.id, ids, { mode });
     await audit(user.id, "application.queued", { metadata: { jobIds: ids, ...result } });
+    if (result.queued) await notifyWorker(user.id);
     refresh();
     if (result.queued === 0) return { ok: false, message: result.duplicates ? "Already applied or queued. Each job gets one application." : "No jobs were queued." };
     const extra = result.duplicates ? ` (${plural(result.duplicates, "job")} already had one)` : "";
@@ -69,6 +72,7 @@ export async function applyToAllQualifiedAction(): Promise<ActionResult> {
   return authedAction(async (user) => {
     const result = await queueAllQualified(user.id);
     await audit(user.id, "application.queued_all_qualified", { metadata: result });
+    if (result.queued) await notifyWorker(user.id);
     refresh();
     return result.queued
       ? { ok: true, message: `Queued ${plural(result.queued, "application")} in ${result.mode.toLowerCase()} mode` }
@@ -103,6 +107,7 @@ export async function retryJobsAction(jobIds: string[]): Promise<ActionResult> {
     const apps = await prisma.application.findMany({ where: { userId: user.id, jobId: { in: ids } }, select: { id: true } });
     const result = await retryApplications(user.id, apps.map((a) => a.id));
     await audit(user.id, "application.retried", { metadata: { jobIds: ids, ...result } });
+    if (result.retried) await notifyWorker(user.id);
     refresh();
     return result.retried
       ? { ok: true, message: `Requeued ${plural(result.retried, "failed application")}` }

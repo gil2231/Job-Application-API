@@ -2,11 +2,12 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Eye, Loader2, RefreshCw, RotateCcw, Send, SkipForward, Trash2 } from "lucide-react";
+import { Eye, Loader2, RefreshCw, RotateCcw, SkipForward, Trash2 } from "lucide-react";
 import type { ApplicationStatus, JobStatus } from "@autoapply/shared";
 import { reanalyzeJobsAction } from "@/actions/ingestion";
 import { applyToJobsAction, deleteJobsAction, retryJobsAction, skipJobsAction } from "@/actions/jobs";
 import { useServerAction } from "@/components/action-button";
+import { ApplyButton } from "@/components/apply-button";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -43,9 +44,7 @@ export function JobActions({
           </Link>
         </Button>
       ) : (
-        <Button size="sm" disabled={pending} onClick={() => run(() => applyToJobsAction([jobId]))}>
-          <Send /> Apply
-        </Button>
+        <ApplyButton disabled={pending} onApply={(mode) => run(() => applyToJobsAction([jobId], mode))} />
       )}
       {applicationStatus === "FAILED" && (
         <Button size="sm" variant="outline" disabled={pending} onClick={() => run(() => retryJobsAction([jobId]))}>

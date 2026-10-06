@@ -1,0 +1,579 @@
+import { randomUUID } from "node:crypto";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import type Redis from "ioredis";
+import type { BrowserContext, Page } from "playwright-core";
+import {
+  classifyFailure,
+  decideRetry,
+  decideSubmission,
+  displayLabel,
+  FieldResolver,
+  findContradictions,
+  isPlaceholderOption,
+  toProfileFacts,
+  type FieldMapping,
+  type FieldKind,
+  type ProfileFactsForForms,
+} from "@autoapply/automation";
+import { detectPlatformFromUrl, type AdapterContext, type AdapterRegistry, type AdapterStatus, type ApplicationAdapter, type DocumentsToUpload, type HumanStep, type ValidationResult } from "@autoapply/ats-adapters";
+import {
+  addApplicationEvent,
+  addAttemptScreenshot,
+  cancelAttempt,
+  finishAttempt,
+  getHeldState,
+  holdForManualSubmit,
+  linkAttemptBrowserSession,
+  loadBrowserSession,
+  loadProcessingContext,
+  markStillWaiting,
+  recordSubmittedInBrowser,
+  releaseHeldApplication,
+  renewLease,
+  requeueAfterShutdown,
+  resumeHeldApplication,
+  saveApplicationQuestions,
+  saveBrowserSession,
+  setApplicationPlatform,
+  setProfileSnapshot,
+  type AttemptOutcome,
+  type ProcessingContext,
+  type QuestionRecord,
+} from "@autoapply/database";
+import type { StorageDriver } from "@autoapply/documents";
+import { APPLICATION_EVENT_TYPES, enumLabel, type ApplicationEventType, type AttentionReason, type EventLevel, type Platform } from "@autoapply/shared";
+import type { BrowserPool } from "./browser";
+import type { WorkerConfig } from "./config";
+import { ProgressReporter } from "./progress";
+import { checkSite } from "./site-policy";
+
+export interface EngineDeps {
+  config: WorkerConfig;
+  browsers: BrowserPool;
+  registry: AdapterRegistry<Page>;
+  storage: StorageDriver;
+  redis: Redis | null;
+  workerId: string;
+}
+
+export interface RunInput {
+  applicationId: string;
+  attemptId: string;
+  attemptNumber: number;
+  userId: string;
+  signal: AbortSignal;
+}
+
+export interface RunResult {
+  result: "finished" | "cancelled" | "released";
+  /** Set when the attempt failed transiently and should run again after this delay. */
+  retryInMs?: number;
+}
+
+/** Why the worker aborted a run itself. */
+export const ABORT_REASONS = { stop: "stop", shutdown: "shutdown", leaseLost: "lease-lost" } as const;
+
+/** The application was stopped, skipped or taken over while this run held it. */
+class StoppedError extends Error {
+  constructor() {
+    super("The application was stopped");
+    this.name = "StoppedError";
+  }
+}
+
+const MAX_PAGES = 15;
+const MAX_CONDITIONAL_ROUNDS = 5;
+const POLL_MS = 2000;
+
+const FIELD_TYPE: Record<FieldKind, QuestionRecord["fieldType"]> = {
+  text: "TEXT", textarea: "TEXTAREA", email: "EMAIL", phone: "PHONE", url: "URL", number: "NUMBER", date: "DATE",
+  select: "SELECT", radio: "RADIO", checkbox: "CHECKBOX", file: "FILE", unknown: "UNKNOWN",
+};
+const SOURCE: Record<FieldMapping["source"], NonNullable<QuestionRecord["answer"]>["source"]> = {
+  profile: "PROFILE", library: "USER", user: "USER", ai: "AI_GENERATED", none: "USER",
+};
+const HUMAN_LABEL: Record<HumanStep, string> = { CAPTCHA: "CAPTCHA detected", MFA: "Verification code required", AUTH_REQUIRED: "Sign-in required" };
+/** Blockers only the person can clear in a browser; everything else is a review. */
+const WAITING_REASONS: ReadonlySet<AttentionReason> = new Set(["CAPTCHA", "MFA", "AUTH_REQUIRED", "UNSUPPORTED_SITE"]);
+
+const isEventType = (t: string): t is ApplicationEventType => (APPLICATION_EVENT_TYPES as readonly string[]).includes(t);
+
+function sleep(ms: number, signal: AbortSignal) {
+  return new Promise<void>((resolve, reject) => {
+    if (signal.aborted) return reject(signal.reason);
+    const timer = setTimeout(resolve, ms);
+    signal.addEventListener("abort", () => {
+      clearTimeout(timer);
+      reject(signal.reason);
+    }, { once: true });
+  });
+}
+
+const safeFileName = (name: string) => name.replace(/[^\w.\- ()]+/g, "_").slice(0, 120) || "document";
+
+/** Profile values worth keeping with the application for the record (no sensitive answers). */
+function snapshotOf(p: ProcessingContext["profile"]) {
+  const current = p.employment.find((e) => e.isCurrent);
+  return {
+    name: [p.firstName, p.lastName].filter(Boolean).join(" ") || null,
+    email: p.email,
+    phone: p.phone,
+    location: [p.city, p.state].filter(Boolean).join(", ") || null,
+    linkedin: p.linkedinUrl,
+    portfolio: p.portfolioUrl ?? p.websiteUrl,
+    currentTitle: p.currentTitle ?? current?.title ?? null,
+    currentCompany: current?.company ?? null,
+    yearsExperience: p.yearsExperience,
+    school: p.education[0]?.school ?? null,
+    capturedAt: new Date().toISOString(),
+  };
+}
+
+function toRecord(m: FieldMapping): QuestionRecord {
+  const value = m.value == null ? null : Array.isArray(m.value) ? m.value.join(", ") : m.value;
+  return {
+    label: displayLabel(m.detectedLabel),
+    normalizedKey: m.field.key ?? m.detectedLabel,
+    fieldType: FIELD_TYPE[m.field.kind],
+    required: m.field.required,
+    options: m.field.options?.filter((o) => !isPlaceholderOption(o)),
+    pageIndex: m.field.pageIndex,
+    locator: m.field.locators[0],
+    mappedField: m.mappedField === "unknown" ? null : m.mappedField,
+    confidence: m.confidence,
+    status: m.status,
+    reviewReason: m.reviewReason,
+    answer: value != null && value !== "" ? { value, source: SOURCE[m.source], confidence: m.confidence, libraryAnswerId: m.libraryAnswerId, sensitive: m.sensitive } : null,
+  };
+}
+
+/**
+ * Runs one attempt of one application, following the worker flow:
+ * load profile → open the application → detect platform → pick adapter →
+ * map → fill → upload → answer → validate → human checkpoint if needed →
+ * submit if permitted → record the result.
+ */
+export class ApplicationEngine {
+  constructor(private readonly deps: EngineDeps) {}
+
+  async run(input: RunInput): Promise<RunResult> {
+    const data = await loadProcessingContext(input.applicationId);
+    if (!data) return { result: "cancelled" };
+    return new AttemptRun(this.deps, input, data).execute();
+  }
+}
+
+class AttemptRun {
+  private context: BrowserContext | null = null;
+  private page: Page | null = null;
+  private tmpDir: string | null = null;
+  private domain = "";
+  private platform: Platform = "UNKNOWN";
+  private readonly progress: ProgressReporter;
+  private readonly facts: ProfileFactsForForms;
+
+  constructor(
+    private readonly deps: EngineDeps,
+    private readonly input: RunInput,
+    private readonly data: ProcessingContext,
+  ) {
+    this.progress = new ProgressReporter(deps.redis, { applicationId: input.applicationId, userId: input.userId, company: data.job.company, title: data.job.title });
+    this.facts = toProfileFacts(data.profile);
+  }
+
+  private log(type: ApplicationEventType, message: string, options: { level?: EventLevel; data?: unknown } = {}) {
+    return addApplicationEvent(this.input.applicationId, this.input.userId, type, message, options);
+  }
+
+  private async finish(outcome: AttemptOutcome): Promise<RunResult> {
+    const applied = await finishAttempt({ applicationId: this.input.applicationId, attemptId: this.input.attemptId, userId: this.input.userId, workerId: this.deps.workerId, outcome });
+    if (!applied) {
+      await this.progress.finish("failed");
+      return { result: "cancelled" };
+    }
+    await this.progress.finish(outcome.kind === "submitted" ? "done" : outcome.kind === "attention" ? "waiting" : "failed");
+    return { result: "finished", retryInMs: outcome.kind === "retry" ? outcome.delayMs : undefined };
+  }
+
+  private attention(status: "WAITING_FOR_USER" | "REVIEW_REQUIRED" | "READY", reason: AttentionReason, detail: string) {
+    return this.finish({ kind: "attention", status, reason, detail });
+  }
+
+  async execute(): Promise<RunResult> {
+    const { input, data, deps } = this;
+    const { signal } = input;
+    const closeOnAbort = () => void this.context?.close().catch(() => undefined);
+    signal.addEventListener("abort", closeOnAbort, { once: true });
+    try {
+      signal.throwIfAborted();
+      await this.progress.running("profile", "Loading profile");
+      await setProfileSnapshot(input.applicationId, snapshotOf(data.profile), { resumeId: data.resume?.id, coverLetterId: data.coverLetter?.id });
+      await this.log("PROFILE_LOADED", "Master Profile loaded");
+      await this.progress.done("profile", "Profile loaded");
+
+      const url = data.job.applicationUrl ?? data.job.url;
+      if (detectPlatformFromUrl(url).platform === "LINKEDIN_EASY_APPLY") {
+        return this.attention("WAITING_FOR_USER", "UNSUPPORTED_SITE", "LinkedIn Easy Apply needs your LinkedIn sign-in, and AutoApply never signs in to LinkedIn. Add the employer's own application link to this job, or apply on LinkedIn yourself and mark it submitted.");
+      }
+      const site = await checkSite(url, deps.config);
+      if (!site.allowed) return this.attention("WAITING_FOR_USER", "UNSUPPORTED_SITE", site.reason);
+
+      this.tmpDir = await mkdtemp(join(tmpdir(), "autoapply-"));
+      const documents = await this.downloadDocuments();
+
+      await this.progress.running("browser", "Launching browser");
+      this.domain = new URL(url).hostname;
+      const saved = await loadBrowserSession(input.userId, this.domain);
+      this.context = await deps.browsers.newContext(saved?.storageState);
+      if (saved) await linkAttemptBrowserSession(input.attemptId, saved.id);
+      this.page = await this.context.newPage();
+      await this.log("BROWSER_LAUNCHED", saved ? `Browser launched with your saved session for ${this.domain}` : "Browser launched");
+      await this.progress.done("browser", "Browser launched");
+
+      await this.page.goto(url, { waitUntil: "domcontentloaded" });
+      const landed = await checkSite(this.page.url(), deps.config);
+      if (!landed.allowed) return this.attention("WAITING_FOR_USER", "UNSUPPORTED_SITE", `The link redirected to ${new URL(this.page.url()).hostname}. ${landed.reason}`);
+
+      const { adapter, detection } = await deps.registry.resolve(this.page.url(), await this.page.content());
+      if (!adapter) return this.attention("WAITING_FOR_USER", "UNSUPPORTED_SITE", `No adapter can fill ${enumLabel(detection.platform)} applications yet.`);
+      this.platform = detection.platform;
+      await setApplicationPlatform(input.applicationId, detection.platform);
+      const usingFallback = adapter.platform !== detection.platform && detection.platform !== "GENERIC";
+      await this.log("PLATFORM_DETECTED", `${enumLabel(detection.platform)} detected (${detection.evidence})${usingFallback ? `; filling it with the ${adapter.displayName.toLowerCase()} adapter` : ""}`);
+      await this.progress.done("detected", `Application detected: ${enumLabel(detection.platform)}`);
+
+      const resolver = new FieldResolver({
+        profile: this.facts,
+        library: data.library,
+        stored: data.questions,
+        documents: { resume: documents.resume ? { fileName: documents.resume.fileName } : null, coverLetter: documents.coverLetter ? { fileName: documents.coverLetter.fileName } : null },
+        fieldConfidenceThreshold: data.settings.fieldConfidenceThreshold,
+        answerConfidenceThreshold: data.settings.answerConfidenceThreshold,
+      });
+      const ctx: AdapterContext<Page> = {
+        page: this.page,
+        applicationId: input.applicationId,
+        mode: data.application.mode,
+        confidenceThreshold: data.settings.fieldConfidenceThreshold,
+        pageIndex: 0,
+        signal,
+        resolveField: (field) => resolver.resolve(field),
+        log: async (e) => {
+          await this.log(isEventType(e.type) ? e.type : "NOTE", e.message, { level: e.level, data: e.data });
+          if (e.type === "RESUME_UPLOADED") await this.progress.done("resume", "Resume uploaded");
+          if (e.type === "COVER_LETTER_UPLOADED") await this.progress.done("cover", "Cover letter uploaded");
+        },
+        screenshot: (caption) => this.screenshot(caption),
+      };
+
+      await adapter.initialize(ctx);
+      await ctx.screenshot("Application opened");
+      return await this.fillPages(adapter, ctx, documents, detection.platform);
+    } catch (error) {
+      if (signal.aborted || error instanceof StoppedError) return this.aborted();
+      return this.failed(error);
+    } finally {
+      signal.removeEventListener("abort", closeOnAbort);
+      await this.context?.close().catch(() => undefined);
+      if (this.tmpDir) await rm(this.tmpDir, { recursive: true, force: true }).catch(() => undefined);
+    }
+  }
+
+  private async fillPages(adapter: ApplicationAdapter<Page>, ctx: AdapterContext<Page>, documents: DocumentsToUpload, detected: Platform): Promise<RunResult> {
+    const all: FieldMapping[] = [];
+    let pageIndex = 0;
+    while (pageIndex < MAX_PAGES) {
+      ctx.pageIndex = pageIndex;
+      await this.assertHeld();
+      const status = await adapter.getStatus(ctx);
+      if (status.state === "needs_human") {
+        const outcome = await this.humanCheckpoint(adapter, ctx, status);
+        if (outcome !== "resumed") return outcome;
+        continue;
+      }
+      if (status.state === "submitted") {
+        await ctx.screenshot("Confirmation");
+        await this.saveSession();
+        return this.finish({ kind: "submitted", confirmation: status.confirmation ?? null, message: `The site accepted the application when leaving page ${pageIndex}${status.confirmation ? ` (confirmation ${status.confirmation})` : ""}` });
+      }
+      if (status.state === "failed") return this.failed(new Error(status.message));
+      if (!status.hasForm) {
+        return this.attention("WAITING_FOR_USER", "UNSUPPORTED_SITE", pageIndex === 0 ? "AutoApply couldn't find an application form at this link. Add the direct application link to the job, or apply yourself." : `Page ${pageIndex + 1} of the application has no form AutoApply can fill.`);
+      }
+
+      const pageNo = pageIndex + 1;
+      await this.progress.running(`page-${pageIndex}`, `Filling page ${pageNo}`);
+      const mappings = await this.fillPage(adapter, ctx, documents);
+      all.push(...mappings);
+      await saveApplicationQuestions(this.input.applicationId, mappings.map(toRecord));
+      await ctx.screenshot(`Page ${pageNo} filled`);
+
+      const review = mappings.filter((m) => m.status === "NEEDS_REVIEW");
+      if (review.length) {
+        await this.saveSession();
+        const names = review.slice(0, 3).map((m) => `"${displayLabel(m.detectedLabel)}"`).join(", ");
+        return this.attention("REVIEW_REQUIRED", "QUESTION_REVIEW", `${review.length} question${review.length === 1 ? "" : "s"} on page ${pageNo} need${review.length === 1 ? "s" : ""} your answer: ${names}${review.length > 3 ? ", …" : ""}. Nothing has been sent yet.`);
+      }
+
+      await this.progress.running("validating", "Validating…");
+      const validation = await adapter.validate(ctx);
+      if (!validation.ok) return this.validationFailed(validation, mappings);
+      await this.log("VALIDATION_COMPLETED", `Page ${pageNo} passed validation`);
+
+      if (!status.isFinalPage) {
+        const advance = await adapter.nextPage(ctx);
+        if (!advance.moved) return this.validationFailed(advance.validation, mappings);
+        await this.log("PAGE_COMPLETED", `Page ${pageNo} completed`);
+        await this.progress.done(`page-${pageIndex}`, `Page ${pageNo} completed`);
+        pageIndex++;
+        continue;
+      }
+      await this.progress.done("validating", "Validation completed");
+      await this.progress.done(`page-${pageIndex}`, pageIndex > 0 ? `Page ${pageNo} completed` : "Form filled");
+
+      // A security check that shows up only at the end still stops everything.
+      const final = await adapter.getStatus(ctx);
+      if (final.state === "needs_human") {
+        const outcome = await this.humanCheckpoint(adapter, ctx, final);
+        if (outcome !== "resumed") return outcome;
+      }
+      return this.decideAndSubmit(adapter, ctx, all, detected);
+    }
+    return this.failed(new Error(`The application has more than ${MAX_PAGES} pages`));
+  }
+
+  /** Fill one page, re-scanning for questions that appear after earlier answers (conditional fields). */
+  private async fillPage(adapter: ApplicationAdapter<Page>, ctx: AdapterContext<Page>, documents: DocumentsToUpload): Promise<FieldMapping[]> {
+    const seen = new Map<string, FieldMapping>();
+    let { mappings } = await adapter.mapFields(ctx);
+    for (let round = 0; round < MAX_CONDITIONAL_ROUNDS; round++) {
+      const fresh = mappings.filter((m) => !seen.has(m.field.key ?? m.detectedLabel));
+      if (!fresh.length) break;
+      for (const m of fresh) seen.set(m.field.key ?? m.detectedLabel, m);
+      if (round > 0) await this.log("NOTE", `${fresh.length} more question${fresh.length === 1 ? "" : "s"} appeared after earlier answers`);
+      await adapter.fillFields(ctx, fresh);
+      await adapter.uploadDocuments(ctx, documents, fresh);
+      await adapter.answerQuestions(ctx, fresh);
+      ({ mappings } = await adapter.mapFields(ctx));
+    }
+    // A field hidden again by a later answer is no longer part of the form.
+    const visible = new Set(mappings.map((m) => m.field.key ?? m.detectedLabel));
+    const final = [...seen.values()].filter((m) => visible.has(m.field.key ?? m.detectedLabel));
+
+    const fromProfile = final.filter((m) => m.source === "profile" && m.status === "ANSWERED").length;
+    const questions = final.filter((m) => (m.mappedField === "answer.library" || m.mappedField === "unknown") && m.status === "ANSWERED");
+    const flagged = final.filter((m) => m.status === "NEEDS_REVIEW").length;
+    await this.log("FIELDS_MAPPED", `Mapped ${final.length} field${final.length === 1 ? "" : "s"} on page ${ctx.pageIndex + 1}: ${fromProfile} from your profile, ${questions.length} from your answers${flagged ? `, ${flagged} need${flagged === 1 ? "s" : ""} review` : ""}`, {
+      data: final.map((m) => ({ label: displayLabel(m.detectedLabel), mappedField: m.mappedField, confidence: m.confidence, status: m.status })),
+    });
+    await this.progress.done(`fields-${ctx.pageIndex}`, `${final.length} fields mapped${ctx.pageIndex ? ` on page ${ctx.pageIndex + 1}` : ""}`);
+    if (questions.length) {
+      await this.log("QUESTIONS_ANSWERED", `${questions.length} question${questions.length === 1 ? "" : "s"} answered from your Answer Library and approvals`);
+      await this.progress.done(`questions-${ctx.pageIndex}`, `${questions.length} question${questions.length === 1 ? "" : "s"} answered`);
+    }
+    return final;
+  }
+
+  private async decideAndSubmit(adapter: ApplicationAdapter<Page>, ctx: AdapterContext<Page>, mappings: FieldMapping[], detected: Platform): Promise<RunResult> {
+    const { data } = this;
+    const contradictions = findContradictions({ mappings, profile: this.facts, library: data.library, job: data.job, rule: data.rule });
+    const decision = decideSubmission({
+      mode: data.application.mode,
+      submitApproved: !!data.application.submitApprovedAt,
+      autoSubmitEnabled: data.rule.autoSubmitEnabled,
+      platformSupported: adapter.supportsAutoSubmit && (adapter.platform === detected || detected === "GENERIC"),
+      platformLabel: enumLabel(detected),
+      mappings,
+      contradictions,
+      securityChallenge: false,
+      confidenceThreshold: data.settings.fieldConfidenceThreshold,
+    });
+
+    if (decision.action === "review") {
+      await this.saveSession();
+      await ctx.screenshot("Ready for review");
+      return this.attention(WAITING_REASONS.has(decision.reason) ? "WAITING_FOR_USER" : "REVIEW_REQUIRED", decision.reason, decision.detail);
+    }
+    if (decision.action === "hand_off") {
+      await this.saveSession();
+      await ctx.screenshot("Ready to submit");
+      if (this.deps.browsers.interactive) return this.waitForManualSubmit(adapter, ctx);
+      return this.attention("READY", "FINAL_REVIEW", decision.detail);
+    }
+
+    await this.progress.running("submit", "Submitting");
+    const result = await adapter.submit(ctx);
+    if ("validation" in result) return this.validationFailed(result.validation, mappings);
+    await ctx.screenshot("Confirmation");
+    await this.saveSession();
+    await this.progress.done("submit", "Submitted");
+    const how = data.application.submitApprovedAt ? "after your approval" : "automatically";
+    return this.finish({ kind: "submitted", confirmation: result.confirmation ?? null, message: `Submitted ${how}${result.confirmation ? ` (confirmation ${result.confirmation})` : ""}` });
+  }
+
+  /** The site rejected values: flag the fields it complained about so the person can correct them. */
+  private async validationFailed(validation: ValidationResult, mappings: FieldMapping[]): Promise<RunResult> {
+    const norm = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+    const flagged: FieldMapping[] = [];
+    const unmatched: string[] = [];
+    for (const err of validation.errors) {
+      const target = mappings.find((m) => norm(m.detectedLabel) === norm(err.label)) ?? mappings.find((m) => norm(err.label).includes(norm(m.detectedLabel)) || norm(m.detectedLabel).includes(norm(err.label)));
+      if (target && target.field.kind !== "file") flagged.push({ ...target, status: "NEEDS_REVIEW", reviewReason: `The site rejected this answer: ${err.message}` });
+      else unmatched.push(`${err.label}: ${err.message}`);
+    }
+    if (flagged.length) await saveApplicationQuestions(this.input.applicationId, flagged.map(toRecord));
+    await this.screenshot("Validation errors").catch(() => undefined);
+    await this.saveSession();
+    const list = validation.errors.slice(0, 4).map((e) => `${e.label}: ${e.message}`).join("; ");
+    const detail = flagged.length
+      ? `The site rejected ${flagged.length === 1 ? "an answer" : `${flagged.length} answers`} (${list}). Correct ${flagged.length === 1 ? "it" : "them"} below and AutoApply will try again.`
+      : `The site reported a problem it didn't tie to a field (${unmatched.slice(0, 3).join("; ") || list}). Check the application, then press Try again.`;
+    return this.attention("REVIEW_REQUIRED", "VALIDATION_ERROR", detail);
+  }
+
+  /**
+   * A CAPTCHA, sign-in or verification code. AutoApply never completes these.
+   * With a visible browser the page stays open for the person to finish it
+   * there, and the run continues as soon as the page moves on; otherwise the
+   * application waits in Needs Attention.
+   */
+  private async humanCheckpoint(adapter: ApplicationAdapter<Page>, ctx: AdapterContext<Page>, status: Extract<AdapterStatus, { state: "needs_human" }>): Promise<RunResult | "resumed"> {
+    const { deps, input } = this;
+    const label = HUMAN_LABEL[status.reason];
+    await ctx.screenshot(label);
+    await this.progress.waiting("human", `Waiting for you: ${label}`);
+    await this.saveSession();
+    if (!deps.browsers.interactive) {
+      const action = status.reason === "CAPTCHA" ? "complete the CAPTCHA" : "sign in";
+      return this.attention("WAITING_FOR_USER", status.reason, `${status.detail} Open the application to ${action} and finish it yourself, then mark it submitted. If the check was a one-off, press I've completed it and AutoApply will look again.`);
+    }
+
+    const detail = `${status.detail} Finish it in the AutoApply browser window, then press ${status.reason === "CAPTCHA" ? "I've completed it" : "Continue"}. AutoApply carries on from there.`;
+    const kept = await finishAttempt({ applicationId: input.applicationId, attemptId: input.attemptId, userId: input.userId, workerId: deps.workerId, outcome: { kind: "attention", status: "WAITING_FOR_USER", reason: status.reason, detail, keepLease: { leaseMs: deps.config.leaseMs } } });
+    if (!kept) return { result: "cancelled" };
+
+    const deadline = Date.now() + deps.config.interactiveWaitMs;
+    while (Date.now() < deadline) {
+      await sleep(POLL_MS, input.signal);
+      await renewLease(input.applicationId, deps.workerId, deps.config.leaseMs);
+      const held = await getHeldState(input.applicationId);
+      if (!held || held.lockedBy !== deps.workerId || (held.status !== "WAITING_FOR_USER" && held.status !== "QUEUED")) {
+        await cancelAttempt(input.applicationId, input.attemptId, deps.workerId, "The application was changed while waiting");
+        return { result: "cancelled" };
+      }
+      const now = await adapter.getStatus(ctx).catch(() => null);
+      if (now && now.state !== "needs_human") {
+        await resumeHeldApplication(input.applicationId, input.attemptId, input.userId, deps.workerId, `${label.replace(" detected", "").replace(" required", "")} completed in the browser; continuing`, deps.config.leaseMs);
+        await this.saveSession();
+        await this.progress.resume();
+        return "resumed";
+      }
+      if (held.status === "QUEUED") await markStillWaiting(input.applicationId, input.userId, deps.workerId, `The page still shows the ${status.reason === "CAPTCHA" ? "CAPTCHA" : "sign-in"}. Finish it in the AutoApply browser window first.`);
+    }
+    await this.saveSession();
+    await releaseHeldApplication(input.applicationId, input.attemptId, deps.workerId);
+    await this.progress.finish("waiting");
+    return { result: "released" };
+  }
+
+  /** Manual mode with a visible browser: leave the filled form open and record it when the person submits. */
+  private async waitForManualSubmit(adapter: ApplicationAdapter<Page>, ctx: AdapterContext<Page>): Promise<RunResult> {
+    const { deps, input } = this;
+    const kept = await finishAttempt({
+      applicationId: input.applicationId, attemptId: input.attemptId, userId: input.userId, workerId: deps.workerId,
+      outcome: { kind: "attention", status: "READY", reason: "FINAL_REVIEW", detail: "Everything is filled in the AutoApply browser window. Review it there and click Submit; AutoApply records it automatically.", keepLease: { leaseMs: deps.config.leaseMs } },
+    });
+    if (!kept) return { result: "cancelled" };
+    await this.progress.waiting("submit", "Waiting for you to click Submit");
+    const deadline = Date.now() + deps.config.interactiveWaitMs;
+    while (Date.now() < deadline) {
+      await sleep(POLL_MS, input.signal);
+      await holdForManualSubmit(input.applicationId, deps.workerId, deps.config.leaseMs);
+      const held = await getHeldState(input.applicationId);
+      if (!held || held.lockedBy !== deps.workerId || held.status !== "READY") {
+        await cancelAttempt(input.applicationId, input.attemptId, deps.workerId, "Finished outside the browser window");
+        return { result: "cancelled" };
+      }
+      const now = await adapter.getStatus(ctx).catch(() => null);
+      if (now?.state === "submitted") {
+        await ctx.screenshot("Confirmation");
+        await this.saveSession();
+        await recordSubmittedInBrowser(input.applicationId, input.attemptId, input.userId, deps.workerId, now.confirmation ?? null);
+        await this.progress.done("submit", "Submitted by you");
+        await this.progress.finish("done");
+        return { result: "finished" };
+      }
+    }
+    await releaseHeldApplication(input.applicationId, input.attemptId, deps.workerId);
+    await this.progress.finish("waiting");
+    return { result: "released" };
+  }
+
+  private async failed(error: unknown): Promise<RunResult> {
+    const failure = classifyFailure(error);
+    const message = error instanceof Error ? error.message.split("\n")[0]!.slice(0, 500) : String(error);
+    await this.screenshot("Error").catch(() => undefined);
+    const decision = decideRetry(failure, this.input.attemptNumber);
+    if (decision.action === "retry") return this.finish({ kind: "retry", failure, message: `${enumLabel(failure)}: ${message}`, delayMs: decision.delayMs });
+    if (decision.action === "needs_attention") {
+      const detail = decision.reason === "REPEATED_FAILURE" ? `This application failed ${this.input.attemptNumber} times (${enumLabel(failure)}: ${message}). Check it, then press Try again or skip it.` : `${enumLabel(failure)}: ${message}`;
+      return this.attention(WAITING_REASONS.has(decision.reason) ? "WAITING_FOR_USER" : "REVIEW_REQUIRED", decision.reason, detail);
+    }
+    return this.finish({ kind: "failed", failure, message });
+  }
+
+  private async aborted(): Promise<RunResult> {
+    const { input, deps } = this;
+    if (input.signal.reason === ABORT_REASONS.shutdown) await requeueAfterShutdown(input.applicationId, input.attemptId, input.userId, deps.workerId);
+    else await cancelAttempt(input.applicationId, input.attemptId, deps.workerId, input.signal.reason === ABORT_REASONS.stop ? "Stopped by user" : "Stopped");
+    await this.progress.finish("failed");
+    return { result: "cancelled" };
+  }
+
+  /** Backstop for a missed stop message: give up if the application is no longer ours. */
+  private async assertHeld() {
+    const held = await getHeldState(this.input.applicationId);
+    if (!held || held.status !== "PROCESSING" || held.lockedBy !== this.deps.workerId) {
+      throw new StoppedError();
+    }
+  }
+
+  private async downloadDocuments(): Promise<DocumentsToUpload> {
+    const out: DocumentsToUpload = {};
+    for (const kind of ["resume", "coverLetter"] as const) {
+      const doc = this.data[kind];
+      if (!doc) continue;
+      const body = await this.deps.storage.get(doc.storageKey);
+      const dir = join(this.tmpDir!, kind);
+      await mkdir(dir, { recursive: true });
+      const path = join(dir, safeFileName(doc.fileName));
+      await writeFile(path, body, { mode: 0o600 });
+      out[kind] = { path, fileName: doc.fileName };
+    }
+    return out;
+  }
+
+  private async screenshot(caption: string): Promise<string> {
+    if (!this.page || this.page.isClosed()) return "";
+    const key = `users/${this.input.userId}/screenshots/${this.input.applicationId}/${randomUUID()}.png`;
+    const body = await this.page.screenshot({ fullPage: true, type: "png", timeout: 10_000 });
+    await this.deps.storage.put(key, body, "image/png");
+    await addAttemptScreenshot(this.input.attemptId, { key, caption, takenAt: new Date().toISOString() });
+    return key;
+  }
+
+  /** Keep the site's cookies so a sign-in done once is reused next time. */
+  private async saveSession() {
+    if (!this.context || !this.domain) return;
+    try {
+      const state = await this.context.storageState();
+      if (!state.cookies.length && !state.origins.length) return;
+      const session = await saveBrowserSession(this.input.userId, this.domain, this.platform, state);
+      await linkAttemptBrowserSession(this.input.attemptId, session.id);
+    } catch {
+      /* the context may already be closed */
+    }
+  }
+}

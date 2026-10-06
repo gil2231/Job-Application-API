@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
-import { getUserSettings, listAuditLogs, listSessions } from "@autoapply/database";
+import { getUserSettings, listAuditLogs, listBrowserSessions, listSessions } from "@autoapply/database";
+import { enumLabel } from "@autoapply/shared";
 import { requireUser } from "@/lib/auth";
 import { formatDate, formatRelative } from "@/lib/format";
 import { PageHeader } from "@/components/page-header";
@@ -7,7 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { ANTHROPIC_DEFAULT_MODEL } from "@autoapply/ai";
-import { AccountForm, AnalysisForm, PasswordForm, PreferencesForm, SessionList } from "./settings-forms";
+import { AccountForm, AnalysisForm, BrowserSessionList, PasswordForm, PreferencesForm, SessionList } from "./settings-forms";
 
 export const metadata: Metadata = { title: "Settings" };
 
@@ -20,7 +21,7 @@ function describeAgent(ua: string | null): string {
 
 export default async function SettingsPage() {
   const user = await requireUser();
-  const [settings, sessions, logs] = await Promise.all([getUserSettings(user.id), listSessions(user.id), listAuditLogs(user.id, 40)]);
+  const [settings, sessions, logs, browserSessions] = await Promise.all([getUserSettings(user.id), listSessions(user.id), listAuditLogs(user.id, 40), listBrowserSessions(user.id)]);
 
   return (
     <div className="grid gap-5">
@@ -70,6 +71,19 @@ export default async function SettingsPage() {
           <SessionList
             currentId={user.sessionId}
             sessions={sessions.map((s) => ({ id: s.id, device: describeAgent(s.userAgent), ip: s.ipAddress, lastSeen: formatRelative(s.lastSeenAt), created: formatDate(s.createdAt) }))}
+          />
+        </CardContent>
+      </Card>
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-sm">Saved application sign-ins</CardTitle>
+          <CardDescription>Browser cookies the worker keeps, encrypted, for each application site, so a sign-in or MFA you finished once isn't asked for again. Remove one to start fresh on that site.</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <BrowserSessionList
+            sessions={browserSessions
+              .filter((s) => s.status === "ACTIVE")
+              .map((s) => ({ id: s.id, domain: s.domain, platform: enumLabel(s.platform), lastUsed: s.lastUsedAt ? formatRelative(s.lastUsedAt) : null, expires: s.expiresAt ? formatDate(s.expiresAt) : null }))}
           />
         </CardContent>
       </Card>

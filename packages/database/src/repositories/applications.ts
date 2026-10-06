@@ -225,16 +225,38 @@ export async function listAttentionItems(userId: string) {
     include: {
       job: { select: { id: true, title: true, company: true, url: true, applicationUrl: true } },
       questions: {
-        where: { status: "NEEDS_REVIEW" },
         orderBy: [{ pageIndex: "asc" }, { createdAt: "asc" }],
-        include: { answer: true },
+        include: { answer: { include: { libraryAnswer: { select: { isSensitive: true } } } } },
       },
+      attempts: { orderBy: { attemptNumber: "desc" }, take: 1, select: { screenshots: true } },
     },
   });
-  return apps.map((a) => ({
-    ...a,
-    questions: a.questions.map((q) => ({ ...q, answer: q.answer ? { ...q.answer, value: decryptString(q.answer.value) } : null })),
-  }));
+  return apps.map(({ attempts, questions, ...a }) => {
+    const shots = Array.isArray(attempts[0]?.screenshots) ? (attempts[0]!.screenshots as unknown as Array<{ key: string; caption?: string; takenAt?: string }>) : [];
+    const withValue = questions.map(({ answer, ...q }) => ({
+      ...q,
+      answer: answer
+        ? {
+            id: answer.id,
+            source: answer.source,
+            confidence: answer.confidence,
+            approvedByUser: answer.approvedByUser,
+            sensitive: answer.libraryAnswer?.isSensitive ?? false,
+            value: decryptString(answer.value),
+          }
+        : null,
+    }));
+    return {
+      ...a,
+      /** Questions waiting on the user. */
+      questions: withValue.filter((q) => q.status === "NEEDS_REVIEW"),
+      /** What the worker filled, for the final-review summary. Sensitive values are hidden. */
+      filled: withValue
+        .filter((q) => q.status !== "NEEDS_REVIEW" && q.answer)
+        .map((q) => ({ id: q.id, label: q.label, pageIndex: q.pageIndex, status: q.status, value: q.answer!.sensitive ? null : q.answer!.value })),
+      latestScreenshot: shots.at(-1) ?? null,
+    };
+  });
 }
 export type AttentionItem = Awaited<ReturnType<typeof listAttentionItems>>[number];
 
@@ -250,7 +272,8 @@ async function loadOwnedQuestion(userId: string, questionId: string) {
 /** When no question on the application still needs review, send it back to the queue. */
 async function resumeIfResolved(tx: Prisma.TransactionClient, userId: string, applicationId: string) {
   const app = await tx.application.findUnique({ where: { id: applicationId }, select: { status: true, attentionReason: true } });
-  if (!app || app.status !== "REVIEW_REQUIRED" || app.attentionReason !== "QUESTION_REVIEW") return;
+  const answerable: Array<string | null> = ["QUESTION_REVIEW", "VALIDATION_ERROR", "LOW_CONFIDENCE_MAPPING"];
+  if (!app || app.status !== "REVIEW_REQUIRED" || !answerable.includes(app.attentionReason)) return;
   const remaining = await tx.applicationQuestion.count({ where: { applicationId, status: "NEEDS_REVIEW" } });
   if (remaining > 0) return;
   await tx.application.update({
@@ -302,6 +325,22 @@ export async function skipQuestion(userId: string, questionId: string) {
 }
 
 /**
+ * The user fixed the cause outside the form (for example uploaded a missing
+ * resume) and wants the worker to work the question out again.
+ */
+export async function recheckQuestion(userId: string, questionId: string) {
+  const question = await loadOwnedQuestion(userId, questionId);
+  if (question.status !== "NEEDS_REVIEW") throw new ConflictError("This question no longer needs review");
+  await prisma.$transaction(async (tx) => {
+    await tx.applicationQuestion.update({ where: { id: questionId }, data: { status: "PENDING", reviewReason: null } });
+    await tx.applicationEvent.create({
+      data: { applicationId: question.application.id, userId, type: "HUMAN_INPUT_RECEIVED", message: `Asked AutoApply to check "${question.label.slice(0, 120)}" again` },
+    });
+    await resumeIfResolved(tx, userId, question.application.id);
+  });
+}
+
+/**
  * The user says they completed a human-only step (CAPTCHA, MFA, sign-in, or
  * final review). The application goes back to the queue and the worker resumes
  * it; the worker re-checks the page, so a false "done" just returns here.
@@ -327,6 +366,33 @@ export async function markHumanStepComplete(userId: string, applicationId: strin
         message: `User completed ${app.attentionReason ? app.attentionReason.toLowerCase().replace(/_/g, " ") : "the requested step"}`,
       },
     }),
+  ]);
+}
+
+/**
+ * The user reviewed a filled application and wants AutoApply to submit it
+ * (Review mode's final stop, an Auto run that was downgraded, or Manual mode's
+ * "let AutoApply submit"). The worker refills it from the approved answers and
+ * submits, still stopping for any CAPTCHA or new question.
+ */
+export async function approveForSubmission(userId: string, applicationId: string) {
+  const app = await prisma.application.findFirst({
+    where: { id: applicationId, userId, status: { in: ["REVIEW_REQUIRED", "READY"] } },
+    select: { id: true, attentionReason: true, lockedBy: true, lockedUntil: true },
+  });
+  if (!app) throw new NotFoundError("Application waiting for your approval");
+  if (app.attentionReason && !["FINAL_REVIEW", "CONTRADICTION"].includes(app.attentionReason)) {
+    throw new ConflictError("Resolve the open questions first");
+  }
+  const pending = await prisma.applicationQuestion.count({ where: { applicationId, status: "NEEDS_REVIEW" } });
+  if (pending > 0) throw new ConflictError("Review the remaining questions first");
+  const now = new Date();
+  await prisma.$transaction([
+    prisma.application.update({
+      where: { id: applicationId },
+      data: { status: "QUEUED", submitApprovedAt: now, attentionReason: null, attentionDetail: null, queuedAt: now, priority: { increment: 10 } },
+    }),
+    prisma.applicationEvent.create({ data: { applicationId, userId, type: "HUMAN_INPUT_RECEIVED", message: "Approved for submission" } }),
   ]);
 }
 

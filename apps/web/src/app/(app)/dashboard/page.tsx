@@ -1,10 +1,11 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { ArrowRight, CheckCircle2, Circle, Inbox } from "lucide-react";
-import { countResumes, getDashboardStats, getFullProfile, profileCompleteness } from "@autoapply/database";
+import { countResumes, getDailyUsage, getDashboardStats, getFullProfile, profileCompleteness } from "@autoapply/database";
 import { requireUser } from "@/lib/auth";
 import { formatRelative } from "@/lib/format";
 import { getWorkerStatus } from "@/lib/worker-status";
+import { LiveRuns } from "@/components/live-progress";
 import { EmptyState, PageHeader } from "@/components/page-header";
 import { MatchScore, StatusBadge } from "@/components/status";
 import { Badge } from "@/components/ui/badge";
@@ -26,11 +27,12 @@ const CARDS = [
 
 export default async function DashboardPage() {
   const user = await requireUser();
-  const [stats, profile, resumes, worker] = await Promise.all([
+  const [stats, profile, resumes, worker, usage] = await Promise.all([
     getDashboardStats(user.id),
     getFullProfile(user.id),
     countResumes(user.id),
     getWorkerStatus(),
+    getDailyUsage(user.id),
   ]);
   const completeness = profileCompleteness(profile, { resumes });
   const funnelMax = Math.max(1, ...stats.funnel.map((f) => f.count));
@@ -94,12 +96,12 @@ export default async function DashboardPage() {
           </CardContent>
         </Card>
 
-        <Card>
+        <Card className="min-w-0">
           <CardHeader>
             <CardTitle className="text-sm">Automation status</CardTitle>
             <CardDescription>
               {worker.state === "online"
-                ? `Worker online · ${worker.heartbeat.activeJobs} active`
+                ? `Worker online · ${worker.heartbeat.activeJobs} active · ${worker.heartbeat.interactive ? "visible browser" : "headless"}`
                 : worker.state === "offline"
                   ? "Worker not running"
                   : "Queue service unreachable"}
@@ -116,7 +118,7 @@ export default async function DashboardPage() {
               )}
             </CardAction>
           </CardHeader>
-          <CardContent className="grid gap-4">
+          <CardContent className="grid min-w-0 gap-4">
             <dl className="grid grid-cols-2 gap-3 text-sm">
               {[
                 ["Queued", stats.automation.queued],
@@ -130,6 +132,22 @@ export default async function DashboardPage() {
                 </div>
               ))}
             </dl>
+            <div className="grid gap-1.5">
+              <div className="flex items-center justify-between text-xs">
+                <span className="text-muted-foreground">Started today</span>
+                <span className="font-medium tabular-nums">
+                  {usage.started} / {usage.limit}
+                </span>
+              </div>
+              <Progress value={Math.min(100, (usage.started / Math.max(1, usage.limit)) * 100)} aria-label="Daily application limit used" />
+              {usage.started >= usage.limit && <p className="text-muted-foreground text-xs">Daily limit reached. Queued applications start again tomorrow.</p>}
+            </div>
+            <LiveRuns />
+            {worker.state === "online" && !worker.heartbeat.interactive && (
+              <p className="text-muted-foreground text-xs">
+                The worker runs without a visible browser, so CAPTCHAs and sign-ins are handed to you in Needs Attention to finish on the site yourself.
+              </p>
+            )}
             {stats.automation.pauseAfterCurrent && !stats.automation.paused && (
               <p className="text-muted-foreground text-xs">Will pause after the current application.</p>
             )}

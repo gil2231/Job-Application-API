@@ -1,9 +1,9 @@
 "use client";
 
 import { useState } from "react";
-import { ExternalLink, RotateCcw, SkipForward } from "lucide-react";
-import { APPLICATION_OUTCOMES, enumLabel, type ApplicationOutcome, type ApplicationStatus } from "@autoapply/shared";
-import { addNoteAction, retryApplicationsAction, setOutcomeAction, skipApplicationAction } from "@/actions/applications";
+import { Check, ExternalLink, RotateCcw, Send, SkipForward } from "lucide-react";
+import { APPLICATION_OUTCOMES, enumLabel, type ApplicationOutcome, type ApplicationStatus, type AttentionReason } from "@autoapply/shared";
+import { addNoteAction, approveSubmissionAction, markSubmittedAction, retryApplicationsAction, setOutcomeAction, skipApplicationAction } from "@/actions/applications";
 import { useServerAction } from "@/components/action-button";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -17,9 +17,25 @@ const OUTCOME_LABEL: Record<ApplicationOutcome, string> = {
   DECLINED: "Rejected",
 };
 
-export function ApplicationActions({ applicationId, status, outcome, jobUrl }: { applicationId: string; status: ApplicationStatus; outcome: ApplicationOutcome; jobUrl: string }) {
+export function ApplicationActions({
+  applicationId,
+  status,
+  outcome,
+  jobUrl,
+  attentionReason,
+  hasOpenQuestions,
+}: {
+  applicationId: string;
+  status: ApplicationStatus;
+  outcome: ApplicationOutcome;
+  jobUrl: string;
+  attentionReason: AttentionReason | null;
+  hasOpenQuestions: boolean;
+}) {
   const { pending, run } = useServerAction();
   const submitted = status === "SUBMITTED" || status === "REJECTED";
+  const canApprove = (status === "READY" || status === "REVIEW_REQUIRED") && !hasOpenQuestions && (!attentionReason || attentionReason === "FINAL_REVIEW" || attentionReason === "CONTRADICTION");
+  const canMarkSubmitted = status === "READY" || status === "REVIEW_REQUIRED" || status === "WAITING_FOR_USER";
   return (
     <div className="flex flex-wrap items-center gap-2">
       {submitted && (
@@ -35,6 +51,16 @@ export function ApplicationActions({ applicationId, status, outcome, jobUrl }: {
             ))}
           </SelectContent>
         </Select>
+      )}
+      {canApprove && (
+        <Button size="sm" disabled={pending} onClick={() => run(() => approveSubmissionAction(applicationId))}>
+          <Send /> {status === "READY" ? "Let AutoApply submit" : "Approve & submit"}
+        </Button>
+      )}
+      {canMarkSubmitted && (
+        <Button size="sm" variant="outline" disabled={pending} onClick={() => run(() => markSubmittedAction(applicationId))}>
+          <Check /> I submitted it
+        </Button>
       )}
       {status === "FAILED" && (
         <Button size="sm" disabled={pending} onClick={() => run(() => retryApplicationsAction([applicationId]))}>

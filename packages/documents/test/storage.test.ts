@@ -1,8 +1,8 @@
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 import { afterAll, describe, expect, it } from "vitest";
-import { buildStorageKey, LocalStorageDriver } from "../src/storage";
+import { buildStorageKey, LocalStorageDriver, localStorageRoot } from "../src/storage";
 import { sanitizeFileName, validateUpload } from "../src/validation";
 
 describe("LocalStorageDriver", async () => {
@@ -33,5 +33,16 @@ describe("validateUpload", () => {
   it("sanitizes file names", () => {
     expect(sanitizeFileName("../../evil<script>.pdf")).toBe("evilscript.pdf");
     expect(sanitizeFileName("C:\\Users\\me\\Resume 2026.pdf")).toBe("Resume 2026.pdf");
+  });
+});
+
+describe("localStorageRoot", () => {
+  const root = resolve(import.meta.dirname, "../../..");
+  it("resolves a relative directory from the workspace root, wherever the app runs", () => {
+    expect(localStorageRoot(".storage", join(root, "apps/web"))).toBe(join(root, ".storage"));
+    expect(localStorageRoot(".storage", join(root, "apps/worker/src"))).toBe(join(root, ".storage"));
+  });
+  it("keeps absolute directories", () => {
+    expect(localStorageRoot("/var/autoapply")).toBe("/var/autoapply");
   });
 });
