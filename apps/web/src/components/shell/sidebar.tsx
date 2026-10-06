@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState } from "react";
-import { LogOut, Menu, Moon, Sun } from "lucide-react";
+import { Flag, LifeBuoy, LogOut, Menu, Moon, Sun } from "lucide-react";
 import { useTheme } from "next-themes";
 import { signOutAction } from "@/actions/auth";
 import { Button } from "@/components/ui/button";
@@ -16,6 +16,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Sheet, SheetContent, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
+import { ReportProblemDialog } from "@/components/support/report-problem-dialog";
 import { cn } from "@/lib/utils";
 import { NAV_ITEMS } from "./nav";
 
@@ -53,6 +54,25 @@ function NavLinks({ attentionCount, onNavigate }: { attentionCount: number; onNa
         );
       })}
     </nav>
+  );
+}
+
+const supportLinkClass = "text-muted-foreground hover:bg-sidebar-accent hover:text-foreground flex h-8 w-full items-center gap-2.5 rounded-md px-2.5 text-[13px] font-medium transition-colors";
+
+function SupportLinks({ onNavigate }: { onNavigate?: () => void }) {
+  return (
+    <div className="grid gap-0.5 pb-1">
+      <Link href="/help" onClick={onNavigate} className={supportLinkClass}>
+        <LifeBuoy className="size-4" />
+        Help center
+      </Link>
+      <ReportProblemDialog>
+        <button type="button" className={supportLinkClass}>
+          <Flag className="size-4" />
+          Report a problem
+        </button>
+      </ReportProblemDialog>
+    </div>
   );
 }
 
@@ -108,6 +128,7 @@ export function Sidebar({ user, attentionCount }: SidebarProps) {
         <NavLinks attentionCount={attentionCount} />
       </div>
       <div className="border-sidebar-border border-t p-2">
+        <SupportLinks />
         <UserMenu user={user} />
       </div>
     </aside>
@@ -131,6 +152,7 @@ export function MobileNav({ user, attentionCount }: SidebarProps) {
             <NavLinks attentionCount={attentionCount} onNavigate={() => setOpen(false)} />
           </div>
           <div className="border-t p-2">
+            <SupportLinks onNavigate={() => setOpen(false)} />
             <UserMenu user={user} />
           </div>
         </SheetContent>

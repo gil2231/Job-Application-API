@@ -1,3 +1,5 @@
+import { LegalLinks } from "@/components/legal/legal";
+
 export default function AuthLayout({ children }: { children: React.ReactNode }) {
   return (
     <div className="grid min-h-screen lg:grid-cols-2">
@@ -8,6 +10,7 @@ export default function AuthLayout({ children }: { children: React.ReactNode }) 
             <span className="text-lg font-semibold tracking-tight">AutoApply</span>
           </div>
           {children}
+          <LegalLinks className="mt-10 justify-center" />
         </div>
       </div>
       <div className="relative hidden overflow-hidden border-l bg-[radial-gradient(ellipse_at_top_left,var(--color-primary)_0%,transparent_60%)] bg-zinc-950 lg:block">
