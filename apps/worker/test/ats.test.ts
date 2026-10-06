@@ -3,6 +3,7 @@ import { markHumanStepComplete, prisma } from "@autoapply/database";
 import { ATS_ENTRY_POINTS } from "../mock-site/ats";
 import { startMockSite, type MockSite } from "../mock-site/server";
 import { loadApplication, makeApplicant, makeEngine, queueFor, resetDatabase, runOnce, type ApplicantOptions } from "./helpers";
+import { decryptString, isEncrypted } from "@autoapply/database/crypto";
 
 /**
  * Each ATS adapter against a local imitation of that ATS (never a real
@@ -101,7 +102,8 @@ describe("Ashby", () => {
     const { fields, files } = site.submissions[0]!;
     expect(fields).toMatchObject({ _systemfield_name: "Jordan Rivera", _systemfield_email: "jordan@example.com", _systemfield_location_value: "New York, New York, US" });
     expect(Object.values(fields)).toEqual(expect.arrayContaining(["212-555-0100", "https://www.linkedin.com/in/jordan-rivera"]));
-    const answers = after.questions.filter((q) => q.fieldType === "RADIO").map((q) => [q.label, q.answer?.value]);
+    // Authorization and sponsorship answers are encrypted at rest.
+    const answers = after.questions.filter((q) => q.fieldType === "RADIO").map((q) => [q.label, q.answer && isEncrypted(q.answer.value) ? decryptString(q.answer.value) : q.answer?.value]);
     expect(answers).toEqual([
       [expect.stringContaining("legally authorized"), "Yes"],
       [expect.stringContaining("sponsorship"), "No"],

@@ -18,6 +18,7 @@ import {
   skipQuestion,
 } from "@autoapply/database";
 import { matchStandardQuestion } from "@autoapply/automation";
+import { SENSITIVE_ANSWER_CATEGORIES, STANDARD_QUESTIONS } from "@autoapply/shared";
 import { authedAction, parseIds, type ActionResult } from "@/lib/action";
 import { notifyWorker } from "@/lib/worker-queue";
 
@@ -84,11 +85,13 @@ export async function approveAnswerAction(questionId: string, editedValue?: stri
     const qid = one(questionId);
     if (!qid) return { ok: false, message: "Invalid id" };
     if (editedValue != null && (typeof editedValue !== "string" || editedValue.length > 10_000)) return { ok: false, message: "Answer is too long" };
-    await approveQuestionAnswer(user.id, qid, editedValue);
+    const question = await prisma.applicationQuestion.findFirst({ where: { id: qid, application: { userId: user.id } }, select: { label: true, normalizedKey: true } });
+    const standardKey = question ? matchStandardQuestion(question.label) : null;
+    const standard = STANDARD_QUESTIONS.find((q) => q.key === standardKey);
+    await approveQuestionAnswer(user.id, qid, editedValue, { sensitive: !!standard && SENSITIVE_ANSWER_CATEGORIES.includes(standard.category) });
     await audit(user.id, editedValue != null ? "attention.answer_edited" : "attention.answer_approved", { entityType: "ApplicationQuestion", entityId: qid });
     if (remember === true) {
-      const question = await prisma.applicationQuestion.findFirst({ where: { id: qid, application: { userId: user.id } }, select: { label: true, normalizedKey: true } });
-      if (question && (await rememberApprovedAnswer(user.id, qid, matchStandardQuestion(question.label) ?? question.normalizedKey))) {
+      if (question && (await rememberApprovedAnswer(user.id, qid, standardKey ?? question.normalizedKey))) {
         await audit(user.id, "answer.remembered", { entityType: "ApplicationQuestion", entityId: qid });
       }
     }

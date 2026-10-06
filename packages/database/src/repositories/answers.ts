@@ -1,7 +1,7 @@
 import type { AnswerInput, AnswerSource } from "@autoapply/shared";
 import { deriveAnswerFromProfile, normalizeQuestionKey, SENSITIVE_ANSWER_CATEGORIES, STANDARD_QUESTIONS } from "@autoapply/shared";
 import { prisma } from "../client";
-import { decryptString, encryptString } from "../crypto";
+import { decryptString, encryptString, isEncrypted } from "../crypto";
 import { isUniqueViolation, NotFoundError, ConflictError } from "./errors";
 import { getFullProfile } from "./profile";
 
@@ -120,4 +120,37 @@ export async function rememberAnswer(userId: string, input: { questionKey: strin
       isSensitive,
     },
   });
+}
+
+/**
+ * Bring stored answers in line with SENSITIVE_ANSWER_CATEGORIES after the
+ * list grows (pay, work authorization and sponsorship joined it in Phase 6):
+ * saved answers in those categories are encrypted and flagged, and so are the
+ * values already filled from them on applications. Encryption needs the app's
+ * key, so this runs from the worker (at start-up and in its maintenance sweep)
+ * rather than as a SQL migration. Idempotent and safe to run concurrently.
+ */
+export async function encryptSensitiveAnswers(batch = 200): Promise<{ answers: number; filled: number }> {
+  let answers = 0;
+  for (;;) {
+    const rows = await prisma.applicationAnswer.findMany({ where: { category: { in: [...SENSITIVE_ANSWER_CATEGORIES] }, isSensitive: false }, select: { id: true, answer: true }, take: batch });
+    if (!rows.length) break;
+    for (const r of rows) {
+      const answer = r.answer.trim() && !isEncrypted(r.answer) ? encryptString(r.answer) : r.answer;
+      const { count } = await prisma.applicationAnswer.updateMany({ where: { id: r.id, isSensitive: false, answer: r.answer }, data: { answer, isSensitive: true } });
+      answers += count;
+    }
+    if (rows.length < batch) break;
+  }
+  let filled = 0;
+  for (;;) {
+    const rows = await prisma.applicationAnswerInstance.findMany({ where: { libraryAnswer: { isSensitive: true }, NOT: { value: { startsWith: "enc:v1:" } } }, select: { id: true, value: true }, take: batch });
+    if (!rows.length) break;
+    for (const r of rows) {
+      const { count } = await prisma.applicationAnswerInstance.updateMany({ where: { id: r.id, value: r.value }, data: { value: encryptString(r.value) } });
+      filled += count;
+    }
+    if (rows.length < batch) break;
+  }
+  return { answers, filled };
 }

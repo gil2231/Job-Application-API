@@ -176,7 +176,7 @@ pnpm test:e2e    # Playwright browser tests against the dev server, then with th
 
 - Passwords are hashed with argon2id. Accounts lock for 15 minutes after 5 failed sign-ins.
 - Sessions live in the database, which stores only a SHA-256 hash of each token. The cookie is httpOnly, SameSite=Lax, and `__Host-` prefixed in production.
-- Sensitive answers (demographics, sponsorship) and browser session state are encrypted with AES-256-GCM.
+- Sensitive answers (salary expectations, work authorization, sponsorship, military status and voluntary self-identification), the values filled from them on applications, and browser session state are encrypted with AES-256-GCM. Answers saved before a category became sensitive are encrypted by the worker when it starts. Sensitive answers never go into AI prompts or similar-answer suggestions, and self-identification answers are also hidden in review summaries.
 - Every mutation is checked for authorization, validated with zod, rate-limited, and written to the audit log (Settings → Security log).
 - Uploads are checked against their file signature (magic bytes) and capped at 10 MB.
 - Every page carries a Content Security Policy: scripts run only with a per-request nonce, and framing, plugins and off-site form posts are blocked.
