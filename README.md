@@ -85,7 +85,7 @@ By default the worker only opens `localhost` and `127.0.0.1`. To run against rea
 
 ### AI
 
-AI is optional. Choose a provider in **Settings → AI** (and set `ANTHROPIC_API_KEY` on the server); without one, the built-in tools do everything below except write new text.
+AI is optional. Two providers are built in: Claude (`AI_PROVIDER=anthropic` with `ANTHROPIC_API_KEY`) and OpenAI (`AI_PROVIDER=openai` with `OPENAI_API_KEY`). Set the provider and its key in `.env`, or set the key and choose the provider in **Settings → AI**; `AI_MODEL` (or the Model box in Settings) overrides the default model. Without a provider, the built-in tools do everything below except write new text. The same checks apply whichever provider writes the text.
 
 - **Field mapping.** The built-in rules map each form field to your Master Profile first. Only fields they aren't sure about go to the model, which can answer only with a field from the fixed profile schema. A field only AI recognized gets at most 85% confidence, a disagreement between the two gets 40%, and anything under your review threshold (Settings) waits for you.
 - **Answers.** A required question with no saved answer gets a suggestion: a saved answer to a similarly worded question (never across different places, numbers or negations), else an AI draft built from your profile and saved answers. AI drafts always wait for your approval and are never auto-submitted. Questions about work authorization, sponsorship, demographics, pay, availability, relocation, travel or consent are never drafted.
