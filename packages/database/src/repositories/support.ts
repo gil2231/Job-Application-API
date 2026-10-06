@@ -1,5 +1,8 @@
-import type { SupportCategory } from "@autoapply/shared";
+import type { SupportCategory, SupportStatus } from "@autoapply/shared";
+import type { Prisma } from "@prisma/client";
 import { prisma } from "../client";
+import { audit, type AuditContext } from "./audit";
+import { NotFoundError } from "./errors";
 
 export interface NewSupportRequest {
   userId: string | null;
@@ -49,15 +52,60 @@ export async function listSupportRequests(userId: string, limit = 20) {
   });
 }
 
-/** Every open report, oldest first, for whoever answers support (the owner admin panel). */
-export async function listOpenSupportRequests(limit = 100) {
-  return prisma.supportRequest.findMany({
-    where: { status: "OPEN" },
-    orderBy: { createdAt: "asc" },
-    take: Math.min(limit, 500),
-  });
+export const SUPPORT_PAGE_SIZE = 25;
+
+export interface AdminSupportFilters {
+  status?: "open" | "resolved" | "all";
+  category?: SupportCategory;
+  page?: number;
 }
 
-export async function resolveSupportRequest(id: string) {
-  return prisma.supportRequest.update({ where: { id }, data: { status: "RESOLVED", resolvedAt: new Date() }, select: { id: true } });
+/**
+ * Reports from every user for the owner admin panel. Open reports list oldest
+ * first (answer in order); resolved ones newest first.
+ */
+export async function listAdminSupportRequests(filters: AdminSupportFilters = {}, take = SUPPORT_PAGE_SIZE) {
+  const status = filters.status ?? "open";
+  const page = Math.max(1, Math.floor(filters.page ?? 1));
+  const where: Prisma.SupportRequestWhereInput = {
+    ...(status === "open" ? { status: "OPEN" } : status === "resolved" ? { status: "RESOLVED" } : {}),
+    ...(filters.category && { category: filters.category }),
+  };
+  const [total, items] = await Promise.all([
+    prisma.supportRequest.count({ where }),
+    prisma.supportRequest.findMany({
+      where,
+      orderBy: [{ createdAt: status === "open" ? "asc" : "desc" }, { id: "asc" }],
+      skip: (page - 1) * take,
+      take,
+      select: {
+        id: true,
+        email: true,
+        name: true,
+        category: true,
+        subject: true,
+        message: true,
+        pagePath: true,
+        applicationId: true,
+        userAgent: true,
+        status: true,
+        resolvedAt: true,
+        createdAt: true,
+        user: { select: { id: true, name: true } },
+      },
+    }),
+  ]);
+  return { total, page, pageCount: Math.max(1, Math.ceil(total / take)), items };
+}
+
+export async function countOpenSupportRequests() {
+  return prisma.supportRequest.count({ where: { status: "OPEN" } });
+}
+
+/** Mark a report resolved, or reopen it. Audited as the admin who did it. */
+export async function setSupportRequestStatus(adminId: string, id: string, status: SupportStatus, context?: AuditContext) {
+  const existing = await prisma.supportRequest.findUnique({ where: { id }, select: { id: true } });
+  if (!existing) throw new NotFoundError("Report not found");
+  await prisma.supportRequest.update({ where: { id }, data: { status, resolvedAt: status === "RESOLVED" ? new Date() : null } });
+  await audit(adminId, status === "RESOLVED" ? "admin.support_resolved" : "admin.support_reopened", { entityType: "SupportRequest", entityId: id, context });
 }

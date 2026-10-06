@@ -57,3 +57,10 @@ export const publicSupportRequestSchema = supportRequestSchema.extend({
   email: z.string().trim().toLowerCase().pipe(z.email("Enter a valid email address")).pipe(z.string().max(254)),
 });
 export type PublicSupportRequestInput = z.infer<typeof publicSupportRequestSchema>;
+
+/** Filters on the admin panel's Reports page, read from the URL. */
+export const adminSupportFiltersSchema = z.object({
+  status: z.enum(["open", "resolved", "all"]).default("open").catch("open"),
+  category: z.enum(SUPPORT_CATEGORIES).optional().catch(undefined),
+  page: z.coerce.number().int().min(1).max(10_000).default(1).catch(1),
+});

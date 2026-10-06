@@ -3,7 +3,7 @@ import { manualJobSchema, publicSupportRequestSchema, supportRequestSchema } fro
 import { prisma } from "../src/client";
 import { createManualJob } from "../src/repositories/jobs";
 import { queueApplications } from "../src/repositories/applications";
-import { createSupportRequest, listOpenSupportRequests, listSupportRequests, resolveSupportRequest } from "../src/repositories/support";
+import { countOpenSupportRequests, createSupportRequest, listAdminSupportRequests, listSupportRequests, setSupportRequestStatus } from "../src/repositories/support";
 import { makeUser, resetDatabase } from "./helpers";
 
 beforeEach(resetDatabase);
@@ -36,11 +36,24 @@ describe("support requests", () => {
     expect(row.applicationId).toBeNull();
   });
 
-  it("accepts signed-out reports and lists open ones until resolved", async () => {
-    const created = await createSupportRequest({ ...base, category: "ACCOUNT", userId: null, email: "locked@example.com", name: "Locked Out" });
-    expect((await listOpenSupportRequests()).map((r) => r.id)).toEqual([created.id]);
-    await resolveSupportRequest(created.id);
-    expect(await listOpenSupportRequests()).toEqual([]);
+  it("accepts signed-out reports and lists them for admins until resolved", async () => {
+    const admin = await makeUser("Admin");
+    const older = await createSupportRequest({ ...base, category: "ACCOUNT", userId: null, email: "locked@example.com", name: "Locked Out" });
+    const newer = await createSupportRequest({ ...base, category: "BILLING", userId: null, email: "pay@example.com" });
+    expect((await listAdminSupportRequests()).items.map((r) => r.id)).toEqual([older.id, newer.id]);
+    expect((await listAdminSupportRequests({ category: "BILLING" })).items.map((r) => r.id)).toEqual([newer.id]);
+    expect(await countOpenSupportRequests()).toBe(2);
+
+    await setSupportRequestStatus(admin.id, older.id, "RESOLVED");
+    expect((await listAdminSupportRequests()).items.map((r) => r.id)).toEqual([newer.id]);
+    const resolved = await listAdminSupportRequests({ status: "resolved" });
+    expect(resolved.items[0]).toMatchObject({ id: older.id, status: "RESOLVED" });
+    expect(resolved.items[0]!.resolvedAt).toBeInstanceOf(Date);
+    expect(await prisma.auditLog.count({ where: { userId: admin.id, action: "admin.support_resolved" } })).toBe(1);
+
+    await setSupportRequestStatus(admin.id, older.id, "OPEN");
+    expect(await countOpenSupportRequests()).toBe(2);
+    await expect(setSupportRequestStatus(admin.id, "missingid000000000000", "RESOLVED")).rejects.toThrow("Report not found");
   });
 
   it("deletes a user's reports with the account", async () => {

@@ -1,5 +1,8 @@
 import { expect, test } from "@playwright/test";
+import { prisma, setUserRole } from "@autoapply/database";
 import { addJob, signUp } from "./helpers";
+
+test.afterAll(() => prisma.$disconnect());
 
 test.describe("legal pages and help center", () => {
   test("are readable without signing in and linked from sign-up", async ({ page }) => {
@@ -64,4 +67,34 @@ test("report a problem from the app and from an application", async ({ page }) =
   dialog = page.getByRole("dialog");
   await expect(dialog.getByText("and this application")).toBeVisible();
   await expect(dialog.getByRole("combobox")).toHaveText("A problem with an application");
+});
+
+test("admins read and resolve reports in the admin panel", async ({ browser, page }) => {
+  const subject = `Upload stuck ${Date.now()}`;
+  const customerPage = await browser.newPage();
+  await signUp(customerPage, "Riley Reporter");
+  await customerPage.goto("/dashboard");
+  await customerPage.locator("aside").getByRole("button", { name: "Report a problem" }).click();
+  const dialog = customerPage.getByRole("dialog");
+  await dialog.getByLabel("Summary").fill(subject);
+  await dialog.getByLabel("What happened?").fill("My resume upload has been spinning for ten minutes.");
+  await dialog.getByRole("button", { name: "Send report" }).click();
+  await expect(customerPage.getByText("Thanks. We got your message")).toBeVisible();
+  await customerPage.close();
+
+  const owner = await signUp(page, "Owner Person");
+  await setUserRole(owner.email, "ADMIN");
+  await page.goto("/admin");
+  await page.getByTestId("admin-card-Open reports").click();
+  await expect(page).toHaveURL(/\/admin\/reports$/);
+  const report = page.getByTestId("admin-reports").getByRole("listitem").filter({ hasText: subject });
+  await expect(report.getByText("My resume upload has been spinning")).toBeVisible();
+  await expect(report.getByText(/Riley Reporter/)).toBeVisible();
+  await expect(report.getByRole("link", { name: "Reply by email" })).toHaveAttribute("href", /^mailto:e2e-.*subject=Re%3A%20Upload%20stuck/);
+
+  await report.getByRole("button", { name: "Mark resolved" }).click();
+  await expect(page.getByText("Marked resolved")).toBeVisible();
+  await expect(page.getByTestId("admin-reports").getByText(subject)).toHaveCount(0);
+  await page.getByRole("tab", { name: "Resolved" }).click();
+  await expect(page.getByTestId("admin-reports").getByText(subject)).toBeVisible();
 });
