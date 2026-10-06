@@ -1,4 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
+import { contentSecurityPolicy, createNonce } from "./lib/csp";
 import { SESSION_COOKIE, sessionCookieOptions } from "./lib/session-cookie";
 
 const PUBLIC_PATHS = ["/sign-in", "/sign-up", "/api/health"];
@@ -7,6 +8,8 @@ const PUBLIC_PATHS = ["/sign-in", "/sign-up", "/api/health"];
  * Optimistic routing only: sends visitors without a session cookie to sign-in.
  * Every page, action and route handler still validates the session against
  * the database (requireUser), so a forged cookie gets nothing.
+ *
+ * Also sets this request's Content Security Policy and script nonce.
  */
 export function proxy(request: NextRequest) {
   const { pathname, search } = request.nextUrl;
@@ -19,9 +22,17 @@ export function proxy(request: NextRequest) {
     if (pathname !== "/") url.searchParams.set("next", pathname + search);
     return NextResponse.redirect(url);
   }
-  const response = NextResponse.next();
-  // Sliding cookie lifetime; the database session decides validity.
-  if (token) response.cookies.set(SESSION_COOKIE, token, sessionCookieOptions);
+  const nonce = createNonce();
+  const csp = contentSecurityPolicy(nonce, { dev: process.env.NODE_ENV !== "production", https: request.nextUrl.protocol === "https:" });
+  const requestHeaders = new Headers(request.headers);
+  requestHeaders.set("x-nonce", nonce);
+  requestHeaders.set("Content-Security-Policy", csp);
+  const response = NextResponse.next({ request: { headers: requestHeaders } });
+  response.headers.set("Content-Security-Policy", csp);
+  // Sliding cookie lifetime; the database session decides validity. Only on
+  // page loads: refreshing it on a POST would re-set the cookie a sign-out
+  // server action is deleting in the same response.
+  if (token && request.method === "GET") response.cookies.set(SESSION_COOKIE, token, sessionCookieOptions);
   return response;
 }
 

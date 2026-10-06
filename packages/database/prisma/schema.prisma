@@ -99,6 +99,10 @@ enum FailureType {
   UNKNOWN_FIELD
   SITE_CHANGED
   UNKNOWN_ERROR
+  RATE_LIMITED
+  SITE_UNAVAILABLE
+  BROWSER_CRASHED
+  POSTING_CLOSED
 }
 
 enum AttentionReason {
@@ -810,6 +814,8 @@ model ApplicationAttempt {
   browserSessionId String?
   failureType      FailureType?
   errorMessage     String?
+  /// Why the attempt stopped for a person (set when status is PAUSED), for automation health.
+  attentionReason  AttentionReason?
   /// [{ key, caption, takenAt }] storage keys of screenshots taken during the attempt.
   screenshots      Json?
   startedAt        DateTime      @default(now())
@@ -820,6 +826,7 @@ model ApplicationAttempt {
 
   @@unique([applicationId, attemptNumber])
   @@index([applicationId, startedAt])
+  @@index([endedAt])
 }
 
 /// Saved browser state for a site so a user who completed MFA once is not asked again.

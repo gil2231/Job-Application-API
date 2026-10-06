@@ -229,7 +229,7 @@ export async function finishAttempt(input: { applicationId: string; attemptId: s
           attentionDetail: outcome.detail.slice(0, 2000),
           ...(outcome.keepLease ? { lockedUntil: new Date(now.getTime() + outcome.keepLease.leaseMs) } : { lockedBy: null, lockedUntil: null }),
         };
-        attempt = { status: "PAUSED", endedAt: outcome.keepLease ? null : now };
+        attempt = { status: "PAUSED", attentionReason: outcome.reason, endedAt: outcome.keepLease ? null : now };
         event = { type: "HUMAN_INPUT_REQUIRED", message: outcome.detail, level: "WARNING", data: { reason: outcome.reason } };
         break;
       case "retry":
@@ -253,6 +253,34 @@ export async function finishAttempt(input: { applicationId: string; attemptId: s
     await tx.applicationEvent.create({ data: { applicationId, userId, ...event } });
     return true;
   });
+}
+
+/** Where a queued application will go, so the worker can check the site before claiming it. */
+export async function getApplicationTarget(applicationId: string) {
+  const app = await prisma.application.findUnique({ where: { id: applicationId }, select: { status: true, userId: true, job: { select: { url: true, applicationUrl: true } } } });
+  if (!app) return null;
+  const url = app.job.applicationUrl ?? app.job.url;
+  let host = "";
+  try {
+    host = new URL(url).hostname.toLowerCase();
+  } catch {
+    /* an unparseable link fails in the engine, with a clear message */
+  }
+  return { status: app.status, userId: app.userId, host };
+}
+
+/**
+ * Hold a queued application back until a site's cooldown ends, without
+ * claiming it or using up one of its attempts. Records one timeline event per
+ * new hold. Returns false if the application isn't queued or is already held
+ * at least that long.
+ */
+export async function deferApplication(applicationId: string, until: Date, message: string): Promise<boolean> {
+  const app = await prisma.application.findUnique({ where: { id: applicationId }, select: { status: true, userId: true, nextAttemptAt: true } });
+  if (!app || app.status !== "QUEUED" || (app.nextAttemptAt && app.nextAttemptAt >= until)) return false;
+  const { count } = await prisma.application.updateMany({ where: { id: applicationId, status: "QUEUED" }, data: { nextAttemptAt: until } });
+  if (count) await addApplicationEvent(applicationId, app.userId, "RETRY_SCHEDULED", message, { data: { deferredUntil: until.toISOString() } });
+  return count > 0;
 }
 
 /** The user stopped or skipped the application while it ran: close the attempt without touching the status. */

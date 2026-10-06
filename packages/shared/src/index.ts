@@ -11,3 +11,6 @@ export * from "./queue";
 export * from "./keywords";
 export * from "./documents";
 export * from "./tracker";
+export * from "./automation-health";
+export * from "./logger";
+export * from "./environment";

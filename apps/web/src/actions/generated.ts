@@ -17,9 +17,11 @@ import {
   type GeneratedKind,
 } from "@autoapply/database";
 import { buildStorageKey, EXPORT_MIME, generatedFileName, getStorage, renderCoverLetter, renderResume, sha256Hex } from "@autoapply/documents";
-import { MAX_COVER_LETTER_CHARS, MAX_SUMMARY_CHARS, toParagraphs, type CoverLetterContent, type ResumeContent } from "@autoapply/shared";
+import { MAX_COVER_LETTER_CHARS, MAX_SUMMARY_CHARS, toParagraphs, type CoverLetterContent, type ResumeContent, createLogger } from "@autoapply/shared";
 import { authedAction, type ActionResult } from "@/lib/action";
 import { LIMITS, rateLimit } from "@/lib/rate-limit";
+
+const log = createLogger("generated");
 
 const ID = /^[a-z0-9]{20,40}$/i;
 const KINDS: readonly GeneratedKind[] = ["resume", "coverLetter"];
@@ -31,14 +33,14 @@ function refresh(jobId: string | null) {
 }
 
 async function removeStored(key: string | null) {
-  if (key) await getStorage().delete(key).catch((error) => console.error("[generated] failed to delete stored file", error));
+  if (key) await getStorage().delete(key).catch((error) => log.error("Failed to delete a stored file", { error }));
 }
 
 /** Write (or rewrite) the tailored resume or cover letter for a job from the Master Profile. */
 export async function generateDocumentAction(jobId: string, kind: GeneratedKind): Promise<ActionResult> {
   return authedAction(async (user) => {
     if (!ID.test(jobId) || !KINDS.includes(kind)) return { ok: false, message: "Invalid request" };
-    const limit = rateLimit(`generate:${user.id}`, LIMITS.generate.limit, LIMITS.generate.windowMs);
+    const limit = await rateLimit(`generate:${user.id}`, LIMITS.generate.limit, LIMITS.generate.windowMs);
     if (!limit.allowed) return { ok: false, message: `Generation limit reached. Try again in ${Math.ceil(limit.retryAfterSeconds / 60)} min.` };
 
     const [job, profile, settings] = await Promise.all([getJob(user.id, jobId), getFullProfile(user.id), getUserSettings(user.id)]);

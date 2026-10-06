@@ -12,6 +12,7 @@ import {
   recheckQuestion,
   rememberApprovedAnswer,
   retryApplications,
+  retryScheduledNow,
   revokeBrowserSession,
   skipApplication,
   skipQuestion,
@@ -26,6 +27,7 @@ function refresh(applicationId?: string) {
   revalidatePath("/needs-attention");
   revalidatePath("/jobs");
   revalidatePath("/dashboard");
+  revalidatePath("/automation");
   if (applicationId) revalidatePath(`/applications/${applicationId}`);
 }
 
@@ -38,6 +40,19 @@ export async function retryApplicationsAction(ids: string[]): Promise<ActionResu
     if (result.retried) await notifyWorker(user.id);
     refresh();
     return result.retried ? { ok: true, message: `Requeued ${result.retried} application${result.retried === 1 ? "" : "s"}` } : { ok: false, message: "Only failed applications can be retried." };
+  });
+}
+
+/** Skip the backoff wait on applications scheduled to retry later. */
+export async function retryScheduledNowAction(ids: string[]): Promise<ActionResult> {
+  return authedAction(async (user) => {
+    const count = await retryScheduledNow(user.id, parseIds(ids));
+    if (!count) return { ok: false, message: "Nothing is waiting to retry." };
+    await audit(user.id, "application.retry_now", { metadata: { ids, count } });
+    await notifyWorker(user.id);
+    refresh();
+    revalidatePath("/automation");
+    return { ok: true, message: count === 1 ? "Retrying now" : `Retrying ${count} applications now` };
   });
 }
 

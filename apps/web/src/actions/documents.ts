@@ -3,9 +3,11 @@
 import { revalidatePath } from "next/cache";
 import { audit, createDocument, deleteDocument, setDefaultDocument } from "@autoapply/database";
 import { buildStorageKey, getStorage, sanitizeFileName, sha256Hex, validateUpload } from "@autoapply/documents";
-import { documentMetaSchema } from "@autoapply/shared";
+import { documentMetaSchema, createLogger } from "@autoapply/shared";
 import { authedAction, formToObject, validationFailed, type ActionResult } from "@/lib/action";
 import { LIMITS, rateLimit } from "@/lib/rate-limit";
+
+const log = createLogger("documents");
 
 const ID = /^[a-z0-9]{20,40}$/i;
 
@@ -17,7 +19,7 @@ function refresh() {
 
 export async function uploadDocumentAction(_prev: ActionResult, formData: FormData): Promise<ActionResult> {
   return authedAction(async (user) => {
-    const limit = rateLimit(`upload:${user.id}`, LIMITS.upload.limit, LIMITS.upload.windowMs);
+    const limit = await rateLimit(`upload:${user.id}`, LIMITS.upload.limit, LIMITS.upload.windowMs);
     if (!limit.allowed) return { ok: false, message: "Upload limit reached. Try again later." };
 
     const file = formData.get("file");
@@ -54,7 +56,7 @@ export async function deleteDocumentAction(id: string): Promise<ActionResult> {
   return authedAction(async (user) => {
     if (!ID.test(id)) return { ok: false, message: "Invalid id" };
     const key = await deleteDocument(user.id, id);
-    await getStorage().delete(key).catch((error) => console.error("[documents] failed to delete stored file", error));
+    await getStorage().delete(key).catch((error) => log.error("Failed to delete a stored file", { error }));
     await audit(user.id, "document.deleted", { entityType: "Document", entityId: id });
     refresh();
     return { ok: true, message: "Document deleted" };

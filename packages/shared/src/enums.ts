@@ -72,6 +72,10 @@ export const FAILURE_TYPES = [
   "UNKNOWN_FIELD",
   "SITE_CHANGED",
   "UNKNOWN_ERROR",
+  "RATE_LIMITED",
+  "SITE_UNAVAILABLE",
+  "BROWSER_CRASHED",
+  "POSTING_CLOSED",
 ] as const;
 export type FailureType = (typeof FAILURE_TYPES)[number];
 
