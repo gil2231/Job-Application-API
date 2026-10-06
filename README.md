@@ -20,7 +20,8 @@ packages/
   database/   Prisma schema, migrations, repositories (all queries are scoped to the user)
   shared/     Enums, zod schemas, salary/URL parsing, standard questions, queue names
   automation/ Field classification and answer resolution, option matching, submit safety checks, retry policy
-  ats-adapters/ Platform detection, ApplicationAdapter interface and registry, generic web form adapter
+  ats-adapters/ Platform detection, ApplicationAdapter interface and registry, the shared form engine, and the
+              Workday, Greenhouse, Lever, Ashby, SmartRecruiters and generic web form adapters
   queue/      BullMQ queue, Redis control and progress channels
   ai/         AI provider registry (Anthropic), job analysis with a deterministic fallback
   matching/   Match score (0–100, weighted and explained) and the qualification rules engine
@@ -79,6 +80,39 @@ The dashboard shows each running application's steps live (server-sent events), 
 
 By default the worker only opens `localhost` and `127.0.0.1`. To run against real employer sites, set `AUTOMATION_ALLOW_ALL_HOSTS=true` (private and internal addresses stay blocked). LinkedIn Easy Apply is never automated.
 
+### Supported platforms
+
+Each application's platform is detected from its link, and again from the page once it opens, so a Greenhouse or Lever board embedded on an employer's careers site is handled by the right adapter. All adapters share one form engine (labels first, then names, stable ids, ARIA and DOM paths, never coordinates) and differ only in what each site does:
+
+| Platform | What the adapter handles |
+| --- | --- |
+| Greenhouse | The `#application_form` under the posting, typeahead dropdowns for questions and the EEOC section, the city search, and the hidden resume input behind Attach |
+| Lever | The posting's Apply link, one Full name field, `✱` required markers and `.application-label` questions. Lever rewrites fields from the uploaded resume, so they're reset to your profile, and fields it filled that your profile doesn't cover are cleared |
+| Ashby | The Application tab of a single-page app, Yes/No answer buttons, the location search, and an in-place confirmation. The Autofill from resume upload is skipped |
+| Workday | Apply, then Apply Manually (never Autofill with Resume or Use My Last Application), the candidate sign-in (always yours to do, then reused), the step-by-step flow with Save and Continue, list buttons for dropdowns, and the final Review page |
+| SmartRecruiters | I'm interested, form fields built from web components inside shadow DOM, the confirm-email field. Apply with LinkedIn or Indeed is never pressed |
+| Other web forms | Any HTML application form |
+
+Adding an ATS is one class that describes the site (its buttons, where questions are labelled, which ids are stable) plus a `register()` call in `packages/ats-adapters/src/defaults.ts`.
+
+### Mock application pages
+
+`pnpm --filter @autoapply/worker mock-site` serves local test forms at http://127.0.0.1:4100: a simple form, multi-page, dropdowns, checkboxes, file uploads, conditional questions, validation errors, CAPTCHA and sign-in walls, and unknown fields. It also imitates each supported ATS's form structure (Greenhouse, Lever with and without an hCaptcha on submit, Ashby, Workday with its sign-in, SmartRecruiters); the index page links to all of them. Add one as a job (for example `http://127.0.0.1:4100/simple`) to watch the whole flow without touching a real site. The worker tests and `pnpm test:e2e` use these pages.
+
+### Worker settings
+
+| Variable | Default | |
+| --- | --- | --- |
+| `WORKER_CONCURRENCY` | `2` | Applications one worker runs at once (each user's own limit still applies) |
+| `WORKER_HEADLESS` | `true` | `false` opens a visible browser you can finish checks in |
+| `WORKER_INTERACTIVE_WAIT_MS` | `900000` | How long a visible browser waits for you before releasing the application |
+| `WORKER_LEASE_MS` | `90000` | Lease length; a crashed worker's applications are requeued after it |
+| `WORKER_SCHEDULER_INTERVAL_MS` | `5000` | How often the scheduler looks for due applications |
+| `WORKER_NAVIGATION_TIMEOUT_MS` | `30000` | Page load timeout |
+| `AUTOMATION_ALLOWED_HOSTS` | `localhost,127.0.0.1` | Hosts the worker may open |
+| `AUTOMATION_ALLOW_ALL_HOSTS` | `false` | Allow public employer sites |
+| `PLAYWRIGHT_CHROMIUM_EXECUTABLE` | | Chromium to launch, if not Playwright's own |
+
 ## Flightpath: tracking every application
 
 **Flightpath** (in the sidebar) follows each application from the queue to the final answer, as a board or a table:
@@ -96,24 +130,6 @@ Stages aren't stored separately: Flightpath derives them from the application's 
 **Email and other integrations.** Replies can't be read yet, so post-submit stages are set by you. An integration plugs in by implementing `StageSignalProvider` (`packages/shared/src/tracker.ts`) and handing its signals to `recordStageSignal` (`packages/database`). That matches the signal to one sent application, applies it only when the provider is confident and the move is forward, ignores repeats, and otherwise leaves a note on the timeline for you to act on, so an integration never overwrites what you set.
 
 The REST API exposes the same operations: `GET /v1/tracker/board`, `GET /v1/tracker/applications`, `PATCH /v1/applications/:id/stage`, and interview rounds under `/v1/applications/:id/interviews` and `/v1/interviews/:id`.
-
-### Mock application pages
-
-`pnpm --filter @autoapply/worker mock-site` serves local test forms at http://127.0.0.1:4100: a simple form, multi-page, dropdowns, checkboxes, file uploads, conditional questions, validation errors, CAPTCHA and sign-in walls, and unknown fields. Add one as a job (for example `http://127.0.0.1:4100/simple`) to watch the whole flow without touching a real site. The worker tests and `pnpm test:e2e` use these pages.
-
-### Worker settings
-
-| Variable | Default | |
-| --- | --- | --- |
-| `WORKER_CONCURRENCY` | `2` | Applications one worker runs at once (each user's own limit still applies) |
-| `WORKER_HEADLESS` | `true` | `false` opens a visible browser you can finish checks in |
-| `WORKER_INTERACTIVE_WAIT_MS` | `900000` | How long a visible browser waits for you before releasing the application |
-| `WORKER_LEASE_MS` | `90000` | Lease length; a crashed worker's applications are requeued after it |
-| `WORKER_SCHEDULER_INTERVAL_MS` | `5000` | How often the scheduler looks for due applications |
-| `WORKER_NAVIGATION_TIMEOUT_MS` | `30000` | Page load timeout |
-| `AUTOMATION_ALLOWED_HOSTS` | `localhost,127.0.0.1` | Hosts the worker may open |
-| `AUTOMATION_ALLOW_ALL_HOSTS` | `false` | Allow public employer sites |
-| `PLAYWRIGHT_CHROMIUM_EXECUTABLE` | | Chromium to launch, if not Playwright's own |
 
 ## Checks
 
@@ -139,7 +155,7 @@ pnpm test:e2e    # Playwright browser tests against the dev server, then with th
 | 1 | Auth, database, Master Profile, documents, Answer Library, dashboard, Jobs/Applications/Needs Attention, rules, settings | Done |
 | 2 | LinkedIn saved-jobs import (user-authorized path only), job analysis, matching, rule evaluation | Done |
 | 3 | Queue and controls, Playwright worker, generic form automation, human intervention flow, live progress | Done |
-| 4 | ATS adapters (Greenhouse, Lever, Ashby, Workday, …) | Next |
-| 5 | AI field mapping, answer drafting, resume/cover-letter generation | |
+| 4 | ATS adapters (Workday, Greenhouse, Lever, Ashby, SmartRecruiters) and platform detection | Done |
+| 5 | AI field mapping, answer drafting, resume/cover-letter generation | Next |
 | 6 | Analytics, retries, real-time hardening | |
 | — | Flightpath application tracker: stages after submission, interview rounds, board and table, dashboard metrics | Done |

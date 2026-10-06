@@ -20,6 +20,12 @@ export interface FieldHints {
   autocomplete?: string;
   inputType?: string;
   accept?: string;
+  /**
+   * How the control is operated when it isn't a native element: a typeahead
+   * dropdown (combobox), a button that opens a list (listbox), a row of answer
+   * buttons, or a text box that suggests values as you type (autocomplete).
+   */
+  widget?: "native" | "combobox" | "listbox" | "buttons" | "autocomplete";
 }
 
 /** A form field as detected on an application page. */

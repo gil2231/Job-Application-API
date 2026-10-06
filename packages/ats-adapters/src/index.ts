@@ -1,4 +1,12 @@
 export * from "./detect";
 export * from "./adapter";
 export * from "./registry";
+export { FormAdapter, type FormAdapterOptions } from "./form/form-adapter";
+export type { ScanOptions } from "./form/dom-scripts";
 export { GenericWebFormAdapter } from "./generic/generic-adapter";
+export { GreenhouseAdapter } from "./platforms/greenhouse";
+export { LeverAdapter } from "./platforms/lever";
+export { AshbyAdapter } from "./platforms/ashby";
+export { WorkdayAdapter } from "./platforms/workday";
+export { SmartRecruitersAdapter } from "./platforms/smartrecruiters";
+export { createDefaultRegistry, AUTOMATED_PLATFORMS } from "./defaults";

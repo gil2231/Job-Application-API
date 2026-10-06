@@ -1,6 +1,7 @@
 import { randomBytes } from "node:crypto";
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 import type { AddressInfo } from "node:net";
+import { ATS_ENTRY_POINTS, handleAtsRequest, type AtsSession } from "./ats";
 
 /**
  * Local mock application sites for testing the worker. Nothing here talks to
@@ -26,6 +27,7 @@ interface Session {
   signedIn: boolean;
   multi: Record<string, string | string[]>;
   multiFiles: MockSubmission["files"];
+  ats: AtsSession;
 }
 
 type FieldValue = string | string[];
@@ -261,6 +263,8 @@ const MULTI_STEPS: Array<{ title: string; fields: FieldDef[] }> = [
 export interface MockSite {
   url: string;
   submissions: MockSubmission[];
+  /** Buttons AutoApply must never press (apply with LinkedIn, Workday autofill) that were pressed anyway. */
+  forbidden: string[];
   /** Simulate a person completing the CAPTCHA in the browser AutoApply opened. */
   solveCaptchas(): void;
   /** Simulate a person signing in within that browser. */
@@ -272,6 +276,7 @@ export interface MockSite {
 export async function startMockSite(port = 0, host = "127.0.0.1"): Promise<MockSite> {
   const sessions = new Map<string, Session>();
   const submissions: MockSubmission[] = [];
+  const forbidden: string[] = [];
   let captchaSolvedGlobally = false;
   let signInGranted = false;
 
@@ -279,7 +284,7 @@ export async function startMockSite(port = 0, host = "127.0.0.1"): Promise<MockS
     const cookie = /mock_session=([a-f0-9]+)/.exec(req.headers.cookie ?? "")?.[1];
     if (cookie && sessions.has(cookie)) return sessions.get(cookie)!;
     const id = randomBytes(8).toString("hex");
-    const s: Session = { id, captchaSolved: false, signedIn: false, multi: {}, multiFiles: {} };
+    const s: Session = { id, captchaSolved: false, signedIn: false, multi: {}, multiFiles: {}, ats: { steps: {}, signedIn: false } };
     sessions.set(id, s);
     res.setHeader("Set-Cookie", `mock_session=${id}; Path=/; HttpOnly; SameSite=Lax`);
     return s;
@@ -325,9 +330,14 @@ export async function startMockSite(port = 0, host = "127.0.0.1"): Promise<MockS
     return errors;
   }
 
-  function confirm(res: ServerResponse, form: string, fields: Values, files: MockSubmission["files"]) {
+  function record(form: string, fields: Values, files: MockSubmission["files"]): string {
     const confirmation = `MOCK-${1000 + Math.floor(Math.random() * 9000)}-${randomBytes(2).toString("hex").toUpperCase()}`;
     submissions.push({ form, confirmation, fields, files, at: new Date().toISOString() });
+    return confirmation;
+  }
+
+  function confirm(res: ServerResponse, form: string, fields: Values, files: MockSubmission["files"]) {
+    const confirmation = record(form, fields, files);
     send(res, 200, page("Application received", `<h1>Thank you for applying!</h1><p>We've received your application.</p><p>Your confirmation number is <strong>${confirmation}</strong>.</p>`));
   }
 
@@ -350,11 +360,38 @@ export async function startMockSite(port = 0, host = "127.0.0.1"): Promise<MockS
       }
       if (path === "/captcha/state" && url.searchParams.get("solve") === "1") session.captchaSolved = true;
       if (path === "/captcha/state") return send(res, 200, JSON.stringify({ solved: session.captchaSolved || captchaSolvedGlobally }), "application/json");
-      if (path === "/login/state") return send(res, 200, JSON.stringify({ signedIn: session.signedIn || signInGranted }), "application/json");
+      if (path === "/login/state") return send(res, 200, JSON.stringify({ signedIn: session.signedIn || session.ats.signedIn || signInGranted }), "application/json");
+
+      const handled = await handleAtsRequest(req, res, path, {
+        send,
+        redirect,
+        readForm: (r) => readForm(r, base),
+        record,
+        session: session.ats,
+        signedIn: () => session.ats.signedIn || signInGranted,
+        flagForbidden: (what) => forbidden.push(what),
+      });
+      if (handled) return;
 
       if (path === "/") {
         const links = [...Object.entries(FORMS).map(([k, f]) => [k, f.title] as const), ["multi-page", "Inside Sales Representative (multi-page)"] as const, ["job/listing", "Job description with an Apply button"] as const];
-        return send(res, 200, page("Mock application sites", `<h1>Mock application sites</h1><p class="sub">Local test pages for the AutoApply worker. Nothing here is a real employer.</p><ul class="forms">${links.map(([k, t]) => `<li><a href="/${k}">${esc(t)}</a> <code>/${k}</code></li>`).join("")}</ul>`));
+        const ats = [
+          ["Greenhouse", ATS_ENTRY_POINTS.greenhouse],
+          ["Lever", ATS_ENTRY_POINTS.lever],
+          ["Lever with an hCaptcha on submit", ATS_ENTRY_POINTS.leverGuarded],
+          ["Ashby", ATS_ENTRY_POINTS.ashby],
+          ["Workday (needs a sign-in)", ATS_ENTRY_POINTS.workday],
+          ["SmartRecruiters", ATS_ENTRY_POINTS.smartrecruiters],
+        ] as const;
+        const list = (items: ReadonlyArray<readonly [string, string]>) => `<ul class="forms">${items.map(([t, href]) => `<li><a href="${href}">${esc(t)}</a> <code>${esc(href)}</code></li>`).join("")}</ul>`;
+        return send(
+          res,
+          200,
+          page(
+            "Mock application sites",
+            `<h1>Mock application sites</h1><p class="sub">Local test pages for the Applyance worker. Nothing here is a real employer.</p><h2>Form patterns</h2>${list(links.map(([k, t]) => [t, `/${k}`] as const))}<h2>Applicant tracking systems</h2><p class="sub">Imitations of each ATS's form structure.</p>${list(ats)}`,
+          ),
+        );
       }
 
       if (path === "/job/listing") {
@@ -445,6 +482,7 @@ export async function startMockSite(port = 0, host = "127.0.0.1"): Promise<MockS
   return {
     url: `http://${host === "0.0.0.0" ? "127.0.0.1" : host}:${address.port}`,
     submissions,
+    forbidden,
     solveCaptchas: () => {
       captchaSolvedGlobally = true;
     },
@@ -453,6 +491,7 @@ export async function startMockSite(port = 0, host = "127.0.0.1"): Promise<MockS
     },
     reset: () => {
       submissions.length = 0;
+      forbidden.length = 0;
       sessions.clear();
       captchaSolvedGlobally = false;
       signInGranted = false;
