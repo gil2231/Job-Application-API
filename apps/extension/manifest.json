@@ -1,0 +1,21 @@
+{
+  "manifest_version": 3,
+  "name": "Applyance",
+  "short_name": "Applyance",
+  "version": "0.1.0",
+  "description": "Save jobs to Applyance in one click, and finish applications that need you (a CAPTCHA, a sign-in) in your own browser.",
+  "minimum_chrome_version": "116",
+  "icons": { "16": "icons/icon16.png", "32": "icons/icon32.png", "48": "icons/icon48.png", "128": "icons/icon128.png" },
+  "action": {
+    "default_title": "Applyance",
+    "default_popup": "popup/popup.html",
+    "default_icon": { "16": "icons/icon16.png", "32": "icons/icon32.png" }
+  },
+  "background": { "service_worker": "background.js", "type": "module" },
+  "permissions": ["activeTab", "alarms", "contextMenus", "cookies", "scripting", "storage"],
+  "host_permissions": ["http://localhost/*", "http://127.0.0.1/*"],
+  "optional_host_permissions": ["https://*/*", "http://*/*"],
+  "commands": {
+    "_execute_action": { "suggested_key": { "default": "Alt+Shift+A" }, "description": "Open Applyance" }
+  }
+}

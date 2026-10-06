@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { getUserSettings, listAuditLogs, listBrowserSessions, listSessions } from "@autoapply/database";
+import { getUserSettings, listAuditLogs, listBrowserSessions, listExtensionConnections, listSessions } from "@autoapply/database";
 import { enumLabel } from "@autoapply/shared";
 import { requireUser } from "@/lib/auth";
 import { formatDate, formatRelative } from "@/lib/format";
@@ -9,6 +9,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { ANTHROPIC_DEFAULT_MODEL } from "@autoapply/ai";
 import { AccountForm, AnalysisForm, BrowserSessionList, PasswordForm, PreferencesForm, SessionList } from "./settings-forms";
+import { ExtensionCard } from "./extension-card";
 
 export const metadata: Metadata = { title: "Settings" };
 
@@ -21,7 +22,14 @@ function describeAgent(ua: string | null): string {
 
 export default async function SettingsPage() {
   const user = await requireUser();
-  const [settings, sessions, logs, browserSessions] = await Promise.all([getUserSettings(user.id), listSessions(user.id), listAuditLogs(user.id, 40), listBrowserSessions(user.id)]);
+  const [settings, sessions, logs, browserSessions, extensions] = await Promise.all([
+    getUserSettings(user.id),
+    listSessions(user.id),
+    listAuditLogs(user.id, 40),
+    listBrowserSessions(user.id),
+    listExtensionConnections(user.id),
+  ]);
+  const serverAddress = process.env.API_PUBLIC_URL ?? `http://localhost:${process.env.API_PORT ?? 4000}`;
 
   return (
     <div className="grid gap-5">
@@ -63,6 +71,20 @@ export default async function SettingsPage() {
         </CardHeader>
         <CardContent>
           <AnalysisForm settings={settings} anthropicConfigured={!!process.env.ANTHROPIC_API_KEY} defaultModel={ANTHROPIC_DEFAULT_MODEL} />
+        </CardContent>
+      </Card>
+      <Card id="browser-extension">
+        <CardHeader>
+          <CardTitle className="text-sm">Browser extension</CardTitle>
+          <CardDescription>
+            Save a job from any site in one click, and finish applications that stop for a CAPTCHA or a sign-in in your own browser. The extension fills in your approved answers; you solve the check and press Submit yourself. On LinkedIn it saves only the link.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <ExtensionCard
+            serverAddress={serverAddress}
+            connections={extensions.map((c) => ({ id: c.id, browser: c.browser ?? "Browser extension", connected: c.connectedAt ? formatRelative(c.connectedAt) : "recently", lastUsed: c.lastUsedAt ? formatRelative(c.lastUsedAt) : null }))}
+          />
         </CardContent>
       </Card>
       <Card>

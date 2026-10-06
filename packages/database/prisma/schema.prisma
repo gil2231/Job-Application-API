@@ -175,6 +175,7 @@ enum JobSourceType {
   CSV_IMPORT
   API
   JOB_BOARD
+  BROWSER_EXTENSION
 }
 
 enum ApplicationEventType {
@@ -276,6 +277,7 @@ model User {
   events          ApplicationEvent[]
   interviewRounds InterviewRound[]
   browserSessions BrowserSession[]
+  extensions      ExtensionConnection[]
   automationRule  AutomationRule?
   settings        UserSetting?
 }
@@ -295,6 +297,27 @@ model Session {
 
   @@index([userId])
   @@index([expiresAt])
+}
+
+/// A browser extension linked to the account. The person creates a one-time
+/// pairing code while signed in; the extension trades it for its own token.
+/// Only SHA-256 hashes of the code and the token are stored.
+model ExtensionConnection {
+  id               String    @id @default(cuid())
+  userId           String
+  pairingCodeHash  String?   @unique
+  pairingExpiresAt DateTime?
+  tokenHash        String?   @unique
+  /// Browser and OS the extension reported when it connected, for the Settings list.
+  browser          String?
+  connectedAt      DateTime?
+  lastUsedAt       DateTime?
+  revokedAt        DateTime?
+  createdAt        DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
 }
 
 model AuditLog {
