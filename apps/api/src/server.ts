@@ -6,19 +6,26 @@ import { z } from "zod";
 import { detectPlatformFromUrl } from "@autoapply/ats-adapters";
 import {
   ConflictError,
+  createInterviewRound,
   createManualJob,
+  deleteInterviewRound,
   DuplicateJobError,
   getApplicationDetail,
   getDashboardStats,
+  getTrackerBoard,
   listApplications,
+  listInterviewRounds,
+  listTrackerApplications,
+  moveApplicationStage,
   listJobs,
   NotFoundError,
   prisma,
   queueApplications,
+  updateInterviewRound,
   validateSessionToken,
   type PublicUser,
 } from "@autoapply/database";
-import { applicationFiltersSchema, fieldErrors, jobFiltersSchema, manualJobSchema } from "@autoapply/shared";
+import { applicationFiltersSchema, fieldErrors, interviewRoundSchema, jobFiltersSchema, manualJobSchema, trackerFiltersSchema, trackerStageSchema } from "@autoapply/shared";
 
 declare module "fastify" {
   interface FastifyRequest {
@@ -98,6 +105,45 @@ export async function buildServer(options: { logger?: boolean } = {}): Promise<F
       v1.get("/applications/:id", async (request) => {
         const { id } = idParam.parse(request.params);
         return getApplicationDetail(request.user!.id, id);
+      });
+
+      // Flightpath (application tracker)
+      v1.get("/tracker/board", async (request) => {
+        const { q } = trackerFiltersSchema.parse(request.query);
+        return getTrackerBoard(request.user!.id, { q });
+      });
+
+      v1.get("/tracker/applications", async (request) => {
+        const { view: _view, ...filters } = trackerFiltersSchema.parse(request.query);
+        return listTrackerApplications(request.user!.id, filters);
+      });
+
+      v1.patch("/applications/:id/stage", async (request) => {
+        const { id } = idParam.parse(request.params);
+        const { stage } = z.object({ stage: trackerStageSchema }).parse(request.body);
+        return moveApplicationStage(request.user!.id, id, stage);
+      });
+
+      v1.get("/applications/:id/interviews", async (request) => {
+        const { id } = idParam.parse(request.params);
+        return { interviews: await listInterviewRounds(request.user!.id, id) };
+      });
+
+      v1.post("/applications/:id/interviews", async (request, reply) => {
+        const { id } = idParam.parse(request.params);
+        const round = await createInterviewRound(request.user!.id, id, interviewRoundSchema.parse(request.body ?? {}));
+        return reply.code(201).send({ interview: round });
+      });
+
+      v1.put("/interviews/:id", async (request) => {
+        const { id } = idParam.parse(request.params);
+        return { interview: await updateInterviewRound(request.user!.id, id, interviewRoundSchema.parse(request.body ?? {})) };
+      });
+
+      v1.delete("/interviews/:id", async (request, reply) => {
+        const { id } = idParam.parse(request.params);
+        await deleteInterviewRound(request.user!.id, id);
+        return reply.code(204).send();
       });
     },
     { prefix: "/v1" },

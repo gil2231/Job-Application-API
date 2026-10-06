@@ -4,8 +4,9 @@ import { prisma } from "../src/client";
 import { createManualJob, deleteJobs, DuplicateJobError, getJob, listJobs, skipJobs } from "../src/repositories/jobs";
 import {
   approveQuestionAnswer, getApplicationDetail, listApplications, listAttentionItems, markHumanStepComplete, queueApplications,
-  retryApplications, setApplicationOutcome, skipQuestion,
+  retryApplications, skipQuestion,
 } from "../src/repositories/applications";
+import { setApplicationOutcome } from "../src/repositories/tracker";
 import { NotFoundError } from "../src/repositories/errors";
 import { getDashboardStats } from "../src/repositories/dashboard";
 import { makeUser, resetDatabase } from "./helpers";
