@@ -1,0 +1,20 @@
+{
+  "name": "@autoapply/worker",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "start": "tsx src/index.ts",
+    "typecheck": "tsc -p tsconfig.json",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@autoapply/ats-adapters": "workspace:*",
+    "@autoapply/automation": "workspace:*",
+    "@autoapply/database": "workspace:*",
+    "@autoapply/shared": "workspace:*",
+    "ioredis": "^5.6.1"
+  },
+  "devDependencies": { "tsx": "^4.20.0", "vitest": "^3.2.4" }
+}

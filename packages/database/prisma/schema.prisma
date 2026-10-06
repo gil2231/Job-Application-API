@@ -1,0 +1,769 @@
+// AutoApply data model.
+//
+// Conventions:
+// - Every user-owned row carries userId (directly or through its parent) and
+//   every query in src/repositories filters on it.
+// - Sensitive values (demographic answers, browser storage state) are encrypted
+//   with AES-256-GCM before they reach this database (see src/crypto.ts).
+// - Duplicate prevention: a job is unique per user by canonical URL and by
+//   (source, external id); an application is unique per job.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─── Enums (mirrored in packages/shared/src/enums.ts) ───────────────────────
+
+enum JobStatus {
+  IMPORTED
+  ANALYZING
+  QUALIFIED
+  NOT_QUALIFIED
+  SKIPPED
+}
+
+enum ApplicationStatus {
+  QUEUED
+  PROCESSING
+  WAITING_FOR_USER
+  REVIEW_REQUIRED
+  READY
+  SUBMITTED
+  FAILED
+  REJECTED
+  SKIPPED
+}
+
+enum ApplicationOutcome {
+  NONE
+  RESPONDED
+  INTERVIEW
+  OFFER
+  DECLINED
+}
+
+enum AutomationMode {
+  MANUAL
+  REVIEW
+  AUTO
+}
+
+enum Platform {
+  WORKDAY
+  GREENHOUSE
+  LEVER
+  ASHBY
+  SMARTRECRUITERS
+  LINKEDIN_EASY_APPLY
+  GENERIC
+  UNKNOWN
+}
+
+enum FailureType {
+  NETWORK_ERROR
+  TIMEOUT
+  SELECTOR_ERROR
+  VALIDATION_ERROR
+  AUTH_REQUIRED
+  CAPTCHA
+  UNKNOWN_FIELD
+  SITE_CHANGED
+  UNKNOWN_ERROR
+}
+
+enum AttentionReason {
+  CAPTCHA
+  MFA
+  AUTH_REQUIRED
+  QUESTION_REVIEW
+  LOW_CONFIDENCE_MAPPING
+  UNSUPPORTED_SITE
+  VALIDATION_ERROR
+  REPEATED_FAILURE
+  CONTRADICTION
+  FINAL_REVIEW
+}
+
+enum WorkArrangement {
+  REMOTE
+  HYBRID
+  ONSITE
+  UNKNOWN
+}
+
+enum EmploymentType {
+  FULL_TIME
+  PART_TIME
+  CONTRACT
+  TEMPORARY
+  INTERNSHIP
+  FREELANCE
+  OTHER
+}
+
+enum SkillCategory {
+  SKILL
+  SOFTWARE
+  TECHNICAL
+  LANGUAGE
+}
+
+enum DocumentType {
+  RESUME
+  COVER_LETTER
+  CERTIFICATION
+  TRANSCRIPT
+  PORTFOLIO
+  OTHER
+}
+
+enum AnswerCategory {
+  MOTIVATION
+  FIT
+  COMPENSATION
+  WORK_AUTHORIZATION
+  SPONSORSHIP
+  RELOCATION
+  TRAVEL
+  EXPERIENCE
+  LINKS
+  AVAILABILITY
+  DEMOGRAPHIC
+  OTHER
+}
+
+enum AnswerSource {
+  USER
+  PROFILE
+  AI_GENERATED
+  IMPORTED
+}
+
+enum JobSourceType {
+  MANUAL
+  LINKEDIN_SAVED
+  CSV_IMPORT
+  API
+}
+
+enum ApplicationEventType {
+  JOB_IMPORTED
+  JOB_ANALYZED
+  MATCH_CALCULATED
+  QUEUED
+  PLATFORM_DETECTED
+  BROWSER_LAUNCHED
+  PROFILE_LOADED
+  FIELDS_MAPPED
+  RESUME_UPLOADED
+  COVER_LETTER_UPLOADED
+  QUESTIONS_ANSWERED
+  VALIDATION_COMPLETED
+  HUMAN_INPUT_REQUIRED
+  HUMAN_INPUT_RECEIVED
+  SUBMITTED
+  FAILED
+  RETRY_SCHEDULED
+  STATUS_CHANGED
+  OUTCOME_UPDATED
+  NOTE
+}
+
+enum EventLevel {
+  INFO
+  WARNING
+  ERROR
+}
+
+enum FieldType {
+  TEXT
+  TEXTAREA
+  EMAIL
+  PHONE
+  URL
+  NUMBER
+  DATE
+  SELECT
+  RADIO
+  CHECKBOX
+  FILE
+  UNKNOWN
+}
+
+enum QuestionStatus {
+  PENDING
+  ANSWERED
+  NEEDS_REVIEW
+  APPROVED
+  SKIPPED
+}
+
+enum AttemptStatus {
+  RUNNING
+  SUCCEEDED
+  FAILED
+  PAUSED
+  CANCELLED
+}
+
+enum BrowserSessionStatus {
+  ACTIVE
+  EXPIRED
+  REVOKED
+}
+
+// ─── Identity & security ────────────────────────────────────────────────────
+
+model User {
+  id               String    @id @default(cuid())
+  email            String    @unique
+  name             String
+  /// argon2id hash. Plaintext passwords are never stored or logged.
+  passwordHash     String
+  emailVerifiedAt  DateTime?
+  lastLoginAt      DateTime?
+  failedLoginCount Int       @default(0)
+  lockedUntil      DateTime?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  sessions        Session[]
+  auditLogs       AuditLog[]
+  profile         MasterProfile?
+  documents       Document[]
+  resumes         Resume[]
+  coverLetters    CoverLetter[]
+  answers         ApplicationAnswer[]
+  jobSources      JobSource[]
+  jobs            Job[]
+  applications    Application[]
+  events          ApplicationEvent[]
+  browserSessions BrowserSession[]
+  automationRule  AutomationRule?
+  settings        UserSetting?
+}
+
+/// Server-side session. Only a SHA-256 hash of the cookie token is stored.
+model Session {
+  id         String   @id @default(cuid())
+  userId     String
+  tokenHash  String   @unique
+  expiresAt  DateTime
+  lastSeenAt DateTime @default(now())
+  ipAddress  String?
+  userAgent  String?
+  createdAt  DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([expiresAt])
+}
+
+model AuditLog {
+  id         String   @id @default(cuid())
+  userId     String?
+  action     String
+  entityType String?
+  entityId   String?
+  ipAddress  String?
+  userAgent  String?
+  metadata   Json?
+  createdAt  DateTime @default(now())
+
+  user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([userId, createdAt])
+  @@index([action, createdAt])
+}
+
+// ─── Master Profile ─────────────────────────────────────────────────────────
+
+model MasterProfile {
+  id     String @id @default(cuid())
+  userId String @unique
+
+  // Personal
+  firstName     String?
+  lastName      String?
+  preferredName String?
+  email         String?
+  phone         String?
+  addressLine1  String?
+  addressLine2  String?
+  city          String?
+  state         String?
+  postalCode    String?
+  country       String?
+  linkedinUrl   String?
+  portfolioUrl  String?
+  websiteUrl    String?
+  githubUrl     String?
+
+  // Professional
+  currentTitle    String?
+  targetTitles    String[]
+  summary         String?
+  industries      String[]
+  yearsExperience Decimal? @db.Decimal(4, 1)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user       User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  education  Education[]
+  employment Employment[]
+  skills     Skill[]
+}
+
+model Education {
+  id             String    @id @default(cuid())
+  profileId      String
+  school         String
+  degree         String?
+  major          String?
+  concentrations String[]
+  minor          String?
+  gpa            Decimal?  @db.Decimal(4, 2)
+  gpaScale       Decimal?  @db.Decimal(4, 2)
+  startDate      DateTime? @db.Date
+  graduationDate DateTime? @db.Date
+  coursework     String[]
+  sortOrder      Int       @default(0)
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  profile MasterProfile @relation(fields: [profileId], references: [id], onDelete: Cascade)
+
+  @@index([profileId, sortOrder])
+}
+
+model Employment {
+  id               String         @id @default(cuid())
+  profileId        String
+  company          String
+  title            String
+  employmentType   EmploymentType @default(FULL_TIME)
+  startDate        DateTime       @db.Date
+  endDate          DateTime?      @db.Date
+  isCurrent        Boolean        @default(false)
+  location         String?
+  description      String?
+  responsibilities String[]
+  achievements     String[]
+  skills           String[]
+  sortOrder        Int            @default(0)
+  createdAt        DateTime       @default(now())
+  updatedAt        DateTime       @updatedAt
+
+  profile MasterProfile @relation(fields: [profileId], references: [id], onDelete: Cascade)
+
+  @@index([profileId, startDate])
+}
+
+model Skill {
+  id              String        @id @default(cuid())
+  profileId       String
+  name            String
+  /// Lowercased name; backs the uniqueness check.
+  normalizedName  String
+  category        SkillCategory @default(SKILL)
+  proficiency     Int?
+  yearsExperience Decimal?      @db.Decimal(4, 1)
+  createdAt       DateTime      @default(now())
+
+  profile MasterProfile @relation(fields: [profileId], references: [id], onDelete: Cascade)
+
+  @@unique([profileId, category, normalizedName])
+  @@index([profileId, category])
+}
+
+// ─── Documents ──────────────────────────────────────────────────────────────
+
+/// A stored file. The bytes live in S3-compatible storage under storageKey.
+model Document {
+  id         String       @id @default(cuid())
+  userId     String
+  type       DocumentType
+  name       String
+  fileName   String
+  mimeType   String
+  sizeBytes  Int
+  storageKey String       @unique
+  sha256     String
+  createdAt  DateTime     @default(now())
+  updatedAt  DateTime     @updatedAt
+
+  user        User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  resume      Resume?
+  coverLetter CoverLetter?
+
+  @@index([userId, type])
+}
+
+/// A resume variant. Default resumes have jobId = null; job-specific ones point at a job.
+model Resume {
+  id         String   @id @default(cuid())
+  userId     String
+  name       String
+  documentId String?  @unique
+  jobId      String?
+  isDefault  Boolean  @default(false)
+  /// True when produced by the document generator rather than uploaded.
+  generated  Boolean  @default(false)
+  /// Structured content for generated resumes (sections, ordered skills, summary).
+  content    Json?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  user         User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  document     Document?     @relation(fields: [documentId], references: [id], onDelete: SetNull)
+  job          Job?          @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  applications Application[]
+
+  @@index([userId, isDefault])
+  @@index([jobId])
+}
+
+model CoverLetter {
+  id         String   @id @default(cuid())
+  userId     String
+  name       String
+  documentId String?  @unique
+  jobId      String?
+  isDefault  Boolean  @default(false)
+  generated  Boolean  @default(false)
+  body       String?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  user         User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  document     Document?     @relation(fields: [documentId], references: [id], onDelete: SetNull)
+  job          Job?          @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  applications Application[]
+
+  @@index([userId, isDefault])
+  @@index([jobId])
+}
+
+// ─── Answer library ─────────────────────────────────────────────────────────
+
+model ApplicationAnswer {
+  id                  String         @id @default(cuid())
+  userId              String
+  /// Normalized question key used to match questions found on application forms.
+  questionKey         String
+  question            String
+  /// Encrypted (prefix "enc:v1:") when isSensitive is true.
+  answer              String
+  category            AnswerCategory
+  source              AnswerSource   @default(USER)
+  /// 0-100
+  confidence          Int            @default(100)
+  autoSubmitAllowed   Boolean        @default(false)
+  requiresHumanReview Boolean        @default(true)
+  isSensitive         Boolean        @default(false)
+  createdAt           DateTime       @default(now())
+  updatedAt           DateTime       @updatedAt
+
+  user      User                        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  instances ApplicationAnswerInstance[]
+
+  @@unique([userId, questionKey])
+  @@index([userId, category])
+}
+
+// ─── Jobs ───────────────────────────────────────────────────────────────────
+
+model JobSource {
+  id           String        @id @default(cuid())
+  userId       String
+  type         JobSourceType
+  name         String
+  config       Json?
+  enabled      Boolean       @default(true)
+  lastSyncedAt DateTime?
+  lastError    String?
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+
+  user User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  jobs Job[]
+
+  @@unique([userId, type, name])
+}
+
+model Job {
+  id             String          @id @default(cuid())
+  userId         String
+  sourceId       String?
+  sourceType     JobSourceType
+  /// Source-specific id (e.g. LinkedIn job id). Unique per user and source.
+  externalId     String?
+  url            String
+  /// Normalized URL (see canonicalizeJobUrl). Unique per user.
+  canonicalUrl   String
+  applicationUrl String?
+  title          String
+  company        String
+  location       String?
+  description    String?
+  postedAt       DateTime?
+  savedAt        DateTime        @default(now())
+  easyApply      Boolean         @default(false)
+  platform       Platform        @default(UNKNOWN)
+  status         JobStatus       @default(IMPORTED)
+
+  // Analysis (populated by the analysis pipeline)
+  department              String?
+  seniority               String?
+  workArrangement         WorkArrangement @default(UNKNOWN)
+  employmentType          EmploymentType?
+  salaryText              String?
+  salaryMin               Int?
+  salaryMax               Int?
+  salaryCurrency          String?
+  salaryPeriod            String?
+  /// Annualized max salary, used for filtering and rules.
+  salaryAnnualMax         Int?
+  requiredQualifications  String[]
+  preferredQualifications String[]
+  experienceYearsMin      Int?
+  educationRequirement    String?
+  skills                  String[]
+  industry                String?
+  sponsorshipAvailable    Boolean?
+  travelRequirement       String?
+  analysis                Json?
+  analyzedAt              DateTime?
+  matchScore              Int?
+  /// MatchBreakdownItem[] explaining the score.
+  matchBreakdown          Json?
+
+  /// Set once the job has been through the pipeline, so re-imports skip it.
+  processedAt DateTime?
+  /// Soft delete: the row is kept so a re-import does not resurrect the job.
+  deletedAt   DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  user         User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  source       JobSource?    @relation(fields: [sourceId], references: [id], onDelete: SetNull)
+  application  Application?
+  resumes      Resume[]
+  coverLetters CoverLetter[]
+
+  @@unique([userId, canonicalUrl])
+  @@unique([userId, sourceType, externalId])
+  @@index([userId, deletedAt, savedAt])
+  @@index([userId, status])
+  @@index([userId, matchScore])
+  @@index([userId, company])
+  @@index([userId, platform])
+}
+
+// ─── Applications ───────────────────────────────────────────────────────────
+
+model Application {
+  id                 String             @id @default(cuid())
+  userId             String
+  /// One application per job: this is the duplicate-application guard.
+  jobId              String             @unique
+  status             ApplicationStatus  @default(QUEUED)
+  mode               AutomationMode     @default(REVIEW)
+  platform           Platform           @default(UNKNOWN)
+  priority           Int                @default(0)
+  resumeId           String?
+  coverLetterId      String?
+  /// Snapshot of the Master Profile values used, for auditability.
+  profileSnapshot    Json?
+  matchScore         Int?
+  attentionReason    AttentionReason?
+  attentionDetail    String?
+  failureType        FailureType?
+  lastError          String?
+  attemptCount       Int                @default(0)
+  nextAttemptAt      DateTime?
+  confirmationNumber String?
+  outcome            ApplicationOutcome @default(NONE)
+  outcomeAt          DateTime?
+  queuedAt           DateTime           @default(now())
+  startedAt          DateTime?
+  submittedAt        DateTime?
+  completedAt        DateTime?
+  createdAt          DateTime           @default(now())
+  updatedAt          DateTime           @updatedAt
+
+  user        User                  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  job         Job                   @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  resume      Resume?               @relation(fields: [resumeId], references: [id], onDelete: SetNull)
+  coverLetter CoverLetter?          @relation(fields: [coverLetterId], references: [id], onDelete: SetNull)
+  questions   ApplicationQuestion[]
+  events      ApplicationEvent[]
+  attempts    ApplicationAttempt[]
+
+  @@index([userId, status, priority, queuedAt])
+  @@index([userId, submittedAt])
+  @@index([userId, updatedAt])
+  @@index([status, nextAttemptAt])
+}
+
+/// A field or question found on an application form.
+model ApplicationQuestion {
+  id            String         @id @default(cuid())
+  applicationId String
+  label         String
+  normalizedKey String
+  fieldType     FieldType      @default(UNKNOWN)
+  required      Boolean        @default(false)
+  options       Json?
+  pageIndex     Int            @default(0)
+  /// How the worker locates the field: { strategy: "label" | "name" | "id" | "aria" | "dom", value }.
+  locator       Json?
+  /// ProfileFieldKey the field was mapped to, if any.
+  mappedField   String?
+  /// 0-100
+  confidence    Int?
+  status        QuestionStatus @default(PENDING)
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+
+  application Application                @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+  answer      ApplicationAnswerInstance?
+
+  @@index([applicationId, pageIndex])
+  @@index([applicationId, status])
+}
+
+/// The value actually used for one question on one application.
+model ApplicationAnswerInstance {
+  id                  String       @id @default(cuid())
+  questionId          String       @unique
+  libraryAnswerId     String?
+  /// Encrypted (prefix "enc:v1:") when the source answer is sensitive.
+  value               String
+  source              AnswerSource
+  confidence          Int
+  approvedByUser      Boolean      @default(false)
+  approvedAt          DateTime?
+  createdAt           DateTime     @default(now())
+  updatedAt           DateTime     @updatedAt
+
+  question      ApplicationQuestion @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  libraryAnswer ApplicationAnswer?  @relation(fields: [libraryAnswerId], references: [id], onDelete: SetNull)
+
+  @@index([libraryAnswerId])
+}
+
+/// Timeline and activity log entries.
+model ApplicationEvent {
+  id            String               @id @default(cuid())
+  applicationId String
+  userId        String
+  type          ApplicationEventType
+  level         EventLevel           @default(INFO)
+  message       String
+  data          Json?
+  createdAt     DateTime             @default(now())
+
+  application Application @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+  user        User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([applicationId, createdAt])
+  @@index([userId, createdAt])
+}
+
+/// One run of the worker against an application. Retries create new attempts.
+model ApplicationAttempt {
+  id               String        @id @default(cuid())
+  applicationId    String
+  attemptNumber    Int
+  status           AttemptStatus @default(RUNNING)
+  workerId         String?
+  browserSessionId String?
+  failureType      FailureType?
+  errorMessage     String?
+  /// [{ key, caption, takenAt }] storage keys of screenshots taken during the attempt.
+  screenshots      Json?
+  startedAt        DateTime      @default(now())
+  endedAt          DateTime?
+
+  application    Application     @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+  browserSession BrowserSession? @relation(fields: [browserSessionId], references: [id], onDelete: SetNull)
+
+  @@unique([applicationId, attemptNumber])
+  @@index([applicationId, startedAt])
+}
+
+/// Saved browser state for a site so a user who completed MFA once is not asked again.
+model BrowserSession {
+  id                    String               @id @default(cuid())
+  userId                String
+  domain                String
+  platform              Platform             @default(UNKNOWN)
+  /// Encrypted Playwright storageState (cookies + localStorage).
+  storageStateEncrypted String?
+  status                BrowserSessionStatus @default(ACTIVE)
+  lastUsedAt            DateTime?
+  expiresAt             DateTime?
+  createdAt             DateTime             @default(now())
+  updatedAt             DateTime             @updatedAt
+
+  user     User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+  attempts ApplicationAttempt[]
+
+  @@unique([userId, domain])
+}
+
+// ─── Configuration ──────────────────────────────────────────────────────────
+
+model AutomationRule {
+  id                        String            @id @default(cuid())
+  userId                    String            @unique
+  minMatchScore             Int               @default(70)
+  minSalary                 Int?
+  preferredLocations        String[]
+  workArrangements          WorkArrangement[]
+  employmentTypes           EmploymentType[]
+  excludedIndustries        String[]
+  excludedCompanies         String[]
+  /// Phrases that disqualify a job (e.g. "commission-only").
+  excludedKeywords          String[]
+  requiresSponsorship       Boolean           @default(false)
+  maxApplicationsPerDay     Int               @default(25)
+  maxConcurrentApplications Int               @default(1)
+  autoSubmitEnabled         Boolean           @default(false)
+  defaultMode               AutomationMode    @default(REVIEW)
+  /// MatchWeights in percent; must sum to 100.
+  matchWeights              Json
+  createdAt                 DateTime          @default(now())
+  updatedAt                 DateTime          @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model UserSetting {
+  id                        String   @id @default(cuid())
+  userId                    String   @unique
+  timezone                  String   @default("America/New_York")
+  /// Field mappings below this confidence (0-100) require human review.
+  fieldConfidenceThreshold  Int      @default(85)
+  /// Library/AI answers below this confidence (0-100) require human review.
+  answerConfidenceThreshold Int      @default(85)
+  screenshotRetentionDays   Int      @default(30)
+  emailNotifications        Boolean  @default(true)
+  /// Queue controls read by the worker.
+  queuePaused               Boolean  @default(false)
+  pauseAfterCurrent         Boolean  @default(false)
+  aiProvider                String?
+  aiModel                   String?
+  createdAt                 DateTime @default(now())
+  updatedAt                 DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
