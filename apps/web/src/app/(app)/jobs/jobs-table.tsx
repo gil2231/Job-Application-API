@@ -66,7 +66,7 @@ export function JobsTable({ data, hasFilters }: { data: { rows: Row[]; total: nu
   };
 
   return (
-    <div className="grid gap-3">
+    <div className="grid grid-cols-[minmax(0,1fr)] gap-3">
       {selectedRows.length > 0 && (
         <div className="bg-primary/5 border-primary/20 flex flex-wrap items-center gap-2 rounded-lg border px-3 py-2">
           <span className="mr-2 text-sm font-medium">{selectedRows.length} selected</span>

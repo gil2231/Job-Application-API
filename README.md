@@ -52,15 +52,18 @@ Other entry points: `pnpm dev:api` (port 4000) and `pnpm dev:worker` (the browse
 
 ## Importing jobs
 
-Jobs come in three ways, all from the Jobs page:
+Jobs come in four ways, all from the Jobs page:
 
 - **LinkedIn saved jobs.** On LinkedIn, Settings & Privacy → Data privacy → Get a copy of your data, with Jobs selected. Upload the archive (or the `Saved Jobs.csv` inside it). AutoApply never signs in to LinkedIn or reads its pages, so LinkedIn jobs arrive as title, company and link; paste the description on the job page to score them.
 - **Pasted URLs.** Greenhouse, Lever, Ashby, SmartRecruiters and Workday links, and careers pages that publish schema.org `JobPosting` data, are filled in from the public posting. Fetches are SSRF-guarded (public addresses only, checked at connect time, size and time limits).
 - **Add job** for a single posting, with an optional Fetch details.
+- **Search job boards** finds open jobs by keyword on the companies' boards you list (Greenhouse, Lever and Ashby links such as `boards.greenhouse.io/acme`, `jobs.lever.co/acme` or `jobs.ashbyhq.com/acme`, up to 25 per search). It reads the public job board APIs those platforms publish for anyone; none of them offers a cross-company search, so you choose the companies. Keywords match job titles (optionally descriptions too), `"quotes"` match a phrase, and `-word` skips postings that mention it anywhere. You pick which results to add. The last search is remembered.
 
 Duplicates are skipped by canonical URL (including the LinkedIn job id) and by company and title. Jobs you deleted, applied to or skipped are never re-added. Each import is listed on the Integrations page.
 
-Every new job is analyzed (seniority, location and arrangement, pay, required and preferred qualifications, experience, education, skills, industry, sponsorship, travel, platform), scored against your Master Profile with the weights on the Rules page, and marked Qualified, Not Qualified or Needs Details. Analysis uses the AI provider when `AI_PROVIDER` and its key are set, and the built-in deterministic analyzer otherwise, so it works without a key. Changing your profile or rules re-scores waiting jobs without re-analyzing them.
+The search box on the Jobs page looks in titles, companies, locations and descriptions, with the same `"phrase"` and `-word` syntax.
+
+Every new job is analyzed (seniority, location and arrangement, pay, required and preferred qualifications, experience, education, skills, industry, sponsorship, travel, platform), scored against your Master Profile with the weights on the Rules page, and marked Qualified, Not Qualified or Needs Details. On the Rules page, **Include keywords** require a job to mention at least one of them and **Exclude keywords** skip any job that mentions one. Analysis uses the AI provider when `AI_PROVIDER` and its key are set, and the built-in deterministic analyzer otherwise, so it works without a key. Changing your profile or rules re-scores waiting jobs without re-analyzing them.
 
 ## Running applications
 

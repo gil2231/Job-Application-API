@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { getJobFilterOptions, listJobs, prisma } from "@autoapply/database";
+import { getJobFilterOptions, getSavedBoardSearch, listJobs, prisma } from "@autoapply/database";
 import { jobFiltersSchema } from "@autoapply/shared";
 import { requireUser } from "@/lib/auth";
 import { ActionButton } from "@/components/action-button";
@@ -8,6 +8,7 @@ import { analyzePendingAction } from "@/actions/ingestion";
 import { applyToAllQualifiedAction } from "@/actions/jobs";
 import { Loader2 } from "lucide-react";
 import { AddJobDialog } from "./add-job-dialog";
+import { BoardSearchDialog } from "./board-search-dialog";
 import { ImportDialog } from "./import-dialog";
 import { JobsTable } from "./jobs-table";
 import { JobsToolbar } from "./jobs-toolbar";
@@ -18,16 +19,18 @@ export default async function JobsPage({ searchParams }: { searchParams: Promise
   const user = await requireUser();
   const raw = await searchParams;
   const filters = jobFiltersSchema.parse(Object.fromEntries(Object.entries(raw).map(([k, v]) => [k, Array.isArray(v) ? v[0] : v])));
-  const [data, options, qualifiedWaiting, analyzing] = await Promise.all([
+  const [data, options, qualifiedWaiting, analyzing, savedBoardSearch] = await Promise.all([
     listJobs(user.id, filters),
     getJobFilterOptions(user.id),
     prisma.job.count({ where: { userId: user.id, deletedAt: null, status: "QUALIFIED", application: null } }),
     prisma.job.count({ where: { userId: user.id, deletedAt: null, status: { in: ["IMPORTED", "ANALYZING"] } } }),
+    getSavedBoardSearch(user.id),
   ]);
   const hasFilters = ["q", "status", "platform", "remote", "minMatch", "company", "location", "minSalary", "savedFrom", "savedTo"].some((k) => raw[k]);
 
+  // minmax(0, 1fr) keeps the wide table scrolling inside its container instead of widening the page.
   return (
-    <div className="grid gap-5">
+    <div className="grid grid-cols-[minmax(0,1fr)] gap-5">
       <PageHeader
         title="Jobs"
         description="Every job you've saved, with its match and where it is in the pipeline."
@@ -36,6 +39,7 @@ export default async function JobsPage({ searchParams }: { searchParams: Promise
             <ActionButton variant="outline" size="sm" disabled={qualifiedWaiting === 0} action={applyToAllQualifiedAction}>
               Apply to all qualified ({qualifiedWaiting})
             </ActionButton>
+            <BoardSearchDialog saved={savedBoardSearch} />
             <ImportDialog />
             <AddJobDialog />
           </>

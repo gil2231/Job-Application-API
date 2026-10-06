@@ -1,12 +1,21 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { audit, getJob, prisma, requeueJobAnalysis, saveAiSettings, updateJobDetails } from "@autoapply/database";
+import { audit, findKnownJobUrls, getJob, prisma, requeueJobAnalysis, saveAiSettings, saveBoardSearch, updateJobDetails } from "@autoapply/database";
 import { detectPlatformFromUrl } from "@autoapply/ats-adapters";
 import { htmlToText } from "@autoapply/ai";
 import {
   analyzeJobs,
+  BOARD_PROVIDER_LABELS,
+  BoardSearchError,
+  boardKey,
+  boardUrl,
   fetchPosting,
+  jobBoardSearchSource,
+  MAX_BOARDS_PER_SEARCH,
+  parseBoardList,
+  parseBoardRef,
+  searchJobBoards,
   fileImportSource,
   ImportFileError,
   jobFingerprint,
@@ -17,7 +26,17 @@ import {
   type ImportIssue,
   type ImportSummary,
 } from "@autoapply/ingestion";
-import { aiSettingsSchema, importUrlsSchema, jobDetailsSchema, parseHttpUrl, extractLinkedInJobId } from "@autoapply/shared";
+import {
+  aiSettingsSchema,
+  boardImportSchema,
+  boardSearchSchema,
+  canonicalizeJobUrl,
+  importUrlsSchema,
+  jobDetailsSchema,
+  parseHttpUrl,
+  extractLinkedInJobId,
+  type BoardSearchFormInput,
+} from "@autoapply/shared";
 import { authedAction, formToObject, parseIds, validationFailed, type ActionResult } from "@/lib/action";
 import { analyzeInBackground } from "@/lib/pipeline";
 import { LIMITS, rateLimit } from "@/lib/rate-limit";
@@ -90,6 +109,133 @@ export async function importUrlsAction(_prev: ActionResult<ImportResultData>, fo
     const summary = await runImport(user.id, urlListSource, parsed.data);
     if (summary.total === 0) return { ok: false, message: "No job URLs found. Paste full links starting with https://", errors: { text: "No job URLs found" } };
     await audit(user.id, "jobs.imported", { entityType: "JobImport", entityId: summary.importId, metadata: { source: "urls", created: summary.created, duplicates: summary.duplicates } });
+    if (summary.created || summary.enrichedJobIds.length) analyzeInBackground(user.id);
+    refresh();
+    return summarize(summary);
+  });
+}
+
+// ── Job board search ────────────────────────────────────────────────────────
+
+export interface BoardSearchResultRow {
+  url: string;
+  title: string;
+  company: string;
+  location: string | null;
+  postedAt: string | null;
+  salaryText: string | null;
+  workArrangement: string | null;
+  provider: string;
+  matchedIn: "title" | "description";
+  /** new: not in the list yet; in_list: already saved; removed: deleted earlier, so it won't be re-added. */
+  known: "new" | "in_list" | "removed";
+}
+
+export interface BoardSearchData {
+  results: BoardSearchResultRow[];
+  totalMatches: number;
+  boards: Array<{ label: string; url: string; postings: number; matches: number; error: string | null }>;
+  notices: string[];
+}
+
+/** Turn the form's board list into boards, or field errors. */
+function readBoards(input: BoardSearchFormInput) {
+  const { boards, invalid } = parseBoardList(input.boards);
+  if (invalid.length) {
+    const message = `Not a Greenhouse, Lever or Ashby board: ${invalid.slice(0, 3).join(", ")}${invalid.length > 3 ? "…" : ""}`;
+    return { error: { ok: false, message, errors: { boards: message } } as ActionResult<never> };
+  }
+  if (!boards.length) return { error: { ok: false, message: "Add at least one job board", errors: { boards: "Add at least one job board" } } as ActionResult<never> };
+  if (boards.length > MAX_BOARDS_PER_SEARCH) {
+    const message = `Search up to ${MAX_BOARDS_PER_SEARCH} boards at a time`;
+    return { error: { ok: false, message, errors: { boards: message } } as ActionResult<never> };
+  }
+  return { boards };
+}
+
+/**
+ * Search companies' public Greenhouse, Lever and Ashby job boards by keyword.
+ * Nothing is saved except the search itself; the user picks what to add.
+ */
+export async function searchJobBoardsAction(input: BoardSearchFormInput): Promise<ActionResult<BoardSearchData>> {
+  return authedAction<BoardSearchData>(async (user) => {
+    const parsed = boardSearchSchema.safeParse(input);
+    if (!parsed.success) return validationFailed(parsed.error);
+    const read = readBoards(parsed.data);
+    if (read.error) return read.error;
+    if (!parsed.data.query && !parsed.data.location) return { ok: false, message: "Enter keywords to search for", errors: { query: "Enter keywords to search for" } };
+    const limit = rateLimit(`board-search:${user.id}`, LIMITS.boardSearch.limit, LIMITS.boardSearch.windowMs);
+    if (!limit.allowed) return { ok: false, message: `Search limit reached. Try again in ${Math.ceil(limit.retryAfterSeconds / 60)} minutes.` };
+
+    const search = { boards: read.boards, query: parsed.data.query, location: parsed.data.location ?? null, searchDescriptions: parsed.data.searchDescriptions };
+    let result;
+    try {
+      result = await searchJobBoards(search);
+    } catch (error) {
+      if (error instanceof BoardSearchError) return { ok: false, message: error.message };
+      throw error;
+    }
+    await saveBoardSearch(user.id, { boards: read.boards.map(boardUrl), query: search.query, location: search.location, searchDescriptions: search.searchDescriptions });
+
+    const canonical = result.jobs.map((j) => canonicalizeJobUrl(j.url));
+    const known = await findKnownJobUrls(user.id, canonical);
+    const results = result.jobs.map((j, i): BoardSearchResultRow => {
+      const k = known.get(canonical[i]!);
+      return {
+        url: j.url,
+        title: j.title ?? "Untitled job",
+        company: j.company ?? "Unknown company",
+        location: j.location ?? null,
+        postedAt: j.postedAt?.toISOString() ?? null,
+        salaryText: j.salaryText ?? null,
+        workArrangement: j.workArrangement ?? null,
+        provider: BOARD_PROVIDER_LABELS[j.provider],
+        matchedIn: j.matchedIn,
+        known: !k ? "new" : k.removed ? "removed" : "in_list",
+      };
+    });
+    const notices = result.issues.filter((i) => i.kind === "limit").map((i) => i.message);
+    const failed = result.boards.filter((b) => b.error).length;
+    return {
+      ok: true,
+      message: `Found ${plural(result.totalMatches, "matching job")} on ${plural(result.boards.length - failed, "board")}${failed ? ` (${failed} couldn't be read)` : ""}.`,
+      data: {
+        results,
+        totalMatches: result.totalMatches,
+        boards: result.boards.map((b) => ({ label: `${BOARD_PROVIDER_LABELS[b.provider]} · ${b.slug}`, url: b.url, postings: b.postings, matches: b.matches, error: b.error })),
+        notices,
+      },
+    };
+  });
+}
+
+/** Add the picked search results. The boards are read again so only real, current postings are stored. */
+export async function importBoardJobsAction(input: BoardSearchFormInput & { urls: string[] }): Promise<ActionResult<ImportResultData>> {
+  return authedAction<ImportResultData>(async (user) => {
+    const parsed = boardImportSchema.safeParse(input);
+    if (!parsed.success) return validationFailed(parsed.error);
+    const read = readBoards(parsed.data);
+    if (read.error) return read.error;
+    const limit = rateLimit(`import:${user.id}`, LIMITS.jobImport.limit, LIMITS.jobImport.windowMs);
+    if (!limit.allowed) return { ok: false, message: `Import limit reached. Try again in ${Math.ceil(limit.retryAfterSeconds / 60)} minutes.` };
+    // Only re-read the boards the picked jobs are on, so an unrelated board that's down doesn't show up as a failure.
+    const picked = new Set(parsed.data.urls.map((u) => parseBoardRef(u)).filter((b) => b !== null).map(boardKey));
+    const boards = read.boards.filter((b) => picked.has(boardKey(b)));
+    let summary: ImportSummary;
+    try {
+      summary = await runImport(user.id, jobBoardSearchSource, {
+        boards: boards.length ? boards : read.boards,
+        query: parsed.data.query,
+        location: parsed.data.location ?? null,
+        searchDescriptions: parsed.data.searchDescriptions,
+        onlyUrls: parsed.data.urls,
+      });
+    } catch (error) {
+      if (error instanceof BoardSearchError) return { ok: false, message: error.message };
+      throw error;
+    }
+    if (summary.total === 0) return { ok: false, message: "Those jobs are no longer on the boards. Search again to see what's open." };
+    await audit(user.id, "jobs.imported", { entityType: "JobImport", entityId: summary.importId, metadata: { source: "job_boards", created: summary.created, duplicates: summary.duplicates } });
     if (summary.created || summary.enrichedJobIds.length) analyzeInBackground(user.id);
     refresh();
     return summarize(summary);

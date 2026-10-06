@@ -63,6 +63,20 @@ describe("jobs", () => {
     expect((await listJobs(user.id, jobFiltersSchema.parse({ company: "glob" }))).total).toBe(1);
     expect((await listJobs(user.id, jobFiltersSchema.parse({ minSalary: "90000" }))).total).toBe(0);
   });
+
+  it("searches keywords across title, company, location and description", async () => {
+    const user = await makeUser();
+    await createManualJob(user.id, job("https://example.com/1", { title: "Account Executive", description: "Sell medical devices. Base plus commission." }), "GENERIC");
+    await createManualJob(user.id, job("https://example.com/2", { title: "Account Manager", company: "Globex", description: "Grow medical devices accounts." }), "GENERIC");
+    await createManualJob(user.id, job("https://example.com/3", { title: "Account Executive", company: "Initech", location: "Austin, TX" }), "GENERIC");
+    const search = async (q: string) => (await listJobs(user.id, jobFiltersSchema.parse({ q }))).rows.map((r) => r.company).sort();
+    expect(await search('"medical devices"')).toEqual(["Acme", "Globex"]);
+    expect(await search("account executive")).toEqual(["Acme", "Initech"]);
+    expect(await search("austin")).toEqual(["Initech"]);
+    // Excluding a word keeps jobs with no description.
+    expect(await search("account -commission")).toEqual(["Globex", "Initech"]);
+    expect(await search("account -globex")).toEqual(["Acme", "Initech"]);
+  });
 });
 
 describe("applications", () => {

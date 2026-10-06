@@ -86,6 +86,7 @@ export interface RuleCheck {
     | "excludedIndustries"
     | "excludedCompanies"
     | "excludedKeywords"
+    | "requiredKeywords"
     | "sponsorship"
     | "description";
   label: string;
