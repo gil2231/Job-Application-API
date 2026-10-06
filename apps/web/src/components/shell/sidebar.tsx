@@ -21,15 +21,15 @@ import { cn } from "@/lib/utils";
 import { NAV_ITEMS } from "./nav";
 
 interface SidebarProps {
-  user: { name: string; email: string };
+  user: { name: string; email: string; role: string };
   attentionCount: number;
 }
 
-function NavLinks({ attentionCount, onNavigate }: { attentionCount: number; onNavigate?: () => void }) {
+function NavLinks({ attentionCount, isAdmin, onNavigate }: { attentionCount: number; isAdmin: boolean; onNavigate?: () => void }) {
   const pathname = usePathname();
   return (
     <nav className="grid gap-0.5 px-2">
-      {NAV_ITEMS.map((item) => {
+      {NAV_ITEMS.filter((item) => !item.adminOnly || isAdmin).map((item) => {
         const active = pathname === item.href || pathname.startsWith(`${item.href}/`);
         const badge = item.badgeKey === "attention" && attentionCount > 0 ? attentionCount : null;
         return (
@@ -125,7 +125,7 @@ export function Sidebar({ user, attentionCount }: SidebarProps) {
     <aside className="bg-sidebar border-sidebar-border sticky top-0 hidden h-screen w-60 shrink-0 flex-col border-r md:flex">
       <Brand />
       <div className="flex-1 overflow-y-auto py-2">
-        <NavLinks attentionCount={attentionCount} />
+        <NavLinks attentionCount={attentionCount} isAdmin={user.role === "ADMIN"} />
       </div>
       <div className="border-sidebar-border border-t p-2">
         <SupportLinks />
@@ -149,7 +149,7 @@ export function MobileNav({ user, attentionCount }: SidebarProps) {
           <SheetTitle className="sr-only">Navigation</SheetTitle>
           <Brand />
           <div className="flex-1 overflow-y-auto py-2">
-            <NavLinks attentionCount={attentionCount} onNavigate={() => setOpen(false)} />
+            <NavLinks attentionCount={attentionCount} isAdmin={user.role === "ADMIN"} onNavigate={() => setOpen(false)} />
           </div>
           <div className="border-t p-2">
             <SupportLinks onNavigate={() => setOpen(false)} />

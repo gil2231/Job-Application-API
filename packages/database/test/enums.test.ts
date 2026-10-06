@@ -8,6 +8,7 @@ const pairs: Array<[string, Record<string, string>, readonly string[]]> = [
   ["ApplicationOutcome", $Enums.ApplicationOutcome, shared.APPLICATION_OUTCOMES],
   ["AutomationMode", $Enums.AutomationMode, shared.AUTOMATION_MODES],
   ["Platform", $Enums.Platform, shared.PLATFORMS],
+  ["UserRole", $Enums.UserRole, shared.USER_ROLES],
   ["FailureType", $Enums.FailureType, shared.FAILURE_TYPES],
   ["AttentionReason", $Enums.AttentionReason, shared.ATTENTION_REASONS],
   ["WorkArrangement", $Enums.WorkArrangement, shared.WORK_ARRANGEMENTS],

@@ -16,6 +16,7 @@
     "@anthropic-ai/sdk": "^0.131.0",
     "@autoapply/automation": "workspace:*",
     "@autoapply/shared": "workspace:*",
+    "openai": "^7.28.0",
     "zod": "^4.6.5"
   },
   "devDependencies": {
