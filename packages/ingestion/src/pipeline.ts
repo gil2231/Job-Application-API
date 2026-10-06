@@ -207,6 +207,7 @@ function toRules(ctx: MatchingContext): { rules: QualificationRules; prefs: Matc
     excludedIndustries: r?.excludedIndustries ?? [],
     excludedCompanies: r?.excludedCompanies ?? [],
     excludedKeywords: r?.excludedKeywords ?? [],
+    requiredKeywords: r?.requiredKeywords ?? [],
     requiresSponsorship: r?.requiresSponsorship ?? false,
   };
   return {

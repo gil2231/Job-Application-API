@@ -55,6 +55,19 @@ describe("evaluateRules", () => {
     expect(outcome(byAnalysis, "minSalary")).toBe("fail");
   });
 
+  it("requires at least one include keyword when any are set", () => {
+    const rules = { ...RULES, requiredKeywords: ["SaaS", "medical devices"] };
+    const hit = evaluateRules({ ...base, description: "Sell Medical-Devices to hospitals." }, rules);
+    expect(hit.checks.find((c) => c.rule === "requiredKeywords")).toMatchObject({ outcome: "pass", detail: 'Mentions "medical devices".' });
+    const miss = evaluateRules({ ...base, description: "Sell insurance." }, rules);
+    expect(outcome(miss, "requiredKeywords")).toBe("fail");
+    expect(miss.status).toBe("NOT_QUALIFIED");
+    // Without a description a miss on the title alone isn't conclusive.
+    const noDescription = evaluateRules({ ...base, description: null, analysis: analysis({ hasDescription: false }) }, rules);
+    expect(outcome(noDescription, "requiredKeywords")).toBe("unknown");
+    expect(outcome(evaluateRules(base, RULES), "requiredKeywords")).toBeUndefined();
+  });
+
   it("passes remote jobs on location and fails other cities", () => {
     expect(outcome(evaluateRules({ ...base, location: "Denver, CO", analysis: analysis({ workArrangement: "REMOTE" }) }, RULES), "location")).toBe("pass");
     expect(outcome(evaluateRules({ ...base, location: "Denver, CO" }, RULES), "location")).toBe("fail");

@@ -86,7 +86,15 @@ export function RulesForm({ rule }: { rule: AutomationRuleView }) {
           <Field label="Excluded companies" htmlFor="excludedCompanies" error={e.excludedCompanies}>
             <TagInput id="excludedCompanies" name="excludedCompanies" defaultValue={rule.excludedCompanies} />
           </Field>
-          <Field label="Excluded keywords" htmlFor="excludedKeywords" error={e.excludedKeywords} className="sm:col-span-2" hint='Jobs mentioning these are excluded, e.g. "commission-only".'>
+          <Field
+            label="Include keywords"
+            htmlFor="requiredKeywords"
+            error={e.requiredKeywords}
+            hint='A job must mention at least one of these to qualify, e.g. "SaaS" or "medical devices". Leave empty to allow any.'
+          >
+            <TagInput id="requiredKeywords" name="requiredKeywords" defaultValue={rule.requiredKeywords} />
+          </Field>
+          <Field label="Exclude keywords" htmlFor="excludedKeywords" error={e.excludedKeywords} hint='Jobs mentioning any of these are skipped, e.g. "commission-only".'>
             <TagInput id="excludedKeywords" name="excludedKeywords" defaultValue={rule.excludedKeywords} />
           </Field>
           <div className="flex items-center gap-2 sm:col-span-2">

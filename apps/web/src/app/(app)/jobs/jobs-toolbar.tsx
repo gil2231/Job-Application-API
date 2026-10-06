@@ -72,9 +72,16 @@ export function JobsToolbar({ companies, platforms }: { companies: string[]; pla
 
   return (
     <div className="flex flex-wrap items-center gap-2">
-      <div className="relative w-full sm:w-64">
+      <div className="relative w-full sm:w-72">
         <Search className="text-muted-foreground absolute top-1/2 left-2.5 size-4 -translate-y-1/2" />
-        <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search title, company, location" className="h-8 pl-8" aria-label="Search jobs" />
+        <Input
+          value={q}
+          onChange={(e) => setQ(e.target.value)}
+          placeholder="Search keywords"
+          title='Searches title, company, location and description. Use "quotes" for phrases and -word to hide jobs that mention it.'
+          className="h-8 pl-8"
+          aria-label="Search jobs by keyword"
+        />
       </div>
       <MultiSelect label="Status" param="status" options={[...JOB_STATUSES, ...APPLICATION_STATUSES].filter((s, i, a) => a.indexOf(s) === i).map((s) => ({ value: s, label: enumLabel(s) }))} />
       <MultiSelect label="Platform" param="platform" options={platforms.map((p) => ({ value: p, label: enumLabel(p) }))} />

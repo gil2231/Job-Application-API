@@ -4,6 +4,7 @@ import {
   canonicalizeJobUrl,
   extractLinkedInJobId,
   JOB_STATUSES,
+  parseKeywordQuery,
   parseSalary,
   type ApplicationStatus,
   type JobFilters,
@@ -21,13 +22,18 @@ const isApplicationStatus = (s: string): s is ApplicationStatus => (APPLICATION_
 function buildJobWhere(userId: string, f: JobFilters): Prisma.JobWhereInput {
   const and: Prisma.JobWhereInput[] = [{ userId, deletedAt: null }];
   if (f.q) {
-    and.push({
-      OR: [
-        { title: { contains: f.q, mode: "insensitive" } },
-        { company: { contains: f.q, mode: "insensitive" } },
-        { location: { contains: f.q, mode: "insensitive" } },
-      ],
-    });
+    // Every word or "phrase" must appear in the title, company, location or
+    // description; -word excludes jobs whose title, company or description has it.
+    const { include, exclude } = parseKeywordQuery(f.q);
+    for (const term of include) {
+      const contains = { contains: term, mode: "insensitive" } as const;
+      and.push({ OR: [{ title: contains }, { company: contains }, { location: contains }, { description: contains }] });
+    }
+    for (const term of exclude) {
+      const contains = { contains: term, mode: "insensitive" } as const;
+      // A NULL description must count as "doesn't mention it", which NOT alone wouldn't do.
+      and.push({ NOT: { title: contains } }, { NOT: { company: contains } }, { OR: [{ description: null }, { NOT: { description: contains } }] });
+    }
   }
   if (f.company) and.push({ company: { contains: f.company, mode: "insensitive" } });
   if (f.location) and.push({ location: { contains: f.location, mode: "insensitive" } });

@@ -22,7 +22,7 @@ const ISSUE_LABELS: Record<string, string> = {
   limit: "Limit",
 };
 
-function ImportResult({ result, onDone }: { result: ActionResult<ImportResultData>; onDone: () => void }) {
+export function ImportResult({ result, onDone }: { result: ActionResult<ImportResultData>; onDone: () => void }) {
   const data = result.data!;
   const stats: Array<[string, number]> = [
     ["New", data.created],

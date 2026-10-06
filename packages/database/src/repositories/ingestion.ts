@@ -342,3 +342,47 @@ export async function getMatchingContext(userId: string) {
   ]);
   return { profile, rule, settings };
 }
+
+// ── Job board search ────────────────────────────────────────────────────────
+
+export const JOB_BOARD_SOURCE_NAME = "Job board search";
+
+/** The last board search, remembered so the form opens with it. */
+export interface SavedBoardSearch {
+  boards: string[];
+  query: string;
+  location: string | null;
+  searchDescriptions: boolean;
+}
+
+export async function getSavedBoardSearch(userId: string): Promise<SavedBoardSearch | null> {
+  const source = await prisma.jobSource.findUnique({
+    where: { userId_type_name: { userId, type: "JOB_BOARD", name: JOB_BOARD_SOURCE_NAME } },
+    select: { config: true },
+  });
+  const c = source?.config;
+  if (!c || typeof c !== "object" || Array.isArray(c)) return null;
+  const config = c as Record<string, unknown>;
+  return {
+    boards: Array.isArray(config.boards) ? config.boards.filter((b): b is string => typeof b === "string") : [],
+    query: typeof config.query === "string" ? config.query : "",
+    location: typeof config.location === "string" ? config.location : null,
+    searchDescriptions: config.searchDescriptions === true,
+  };
+}
+
+export async function saveBoardSearch(userId: string, search: SavedBoardSearch) {
+  const config = search as unknown as Prisma.InputJsonValue;
+  await prisma.jobSource.upsert({
+    where: { userId_type_name: { userId, type: "JOB_BOARD", name: JOB_BOARD_SOURCE_NAME } },
+    update: { config },
+    create: { userId, type: "JOB_BOARD", name: JOB_BOARD_SOURCE_NAME, config },
+  });
+}
+
+/** Which of these canonical URLs the user already has (including deleted jobs, which imports never re-add). */
+export async function findKnownJobUrls(userId: string, canonicalUrls: string[]): Promise<Map<string, { jobId: string; removed: boolean }>> {
+  if (!canonicalUrls.length) return new Map();
+  const rows = await prisma.job.findMany({ where: { userId, canonicalUrl: { in: canonicalUrls } }, select: { id: true, canonicalUrl: true, deletedAt: true } });
+  return new Map(rows.map((r) => [r.canonicalUrl, { jobId: r.id, removed: r.deletedAt !== null }]));
+}

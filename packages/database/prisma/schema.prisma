@@ -151,6 +151,7 @@ enum JobSourceType {
   LINKEDIN_SAVED
   CSV_IMPORT
   API
+  JOB_BOARD
 }
 
 enum ApplicationEventType {
@@ -789,6 +790,8 @@ model AutomationRule {
   excludedCompanies         String[]
   /// Phrases that disqualify a job (e.g. "commission-only").
   excludedKeywords          String[]
+  /// When set, a job must mention at least one of these phrases to qualify.
+  requiredKeywords          String[]
   requiresSponsorship       Boolean           @default(false)
   maxApplicationsPerDay     Int               @default(25)
   maxConcurrentApplications Int               @default(1)

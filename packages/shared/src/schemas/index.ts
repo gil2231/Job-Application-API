@@ -261,6 +261,18 @@ export const importUrlsSchema = z.object({
   text: z.string().trim().min(1, "Paste at least one job URL").max(100_000, "That's too much text. Paste up to 100 URLs at a time."),
 });
 
+export const boardSearchSchema = z.object({
+  boards: z.string().trim().min(1, "Add at least one job board").max(10_000, "That's too many boards. Search up to 25 at a time."),
+  query: z.string().trim().max(300, "Keep keywords under 300 characters"),
+  location: optionalText(100),
+  searchDescriptions: checkbox,
+});
+export type BoardSearchFormInput = z.infer<typeof boardSearchSchema>;
+
+export const boardImportSchema = boardSearchSchema.extend({
+  urls: z.array(z.string().trim().max(2048)).min(1, "Choose at least one job to add").max(200),
+});
+
 export const AI_PROVIDER_OPTIONS = ["anthropic"] as const;
 export const aiSettingsSchema = z.object({
   aiProvider: z
@@ -330,6 +342,7 @@ export const automationRuleSchema = z.object({
   excludedIndustries: stringList(50, 100),
   excludedCompanies: stringList(200, 150),
   excludedKeywords: stringList(50, 100),
+  requiredKeywords: stringList(50, 100),
   requiresSponsorship: checkbox,
   maxApplicationsPerDay: z.coerce.number().int().min(1).max(500),
   maxConcurrentApplications: z.coerce.number().int().min(1).max(10),

@@ -19,6 +19,8 @@ export interface QualificationRules {
   excludedIndustries: string[];
   excludedCompanies: string[];
   excludedKeywords: string[];
+  /** When non-empty, the job must mention at least one. */
+  requiredKeywords: string[];
   requiresSponsorship: boolean;
 }
 
@@ -110,6 +112,16 @@ export function evaluateRules(job: QualificationInput, rules: QualificationRules
     const text = [job.title, job.description, job.salaryText].filter(Boolean).join("\n");
     const hit = rules.excludedKeywords.find((k) => containsPhrase(text, k) || (/commission/i.test(k) && a.commissionOnly));
     add("excludedKeywords", "No excluded keywords", hit ? "fail" : "pass", hit ? `Mentions "${hit}".` : "None of your excluded keywords appear.");
+  }
+
+  if (rules.requiredKeywords.length) {
+    const label = `Mentions ${rules.requiredKeywords.length === 1 ? `"${rules.requiredKeywords[0]}"` : "one of your keywords"}`;
+    const text = [job.title, job.company, job.description].filter(Boolean).join("\n");
+    const hit = rules.requiredKeywords.find((k) => containsPhrase(text, k));
+    // Without a description only the title can be checked, so a miss isn't conclusive yet.
+    if (hit) add("requiredKeywords", label, "pass", `Mentions "${hit}".`);
+    else if (!a.hasDescription) add("requiredKeywords", label, "unknown", "Checked once the description is added.");
+    else add("requiredKeywords", label, "fail", `Doesn't mention ${rules.requiredKeywords.map((k) => `"${k}"`).join(", ")}.`);
   }
 
   if (rules.requiresSponsorship) {

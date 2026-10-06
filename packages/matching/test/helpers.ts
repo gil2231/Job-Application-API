@@ -53,5 +53,6 @@ export const RULES: QualificationRules = {
   excludedIndustries: [],
   excludedCompanies: [],
   excludedKeywords: ["commission-only"],
+  requiredKeywords: [],
   requiresSponsorship: false,
 };

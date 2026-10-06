@@ -101,7 +101,8 @@ export interface FetchedResponse {
   text: string;
 }
 
-export type HttpFetcher = (url: string, init: { accept: string }) => Promise<FetchedResponse>;
+/** maxBytes overrides the default 3 MB response cap (e.g. for a whole job board listing). */
+export type HttpFetcher = (url: string, init: { accept: string; maxBytes?: number }) => Promise<FetchedResponse>;
 
 const MAX_BYTES = 3 * 1024 * 1024;
 const USER_AGENT = "AutoApply/1.0 (job posting import; +https://github.com/gil2231/Job-Application-API)";
@@ -135,7 +136,7 @@ export const safeFetch: HttpFetcher = async (input, init) => {
         const { done, value } = await reader.read();
         if (done) break;
         size += value.byteLength;
-        if (size > MAX_BYTES) {
+        if (size > (init.maxBytes ?? MAX_BYTES)) {
           await reader.cancel();
           throw new Error("The page is too large to import");
         }
