@@ -90,7 +90,7 @@ export async function getDashboardStats(userId: string, now: Date = new Date()) 
     automation: {
       queued: count("QUEUED"),
       processing: count("PROCESSING"),
-      waiting: needsReview,
+      waiting: count("WAITING_FOR_USER") + count("REVIEW_REQUIRED"),
       ready: count("READY"),
       paused: settings?.queuePaused ?? false,
       pauseAfterCurrent: settings?.pauseAfterCurrent ?? false,

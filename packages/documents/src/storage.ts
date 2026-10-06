@@ -1,6 +1,7 @@
 import { createHash, randomUUID } from "node:crypto";
+import { existsSync } from "node:fs";
 import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
-import { dirname, join, resolve, sep } from "node:path";
+import { dirname, isAbsolute, join, resolve, sep } from "node:path";
 import { DeleteObjectCommand, GetObjectCommand, PutObjectCommand, S3Client } from "@aws-sdk/client-s3";
 
 export interface StorageDriver {
@@ -72,9 +73,21 @@ export function getStorage(env: NodeJS.ProcessEnv = process.env): StorageDriver 
     });
     cached = new S3StorageDriver(client, env.S3_BUCKET);
   } else {
-    cached = new LocalStorageDriver(env.STORAGE_LOCAL_DIR ?? ".storage");
+    cached = new LocalStorageDriver(localStorageRoot(env.STORAGE_LOCAL_DIR ?? ".storage"));
   }
   return cached;
+}
+
+/**
+ * A relative STORAGE_LOCAL_DIR is resolved from the workspace root, so the web
+ * app and the worker (which run from different directories) share one folder.
+ */
+export function localStorageRoot(dir: string, from = process.cwd()): string {
+  if (isAbsolute(dir)) return dir;
+  for (let current = resolve(from); ; current = dirname(current)) {
+    if (existsSync(join(current, "pnpm-workspace.yaml"))) return resolve(current, dir);
+    if (dirname(current) === current) return resolve(from, dir);
+  }
 }
 
 export function sha256Hex(body: Buffer): string {

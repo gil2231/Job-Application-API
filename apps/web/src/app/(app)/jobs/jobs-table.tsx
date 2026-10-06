@@ -8,6 +8,7 @@ import { enumLabel } from "@autoapply/shared";
 import { reanalyzeJobsAction } from "@/actions/ingestion";
 import { applyToJobsAction, deleteJobsAction, retryJobsAction, skipJobsAction } from "@/actions/jobs";
 import { useServerAction } from "@/components/action-button";
+import { ApplyButton } from "@/components/apply-button";
 import { Pagination, SortableHead } from "@/components/data-table";
 import { EmptyState } from "@/components/page-header";
 import { MatchScore, PlatformLabel, StatusBadge } from "@/components/status";
@@ -69,9 +70,12 @@ export function JobsTable({ data, hasFilters }: { data: { rows: Row[]; total: nu
       {selectedRows.length > 0 && (
         <div className="bg-primary/5 border-primary/20 flex flex-wrap items-center gap-2 rounded-lg border px-3 py-2">
           <span className="mr-2 text-sm font-medium">{selectedRows.length} selected</span>
-          <Button size="xs" disabled={pending || !bulk.apply.length} onClick={() => act(() => applyToJobsAction(bulk.apply))}>
-            <Send /> Apply{bulk.apply.length !== selectedRows.length && bulk.apply.length > 0 ? ` (${bulk.apply.length})` : ""}
-          </Button>
+          <ApplyButton
+            size="xs"
+            disabled={pending || !bulk.apply.length}
+            onApply={(mode) => act(() => applyToJobsAction(bulk.apply, mode))}
+            label={`Apply${bulk.apply.length !== selectedRows.length && bulk.apply.length > 0 ? ` (${bulk.apply.length})` : ""}`}
+          />
           <Button size="xs" variant="outline" disabled={pending || !bulk.skip.length} onClick={() => act(() => skipJobsAction(bulk.skip))}>
             <SkipForward /> Skip
           </Button>

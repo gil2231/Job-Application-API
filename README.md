@@ -6,7 +6,7 @@ AutoApply imports the jobs you've saved, scores them against your Master Profile
 
 - AutoApply never bypasses CAPTCHAs, MFA, logins or anti-bot protections. When automation hits one, the application moves to **Needs Attention** and waits for you.
 - Applications are filled only from facts in your Master Profile and Answer Library. A question with no stored answer is sent to you; AutoApply never makes up an answer.
-- Applications are submitted automatically only when an automation rule is set to `AUTO` **and** you've turned on auto-submit in Settings. Otherwise they stop at review.
+- Applications are submitted automatically only in `AUTO` mode, with auto-submit turned on in Rules, and only when every safety check passes. Otherwise they stop for your review.
 - Automation is never run against real employers by default.
 
 ## Layout
@@ -15,12 +15,13 @@ AutoApply imports the jobs you've saved, scores them against your Master Profile
 apps/
   web/        Next.js 16 dashboard (App Router, server actions, SSE live updates)
   api/        Fastify REST API (/v1/me, /v1/dashboard, /v1/jobs, /v1/applications)
-  worker/     Playwright/BullMQ worker (heartbeat only in Phase 1)
+  worker/     Playwright/BullMQ worker that fills applications, plus mock application pages for tests
 packages/
   database/   Prisma schema, migrations, repositories (all queries are scoped to the user)
   shared/     Enums, zod schemas, salary/URL parsing, standard questions, queue names
-  automation/ Failure classification, retry policy, field-locator strategy
-  ats-adapters/ Platform detection, ApplicationAdapter interface, registry
+  automation/ Field classification and answer resolution, option matching, submit safety checks, retry policy
+  ats-adapters/ Platform detection, ApplicationAdapter interface and registry, generic web form adapter
+  queue/      BullMQ queue, Redis control and progress channels
   ai/         AI provider registry (Anthropic), job analysis with a deterministic fallback
   matching/   Match score (0–100, weighted and explained) and the qualification rules engine
   ingestion/  Job sources (LinkedIn export, CSV, pasted URLs), public posting readers, dedup, analysis pipeline
@@ -47,7 +48,7 @@ docker compose exec postgres createdb -U autoapply autoapply_test
 DATABASE_URL="$TEST_DATABASE_URL" pnpm db:deploy
 ```
 
-Other entry points: `pnpm dev:api` (port 4000) and `pnpm dev:worker`.
+Other entry points: `pnpm dev:api` (port 4000) and `pnpm dev:worker` (the browser worker, below).
 
 ## Importing jobs
 
@@ -61,13 +62,45 @@ Duplicates are skipped by canonical URL (including the LinkedIn job id) and by c
 
 Every new job is analyzed (seniority, location and arrangement, pay, required and preferred qualifications, experience, education, skills, industry, sponsorship, travel, platform), scored against your Master Profile with the weights on the Rules page, and marked Qualified, Not Qualified or Needs Details. Analysis uses the AI provider when `AI_PROVIDER` and its key are set, and the built-in deterministic analyzer otherwise, so it works without a key. Changing your profile or rules re-scores waiting jobs without re-analyzing them.
 
+## Running applications
+
+Choose **Apply** on the Jobs page (the arrow next to it picks Manual, Review or Auto mode for that batch; otherwise your default mode from Rules is used), or **Apply to all qualified**. Applications are queued, and the worker (`pnpm dev:worker`) picks them up.
+
+- **Manual** fills the form and stops. You submit it yourself and mark it submitted (with a visible browser, AutoApply notices the submission).
+- **Review** fills the form and stops for you to approve. **Approve & submit** in Needs Attention lets AutoApply submit it.
+- **Auto** submits only when every check passes: auto-submit is on in Rules, the site is supported, every required field was mapped confidently, every answer is allowed to be sent without review, nothing contradicts your profile, and there's no CAPTCHA. Otherwise it stops for review and says why.
+
+The worker stops before leaving any page that has a question it isn't sure about, so nothing you haven't approved is sent. Approved answers are reused when the application resumes, and **Remember this answer** saves them to your Answer Library. CAPTCHAs, MFA and sign-ins always go to Needs Attention. With `WORKER_HEADLESS=false` the worker opens a real browser window and keeps the page open, so you can finish the check there and it carries on by itself.
+
+The dashboard shows each running application's steps live (server-sent events), and Pause, Resume, Pause after current and Stop now take effect immediately. Daily and concurrency limits from Rules are enforced when the worker claims an application. Postgres holds the state; a crashed worker's applications return to the queue when its lease runs out.
+
+By default the worker only opens `localhost` and `127.0.0.1`. To run against real employer sites, set `AUTOMATION_ALLOW_ALL_HOSTS=true` (private and internal addresses stay blocked). LinkedIn Easy Apply is never automated.
+
+### Mock application pages
+
+`pnpm --filter @autoapply/worker mock-site` serves local test forms at http://127.0.0.1:4100: a simple form, multi-page, dropdowns, checkboxes, file uploads, conditional questions, validation errors, CAPTCHA and sign-in walls, and unknown fields. Add one as a job (for example `http://127.0.0.1:4100/simple`) to watch the whole flow without touching a real site. The worker tests and `pnpm test:e2e` use these pages.
+
+### Worker settings
+
+| Variable | Default | |
+| --- | --- | --- |
+| `WORKER_CONCURRENCY` | `2` | Applications one worker runs at once (each user's own limit still applies) |
+| `WORKER_HEADLESS` | `true` | `false` opens a visible browser you can finish checks in |
+| `WORKER_INTERACTIVE_WAIT_MS` | `900000` | How long a visible browser waits for you before releasing the application |
+| `WORKER_LEASE_MS` | `90000` | Lease length; a crashed worker's applications are requeued after it |
+| `WORKER_SCHEDULER_INTERVAL_MS` | `5000` | How often the scheduler looks for due applications |
+| `WORKER_NAVIGATION_TIMEOUT_MS` | `30000` | Page load timeout |
+| `AUTOMATION_ALLOWED_HOSTS` | `localhost,127.0.0.1` | Hosts the worker may open |
+| `AUTOMATION_ALLOW_ALL_HOSTS` | `false` | Allow public employer sites |
+| `PLAYWRIGHT_CHROMIUM_EXECUTABLE` | | Chromium to launch, if not Playwright's own |
+
 ## Checks
 
 ```bash
 pnpm typecheck
 pnpm lint
 pnpm test        # unit and integration tests (needs Postgres)
-pnpm test:e2e    # Playwright browser tests against the dev server
+pnpm test:e2e    # Playwright browser tests against the dev server, then with the real worker and mock pages
 ```
 
 ## Security
@@ -84,7 +117,7 @@ pnpm test:e2e    # Playwright browser tests against the dev server
 | --- | --- | --- |
 | 1 | Auth, database, Master Profile, documents, Answer Library, dashboard, Jobs/Applications/Needs Attention, rules, settings | Done |
 | 2 | LinkedIn saved-jobs import (user-authorized path only), job analysis, matching, rule evaluation | Done |
-| 3 | Playwright worker, generic form automation, human intervention flow | Next |
-| 4 | ATS adapters (Greenhouse, Lever, Ashby, Workday, …) | |
+| 3 | Queue and controls, Playwright worker, generic form automation, human intervention flow, live progress | Done |
+| 4 | ATS adapters (Greenhouse, Lever, Ashby, Workday, …) | Next |
 | 5 | AI field mapping, answer drafting, resume/cover-letter generation | |
 | 6 | Analytics, retries, real-time hardening | |

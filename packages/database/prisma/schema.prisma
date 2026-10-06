@@ -165,6 +165,7 @@ enum ApplicationEventType {
   RESUME_UPLOADED
   COVER_LETTER_UPLOADED
   QUESTIONS_ANSWERED
+  PAGE_COMPLETED
   VALIDATION_COMPLETED
   HUMAN_INPUT_REQUIRED
   HUMAN_INPUT_RECEIVED
@@ -635,6 +636,12 @@ model Application {
   attemptCount       Int                @default(0)
   nextAttemptAt      DateTime?
   confirmationNumber String?
+  /// Set when the user approves a Review-mode application for submission.
+  submitApprovedAt   DateTime?
+  /// Worker lease: the worker holding this application and when the lease lapses.
+  /// A lapsed lease (crashed worker) lets the scheduler return it to the queue.
+  lockedBy           String?
+  lockedUntil        DateTime?
   outcome            ApplicationOutcome @default(NONE)
   outcomeAt          DateTime?
   queuedAt           DateTime           @default(now())
@@ -656,6 +663,7 @@ model Application {
   @@index([userId, submittedAt])
   @@index([userId, updatedAt])
   @@index([status, nextAttemptAt])
+  @@index([status, lockedUntil])
 }
 
 /// A field or question found on an application form.
@@ -675,13 +683,15 @@ model ApplicationQuestion {
   /// 0-100
   confidence    Int?
   status        QuestionStatus @default(PENDING)
+  /// Why the worker needs a person to look at this question (shown in Needs Attention).
+  reviewReason  String?
   createdAt     DateTime       @default(now())
   updatedAt     DateTime       @updatedAt
 
   application Application                @relation(fields: [applicationId], references: [id], onDelete: Cascade)
   answer      ApplicationAnswerInstance?
 
-  @@index([applicationId, pageIndex])
+  @@unique([applicationId, pageIndex, normalizedKey])
   @@index([applicationId, status])
 }
 

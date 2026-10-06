@@ -31,8 +31,11 @@ export const ACTIVE_APPLICATION_STATUSES: readonly ApplicationStatus[] = [
   "READY",
 ];
 
-/** Statuses that need a human before the application can continue. */
-export const ATTENTION_APPLICATION_STATUSES: readonly ApplicationStatus[] = ["WAITING_FOR_USER", "REVIEW_REQUIRED"];
+/**
+ * Statuses that need a human before the application can continue. READY means
+ * the form is filled and checked and only the final submit is left to the user.
+ */
+export const ATTENTION_APPLICATION_STATUSES: readonly ApplicationStatus[] = ["WAITING_FOR_USER", "REVIEW_REQUIRED", "READY"];
 
 /**
  * The combined pipeline status shown in the Jobs table: a job's own status until
@@ -139,6 +142,7 @@ export const APPLICATION_EVENT_TYPES = [
   "RESUME_UPLOADED",
   "COVER_LETTER_UPLOADED",
   "QUESTIONS_ANSWERED",
+  "PAGE_COMPLETED",
   "VALIDATION_COMPLETED",
   "HUMAN_INPUT_REQUIRED",
   "HUMAN_INPUT_RECEIVED",

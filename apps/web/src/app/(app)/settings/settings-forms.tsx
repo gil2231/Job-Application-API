@@ -1,6 +1,7 @@
 "use client";
 
 import type { UserSettingsView } from "@autoapply/database";
+import { revokeBrowserSessionAction } from "@/actions/applications";
 import { saveAiSettingsAction } from "@/actions/ingestion";
 import { changePasswordAction, revokeOtherSessionsAction, revokeSessionAction, saveSettingsAction, updateNameAction } from "@/actions/settings";
 import { ActionButton } from "@/components/action-button";
@@ -130,6 +131,30 @@ export function SessionList({ sessions, currentId }: { sessions: Array<{ id: str
         </div>
       )}
     </div>
+  );
+}
+
+export function BrowserSessionList({ sessions }: { sessions: Array<{ id: string; domain: string; platform: string; lastUsed: string | null; expires: string | null }> }) {
+  if (!sessions.length) {
+    return <p className="text-muted-foreground text-sm">None yet. Each application site the worker opens keeps its cookies here, so a sign-in you finish once is remembered.</p>;
+  }
+  return (
+    <ul className="divide-y rounded-lg border">
+      {sessions.map((s) => (
+        <li key={s.id} className="flex flex-wrap items-center gap-3 px-4 py-3">
+          <div className="min-w-0 flex-1">
+            <p className="text-sm font-medium">{s.domain}</p>
+            <p className="text-muted-foreground text-xs">
+              {s.platform} · {s.lastUsed ? `used ${s.lastUsed}` : "not used yet"}
+              {s.expires ? ` · expires ${s.expires}` : ""}
+            </p>
+          </div>
+          <ActionButton size="xs" variant="outline" action={() => revokeBrowserSessionAction(s.id)}>
+            Remove
+          </ActionButton>
+        </li>
+      ))}
+    </ul>
   );
 }
 

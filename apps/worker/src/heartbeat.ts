@@ -6,7 +6,7 @@ import { WORKER_HEARTBEAT_KEY, WORKER_HEARTBEAT_TTL_SECONDS, type WorkerHeartbea
  * Publishes a short-lived heartbeat so the dashboard can show whether a
  * worker is running. If the process dies, the key expires on its own.
  */
-export function startHeartbeat(redis: Redis, state: { adapters: () => string[]; activeJobs: () => number }, intervalMs = 10_000) {
+export function startHeartbeat(redis: Redis, state: { adapters: () => string[]; activeJobs: () => number; interactive?: () => boolean }, intervalMs = 10_000) {
   const workerId = `${hostname()}:${process.pid}`;
   const startedAt = new Date().toISOString();
   const beat = async () => {
@@ -16,6 +16,7 @@ export function startHeartbeat(redis: Redis, state: { adapters: () => string[]; 
       updatedAt: new Date().toISOString(),
       adapters: state.adapters(),
       activeJobs: state.activeJobs(),
+      interactive: state.interactive?.() ?? false,
     };
     await redis.set(WORKER_HEARTBEAT_KEY, JSON.stringify(payload), "EX", WORKER_HEARTBEAT_TTL_SECONDS);
   };

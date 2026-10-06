@@ -20,7 +20,12 @@ export default defineConfig({
   workers: 2,
   reporter: [["list"]],
   use: { baseURL, trace: "retain-on-failure", screenshot: "only-on-failure" },
-  projects: [{ name: "chromium", use: { ...devices["Desktop Chrome"], launchOptions: { executablePath } } }],
+  projects: [
+    { name: "chromium", testIgnore: /worker\.spec\.ts/, use: { ...devices["Desktop Chrome"], launchOptions: { executablePath } } },
+    // Starts the real worker and the local mock application site. Runs last so
+    // the worker doesn't pick up applications the other tests set up by hand.
+    { name: "worker", testMatch: /worker\.spec\.ts/, dependencies: ["chromium"], use: { ...devices["Desktop Chrome"], launchOptions: { executablePath } } },
+  ],
   webServer: {
     command: "pnpm dev",
     url: `${baseURL}/api/health`,
