@@ -43,7 +43,8 @@ export const ATTENTION_APPLICATION_STATUSES: readonly ApplicationStatus[] = ["WA
  */
 export type PipelineStatus = JobStatus | ApplicationStatus;
 
-export const APPLICATION_OUTCOMES = ["NONE", "RESPONDED", "INTERVIEW", "OFFER", "DECLINED"] as const;
+/** What happened after submission. Set by the user; see tracker.ts for how it maps to Flightpath stages. */
+export const APPLICATION_OUTCOMES = ["NONE", "RESPONDED", "INTERVIEW", "OFFER", "ACCEPTED", "DECLINED", "WITHDRAWN"] as const;
 export type ApplicationOutcome = (typeof APPLICATION_OUTCOMES)[number];
 
 export const AUTOMATION_MODES = ["MANUAL", "REVIEW", "AUTO"] as const;
@@ -152,6 +153,9 @@ export const APPLICATION_EVENT_TYPES = [
   "STATUS_CHANGED",
   "OUTCOME_UPDATED",
   "NOTE",
+  "STAGE_CHANGED",
+  "INTERVIEW_SCHEDULED",
+  "INTERVIEW_UPDATED",
 ] as const;
 export type ApplicationEventType = (typeof APPLICATION_EVENT_TYPES)[number];
 

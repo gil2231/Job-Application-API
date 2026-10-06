@@ -2,7 +2,6 @@ import type { Prisma } from "@prisma/client";
 import {
   ATTENTION_APPLICATION_STATUSES,
   type ApplicationFilters,
-  type ApplicationOutcome,
   type ApplicationStatus,
   type AutomationMode,
 } from "@autoapply/shared";
@@ -166,6 +165,7 @@ export async function getApplicationDetail(userId: string, id: string) {
       },
       events: { orderBy: { createdAt: "asc" } },
       attempts: { orderBy: { attemptNumber: "desc" } },
+      interviews: { orderBy: [{ scheduledAt: { sort: "asc", nulls: "last" } }, { createdAt: "asc" }] },
     },
   });
   if (!app) throw new NotFoundError("Application");
@@ -188,27 +188,6 @@ export async function getApplicationDetail(userId: string, id: string) {
   };
 }
 export type ApplicationDetail = Awaited<ReturnType<typeof getApplicationDetail>>;
-
-export async function setApplicationOutcome(userId: string, id: string, outcome: ApplicationOutcome) {
-  const app = await prisma.application.findFirst({ where: { id, userId }, select: { id: true, status: true } });
-  if (!app) throw new NotFoundError("Application");
-  if (app.status !== "SUBMITTED" && app.status !== "REJECTED") {
-    throw new ConflictError("Outcomes can only be recorded for submitted applications");
-  }
-  await prisma.$transaction([
-    prisma.application.update({
-      where: { id },
-      data: {
-        outcome,
-        outcomeAt: outcome === "NONE" ? null : new Date(),
-        status: outcome === "DECLINED" ? "REJECTED" : "SUBMITTED",
-      },
-    }),
-    prisma.applicationEvent.create({
-      data: { applicationId: id, userId, type: "OUTCOME_UPDATED", message: `Outcome set to ${outcome.toLowerCase()}` },
-    }),
-  ]);
-}
 
 export async function addApplicationNote(userId: string, id: string, note: string) {
   const app = await prisma.application.findFirst({ where: { id, userId }, select: { id: true } });

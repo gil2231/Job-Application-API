@@ -2,56 +2,38 @@
 
 import { useState } from "react";
 import { Check, ExternalLink, RotateCcw, Send, SkipForward } from "lucide-react";
-import { APPLICATION_OUTCOMES, enumLabel, type ApplicationOutcome, type ApplicationStatus, type AttentionReason } from "@autoapply/shared";
-import { addNoteAction, approveSubmissionAction, markSubmittedAction, retryApplicationsAction, setOutcomeAction, skipApplicationAction } from "@/actions/applications";
+import type { ApplicationStatus, AttentionReason, TrackerStage } from "@autoapply/shared";
+import { addNoteAction, approveSubmissionAction, markSubmittedAction, retryApplicationsAction, skipApplicationAction } from "@/actions/applications";
 import { useServerAction } from "@/components/action-button";
+import { StageMenu, useStageMover } from "@/components/stage";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-
-const OUTCOME_LABEL: Record<ApplicationOutcome, string> = {
-  NONE: "No response yet",
-  RESPONDED: "Responded",
-  INTERVIEW: "Interview",
-  OFFER: "Offer",
-  DECLINED: "Rejected",
-};
 
 export function ApplicationActions({
   applicationId,
   status,
-  outcome,
+  stage,
+  lockedBy,
   jobUrl,
   attentionReason,
   hasOpenQuestions,
 }: {
   applicationId: string;
   status: ApplicationStatus;
-  outcome: ApplicationOutcome;
+  stage: TrackerStage;
+  lockedBy: string | null;
   jobUrl: string;
   attentionReason: AttentionReason | null;
   hasOpenQuestions: boolean;
 }) {
   const { pending, run } = useServerAction();
-  const submitted = status === "SUBMITTED" || status === "REJECTED";
+  const mover = useStageMover();
   const canApprove = (status === "READY" || status === "REVIEW_REQUIRED") && !hasOpenQuestions && (!attentionReason || attentionReason === "FINAL_REVIEW" || attentionReason === "CONTRADICTION");
   const canMarkSubmitted = status === "READY" || status === "REVIEW_REQUIRED" || status === "WAITING_FOR_USER";
   return (
     <div className="flex flex-wrap items-center gap-2">
-      {submitted && (
-        <Select value={outcome} onValueChange={(v) => run(() => setOutcomeAction(applicationId, v))} disabled={pending}>
-          <SelectTrigger size="sm" className="w-44" aria-label="Outcome">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            {APPLICATION_OUTCOMES.map((o) => (
-              <SelectItem key={o} value={o}>
-                {OUTCOME_LABEL[o] ?? enumLabel(o)}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      )}
+      {mover.dialog}
+      <StageMenu card={{ id: applicationId, stage, lockedBy }} onMove={(to) => mover.move({ id: applicationId, stage, lockedBy }, to)} pending={mover.pending} variant="button" />
       {canApprove && (
         <Button size="sm" disabled={pending} onClick={() => run(() => approveSubmissionAction(applicationId))}>
           <Send /> {status === "READY" ? "Let AutoApply submit" : "Approve & submit"}

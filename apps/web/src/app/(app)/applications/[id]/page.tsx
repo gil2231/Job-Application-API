@@ -3,7 +3,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { AlertTriangle, ArrowLeft, Check, Circle, ExternalLink, FileText } from "lucide-react";
 import { getApplicationDetail, NotFoundError } from "@autoapply/database";
-import { enumLabel, type ApplicationEventType } from "@autoapply/shared";
+import { enumLabel, isPostSubmitStage, STAGE_META, stageOf, trackerStageSchema, type ApplicationEventType } from "@autoapply/shared";
 import { requireUser } from "@/lib/auth";
 import { formatDate, formatRelative } from "@/lib/format";
 import { AttentionBadge, MatchScore, PlatformLabel, StatusBadge } from "@/components/status";
@@ -13,7 +13,9 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { cn } from "@/lib/utils";
 import { LiveProgressCard } from "@/components/live-progress";
+import { StageBadge } from "@/components/stage";
 import { ApplicationActions, NoteForm } from "./application-actions";
+import { InterviewsCard } from "./interviews";
 
 export const metadata: Metadata = { title: "Application" };
 
@@ -47,7 +49,7 @@ export default async function ApplicationPage({ params }: { params: Promise<{ id
 
   const eventAt = (type: ApplicationEventType) => app.events.find((e) => e.type === type)?.createdAt ?? null;
   const timeline = TIMELINE.map((step) => {
-    const at = step.key === "imported" ? job.createdAt : step.key === "analyzed" ? job.analyzedAt : step.event === "MATCH_CALCULATED" ? (eventAt("MATCH_CALCULATED") ?? (job.matchScore != null ? job.analyzedAt : null)) : step.event === "QUESTIONS_ANSWERED" ? (eventAt("QUESTIONS_ANSWERED") ?? eventAt("FIELDS_MAPPED")) : eventAt(step.event!);
+    const at = step.key === "imported" ? job.createdAt : step.key === "analyzed" ? job.analyzedAt : step.event === "MATCH_CALCULATED" ? (eventAt("MATCH_CALCULATED") ?? (job.matchScore != null ? job.analyzedAt : null)) : step.event === "QUESTIONS_ANSWERED" ? (eventAt("QUESTIONS_ANSWERED") ?? eventAt("FIELDS_MAPPED")) : step.event === "SUBMITTED" ? (eventAt("SUBMITTED") ?? app.submittedAt) : eventAt(step.event!);
     return { ...step, at };
   });
   const screenshots = app.attempts.flatMap((a) => ((Array.isArray(a.screenshots) ? a.screenshots : []) as unknown as Screenshot[]).map((s) => ({ ...s, attempt: a.attemptNumber })));
@@ -56,6 +58,15 @@ export default async function ApplicationPage({ params }: { params: Promise<{ id
     ...app.attempts.filter((a) => a.errorMessage).map((a) => ({ at: a.endedAt ?? a.startedAt, type: a.failureType, message: a.errorMessage!, source: `Attempt ${a.attemptNumber}` })),
     ...app.events.filter((e) => e.level === "ERROR").map((e) => ({ at: e.createdAt, type: null, message: e.message, source: enumLabel(e.type) })),
   ];
+  const stage = stageOf(app);
+  // Stage moves after submission, oldest first, for the end of the timeline.
+  const moves = app.events.flatMap((e) => {
+    if (e.type !== "STAGE_CHANGED") return [];
+    const data = (e.data && typeof e.data === "object" ? e.data : {}) as Record<string, unknown>;
+    const to = trackerStageSchema.safeParse(data.to);
+    if (!to.success) return [];
+    return [{ id: e.id, to: to.data, at: e.createdAt, provider: data.source === "integration" && typeof data.provider === "string" ? data.provider : null }];
+  });
   const snapshot = (app.profileSnapshot && typeof app.profileSnapshot === "object" ? app.profileSnapshot : null) as Record<string, unknown> | null;
 
   return (
@@ -71,7 +82,7 @@ export default async function ApplicationPage({ params }: { params: Promise<{ id
           <p className="text-muted-foreground text-sm">{job.company}</p>
           <h1 className="text-xl font-semibold tracking-tight">{job.title}</h1>
           <div className="mt-2 flex flex-wrap items-center gap-2">
-            <StatusBadge status={app.status} />
+            {isPostSubmitStage(stage) ? <StageBadge stage={stage} /> : <StatusBadge status={app.status} />}
             {app.attentionReason && <AttentionBadge reason={app.attentionReason} />}
             <Badge variant="outline">{enumLabel(app.mode)} mode</Badge>
             <MatchScore score={app.matchScore} className="ml-1" />
@@ -80,7 +91,8 @@ export default async function ApplicationPage({ params }: { params: Promise<{ id
         <ApplicationActions
           applicationId={app.id}
           status={app.status}
-          outcome={app.outcome}
+          stage={stage}
+          lockedBy={app.lockedBy}
           jobUrl={job.applicationUrl ?? job.url}
           attentionReason={app.attentionReason}
           hasOpenQuestions={app.questions.some((q) => q.status === "NEEDS_REVIEW")}
@@ -103,6 +115,8 @@ export default async function ApplicationPage({ params }: { params: Promise<{ id
 
       <div className="grid gap-4 lg:grid-cols-3">
         <div className="grid content-start gap-4 lg:col-span-2">
+          <InterviewsCard applicationId={app.id} rounds={app.interviews} canAdd={isPostSubmitStage(stage)} />
+
           <Card>
             <CardHeader>
               <CardTitle className="text-sm">Questions &amp; answers</CardTitle>
@@ -220,13 +234,28 @@ export default async function ApplicationPage({ params }: { params: Promise<{ id
               <ol className="grid gap-0">
                 {timeline.map((step, i) => (
                   <li key={step.label} className="relative grid grid-cols-[20px_1fr] gap-3 pb-4 last:pb-0">
-                    {i < timeline.length - 1 && <span className={cn("absolute top-5 left-[9px] h-[calc(100%-12px)] w-px", step.at ? "bg-success/50" : "bg-border")} />}
+                    {(i < timeline.length - 1 || moves.length > 0) && <span className={cn("absolute top-5 left-[9px] h-[calc(100%-12px)] w-px", step.at ? "bg-success/50" : "bg-border")} />}
                     <span className={cn("z-10 mt-0.5 grid size-5 place-items-center rounded-full", step.at ? "bg-success text-white" : "bg-muted text-muted-foreground")}>
                       {step.at ? <Check className="size-3" /> : <Circle className="size-2" />}
                     </span>
                     <div>
                       <p className={cn("text-sm", !step.at && "text-muted-foreground")}>{step.label}</p>
                       {step.at && <p className="text-muted-foreground text-xs">{formatDate(step.at, "MMM d, h:mm a")}</p>}
+                    </div>
+                  </li>
+                ))}
+                {moves.map((m, i) => (
+                  <li key={m.id} className="relative grid grid-cols-[20px_1fr] gap-3 pb-4 last:pb-0" data-testid="timeline-stage">
+                    {i < moves.length - 1 && <span className="bg-success/50 absolute top-5 left-[9px] h-[calc(100%-12px)] w-px" />}
+                    <span className={cn("z-10 mt-0.5 grid size-5 place-items-center rounded-full text-white", ["REJECTED", "WITHDRAWN", "SUBMITTED"].includes(m.to) ? "bg-muted-foreground/60" : "bg-success")}>
+                      <Check className="size-3" />
+                    </span>
+                    <div>
+                      <p className="text-sm">{STAGE_META[m.to].label}</p>
+                      <p className="text-muted-foreground text-xs">
+                        {formatDate(m.at, "MMM d, h:mm a")}
+                        {m.provider ? ` · from ${m.provider}` : ""}
+                      </p>
                     </div>
                   </li>
                 ))}

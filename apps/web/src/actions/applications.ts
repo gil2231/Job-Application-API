@@ -13,17 +13,16 @@ import {
   rememberApprovedAnswer,
   retryApplications,
   revokeBrowserSession,
-  setApplicationOutcome,
   skipApplication,
   skipQuestion,
 } from "@autoapply/database";
 import { matchStandardQuestion } from "@autoapply/automation";
-import { applicationOutcomeSchema } from "@autoapply/shared";
 import { authedAction, parseIds, type ActionResult } from "@/lib/action";
 import { notifyWorker } from "@/lib/worker-queue";
 
 function refresh(applicationId?: string) {
   revalidatePath("/applications");
+  revalidatePath("/flightpath");
   revalidatePath("/needs-attention");
   revalidatePath("/jobs");
   revalidatePath("/dashboard");
@@ -50,18 +49,6 @@ export async function skipApplicationAction(id: string): Promise<ActionResult> {
     await audit(user.id, "application.skipped", { entityType: "Application", entityId: appId });
     refresh(appId);
     return { ok: true, message: "Application skipped" };
-  });
-}
-
-export async function setOutcomeAction(id: string, outcome: string): Promise<ActionResult> {
-  return authedAction(async (user) => {
-    const appId = one(id);
-    const parsed = applicationOutcomeSchema.safeParse(outcome);
-    if (!appId || !parsed.success) return { ok: false, message: "Invalid request" };
-    await setApplicationOutcome(user.id, appId, parsed.data);
-    await audit(user.id, "application.outcome_set", { entityType: "Application", entityId: appId, metadata: { outcome: parsed.data } });
-    refresh(appId);
-    return { ok: true, message: "Outcome recorded" };
   });
 }
 

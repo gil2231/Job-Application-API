@@ -4,6 +4,7 @@ import {
   Briefcase,
   FileText,
   LayoutDashboard,
+  PlaneTakeoff,
   Plug,
   Send,
   Settings,
@@ -21,6 +22,7 @@ export interface NavItem {
 
 export const NAV_ITEMS: NavItem[] = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
+  { href: "/flightpath", label: "Flightpath", icon: PlaneTakeoff },
   { href: "/jobs", label: "Jobs", icon: Briefcase },
   { href: "/applications", label: "Applications", icon: Send },
   { href: "/needs-attention", label: "Needs Attention", icon: AlertCircle, badgeKey: "attention" },
