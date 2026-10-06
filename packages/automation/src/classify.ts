@@ -168,5 +168,5 @@ export function assignFieldKeys(fields: DetectedField[]): DetectedField[] {
 
 /** A field label for people to read: without the trailing required marker ("Email *", "Phone (required)"). */
 export function displayLabel(label: string): string {
-  return label.replace(/\s*(?:\*+|\(required\))\s*$/i, "").trim() || label;
+  return label.replace(/\s*(?:[*✱]+|\(required\))\s*$/i, "").trim() || label;
 }
