@@ -316,6 +316,8 @@ model MasterProfile {
   summary         String?
   industries      String[]
   yearsExperience Decimal? @db.Decimal(4, 1)
+  /// Keywords the user wants jobs recommended by (Recommended page).
+  recommendationKeywords String[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

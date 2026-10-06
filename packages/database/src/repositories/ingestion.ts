@@ -353,6 +353,7 @@ export interface SavedBoardSearch {
   query: string;
   location: string | null;
   searchDescriptions: boolean;
+  matchAny: boolean;
 }
 
 export async function getSavedBoardSearch(userId: string): Promise<SavedBoardSearch | null> {
@@ -368,6 +369,7 @@ export async function getSavedBoardSearch(userId: string): Promise<SavedBoardSea
     query: typeof config.query === "string" ? config.query : "",
     location: typeof config.location === "string" ? config.location : null,
     searchDescriptions: config.searchDescriptions === true,
+    matchAny: config.matchAny === true,
   };
 }
 

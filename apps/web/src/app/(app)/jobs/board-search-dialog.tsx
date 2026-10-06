@@ -24,6 +24,7 @@ export interface SavedBoardSearchView {
   query: string;
   location: string | null;
   searchDescriptions: boolean;
+  matchAny: boolean;
 }
 
 function SearchResults({
@@ -133,6 +134,7 @@ function BoardSearch({ saved, onDone }: { saved: SavedBoardSearchView | null; on
     query: saved?.query ?? "",
     location: saved?.location ?? "",
     searchDescriptions: saved?.searchDescriptions ?? false,
+    matchAny: saved?.matchAny ?? false,
   });
   // The search the results came from; adding re-reads exactly these boards.
   const [searched, setSearched] = useState<BoardSearchFormInput | null>(null);
@@ -193,18 +195,31 @@ function BoardSearch({ saved, onDone }: { saved: SavedBoardSearchView | null; on
     <form onSubmit={runSearch} className="grid gap-4" noValidate>
       <FormMessage state={search ?? undefined} />
       <div className="grid gap-4 sm:grid-cols-[1fr_12rem]">
-        <Field label="Keywords" htmlFor="board-query" error={errors.query} hint='Every word must appear in the job title. Use "quotes" for phrases and -word to skip jobs that mention it.'>
+        <Field
+          label="Keywords"
+          htmlFor="board-query"
+          error={errors.query}
+          hint={`${form.matchAny ? "Any one of these" : "Every word"} must appear in the job title. Use "quotes" for phrases and -word to skip jobs that mention it.`}
+        >
           <Input id="board-query" value={form.query} onChange={(e) => set("query", e.target.value)} placeholder='"account executive" -commission' aria-invalid={!!errors.query} autoFocus />
         </Field>
         <Field label="Location" htmlFor="board-location" error={errors.location} hint="Optional, e.g. New York or Remote.">
           <Input id="board-location" value={form.location ?? ""} onChange={(e) => set("location", e.target.value)} placeholder="Any location" />
         </Field>
       </div>
-      <div className="flex items-center gap-2">
-        <Checkbox id="board-descriptions" checked={form.searchDescriptions} onCheckedChange={(v) => set("searchDescriptions", v === true)} />
-        <Label htmlFor="board-descriptions" className="text-[13px] font-normal">
-          Also match descriptions, not just job titles
-        </Label>
+      <div className="flex flex-wrap gap-x-6 gap-y-2">
+        <div className="flex items-center gap-2">
+          <Checkbox id="board-any" checked={form.matchAny} onCheckedChange={(v) => set("matchAny", v === true)} />
+          <Label htmlFor="board-any" className="text-[13px] font-normal">
+            Match any keyword, not all of them
+          </Label>
+        </div>
+        <div className="flex items-center gap-2">
+          <Checkbox id="board-descriptions" checked={form.searchDescriptions} onCheckedChange={(v) => set("searchDescriptions", v === true)} />
+          <Label htmlFor="board-descriptions" className="text-[13px] font-normal">
+            Also match descriptions, not just job titles
+          </Label>
+        </div>
       </div>
       <Field
         label="Job boards to search"
@@ -213,7 +228,7 @@ function BoardSearch({ saved, onDone }: { saved: SavedBoardSearchView | null; on
         hint={
           <>
             One per line, up to 25: a company&apos;s Greenhouse, Lever or Ashby job board link (for example boards.greenhouse.io/acme or jobs.lever.co/acme). Open a company&apos;s careers
-            page and copy the link of its job list. These boards publish their openings for anyone to read; AutoApply never searches LinkedIn.
+            page and copy the link of its job list. These boards publish their openings for anyone to read. LinkedIn is never searched.
           </>
         }
       >
@@ -242,13 +257,13 @@ function BoardSearch({ saved, onDone }: { saved: SavedBoardSearchView | null; on
   );
 }
 
-export function BoardSearchDialog({ saved }: { saved: SavedBoardSearchView | null }) {
+export function BoardSearchDialog({ saved, label = "Search job boards" }: { saved: SavedBoardSearchView | null; label?: string }) {
   const [open, setOpen] = useState(false);
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
         <Button size="sm" variant="outline">
-          <Globe /> Search job boards
+          <Globe /> {label}
         </Button>
       </DialogTrigger>
       <DialogContent className="sm:max-w-2xl">

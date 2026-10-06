@@ -98,6 +98,13 @@ describe("searchJobBoards", () => {
     ]);
   });
 
+  it("can match any keyword instead of all of them", async () => {
+    const http = fakeHttp(routes);
+    const titles = async (matchAny: boolean) => (await searchJobBoards({ boards, query: '"account executive" "sales development"', matchAny }, http)).jobs.map((j) => j.title).sort();
+    expect(await titles(false)).toEqual([]);
+    expect(await titles(true)).toEqual(["Account Executive", "Sales Development Rep"]);
+  });
+
   it("applies exclusions to the whole posting and filters by location", async () => {
     const http = fakeHttp(routes);
     const titles = async (query: string, location?: string) => (await searchJobBoards({ boards, query, location }, http)).jobs.map((j) => j.title);
