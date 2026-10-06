@@ -17,3 +17,4 @@ export * from "./repositories/ingestion";
 export * from "./repositories/recommendations";
 export * from "./repositories/queue";
 export * from "./repositories/worker";
+export * from "./repositories/tracker";
