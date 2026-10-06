@@ -5,7 +5,7 @@ AutoApply imports the jobs you've saved, scores them against your Master Profile
 ## Ground rules the code enforces
 
 - AutoApply never bypasses CAPTCHAs, MFA, logins or anti-bot protections. When automation hits one, the application moves to **Needs Attention** and waits for you.
-- Applications are filled only from facts in your Master Profile and Answer Library. A question with no stored answer is sent to you; AutoApply never makes up an answer.
+- Applications are filled only from facts in your Master Profile and Answer Library. A question with no stored answer is sent to you; AutoApply never makes up an answer. AI drafts are only suggestions you approve, and generated resumes and cover letters are checked against your profile.
 - Applications are submitted automatically only in `AUTO` mode, with auto-submit turned on in Rules, and only when every safety check passes. Otherwise they stop for your review.
 - Automation is never run against real employers by default.
 
@@ -23,10 +23,11 @@ packages/
   ats-adapters/ Platform detection, ApplicationAdapter interface and registry, the shared form engine, and the
               Workday, Greenhouse, Lever, Ashby, SmartRecruiters and generic web form adapters
   queue/      BullMQ queue, Redis control and progress channels
-  ai/         AI provider registry (Anthropic), job analysis with a deterministic fallback
+  ai/         AI provider registry (Anthropic), job analysis, field mapping, answer drafts, resume and
+              cover letter writing with truthfulness checks; every feature has a deterministic fallback
   matching/   Match score (0–100, weighted and explained) and the qualification rules engine
   ingestion/  Job sources (LinkedIn export, CSV, pasted URLs), public posting readers, dedup, analysis pipeline
-  documents/  Local/S3 storage drivers, upload validation
+  documents/  Local/S3 storage drivers, upload validation, PDF and Word rendering of generated documents
 ```
 
 ## Getting started
@@ -79,6 +80,14 @@ The worker stops before leaving any page that has a question it isn't sure about
 The dashboard shows each running application's steps live (server-sent events), and Pause, Resume, Pause after current and Stop now take effect immediately. Daily and concurrency limits from Rules are enforced when the worker claims an application. Postgres holds the state; a crashed worker's applications return to the queue when its lease runs out.
 
 By default the worker only opens `localhost` and `127.0.0.1`. To run against real employer sites, set `AUTOMATION_ALLOW_ALL_HOSTS=true` (private and internal addresses stay blocked). LinkedIn Easy Apply is never automated.
+
+### AI
+
+AI is optional. Choose a provider in **Settings → AI** (and set `ANTHROPIC_API_KEY` on the server); without one, the built-in tools do everything below except write new text.
+
+- **Field mapping.** The built-in rules map each form field to your Master Profile first. Only fields they aren't sure about go to the model, which can answer only with a field from the fixed profile schema. A field only AI recognized gets at most 85% confidence, a disagreement between the two gets 40%, and anything under your review threshold (Settings) waits for you.
+- **Answers.** A required question with no saved answer gets a suggestion: a saved answer to a similarly worded question (never across different places, numbers or negations), else an AI draft built from your profile and saved answers. AI drafts always wait for your approval and are never auto-submitted. Questions about work authorization, sponsorship, demographics, pay, availability, relocation, travel or consent are never drafted.
+- **Tailored resume and cover letter.** On a job's page, **Tailor resume** orders your own bullets and skills for that job (AI picks them when it's on and may write a short summary); **Write cover letter** writes a letter from your profile. Every figure, skill, credential and employer in AI-written text must appear in your profile, or the text is replaced by the template version and the page says why. Review and edit either one, download it as PDF or Word, and **Approve for this job** to have that job's application upload it instead of your default.
 
 ### Supported platforms
 
@@ -138,5 +147,5 @@ pnpm test:e2e    # Playwright browser tests against the dev server, then with th
 | 2 | LinkedIn saved-jobs import (user-authorized path only), job analysis, matching, rule evaluation | Done |
 | 3 | Queue and controls, Playwright worker, generic form automation, human intervention flow, live progress | Done |
 | 4 | ATS adapters (Workday, Greenhouse, Lever, Ashby, SmartRecruiters) and platform detection | Done |
-| 5 | AI field mapping, answer drafting, resume/cover-letter generation | Next |
-| 6 | Analytics, retries, real-time hardening | |
+| 5 | AI field mapping, answer drafting, resume/cover-letter generation | Done |
+| 6 | Analytics, retries, real-time hardening | Next |

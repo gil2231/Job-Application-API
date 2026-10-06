@@ -226,6 +226,16 @@ const FORMS: Record<string, { title: string; subtitle: string; fields: FieldDef[
       { name: "resume", label: "Resume", type: "file", required: true },
     ],
   },
+  "ai-questions": {
+    title: "Account Development Rep",
+    subtitle: "Novel Forms Ltd · Austin, TX",
+    fields: [
+      ...CONTACT,
+      { name: "role_now", label: "What do people call you at work these days?", type: "text", required: true },
+      { name: "story", label: "Walk us through your outbound prospecting background", type: "textarea", required: true },
+      { name: "resume", label: "Resume", type: "file", required: true },
+    ],
+  },
   captcha: {
     title: "Partnerships Manager",
     subtitle: "Guarded Co · Seattle, WA",

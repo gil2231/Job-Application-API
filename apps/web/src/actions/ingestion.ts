@@ -360,6 +360,6 @@ export async function saveAiSettingsAction(_prev: ActionResult, formData: FormDa
     await audit(user.id, "settings.ai_updated", { entityType: "UserSetting", metadata: { aiProvider: parsed.data.aiProvider } });
     revalidatePath("/settings");
     revalidatePath("/integrations");
-    return { ok: true, message: "Analysis settings saved. New and re-analyzed jobs will use them." };
+    return { ok: true, message: "AI settings saved. New analyses, applications and documents will use them." };
   });
 }

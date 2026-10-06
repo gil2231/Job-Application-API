@@ -50,5 +50,7 @@ export const LIMITS = {
   postingLookup: { limit: relaxed ? 500 : 60, windowMs: 60 * 60_000 },
   /** Each search reads up to 25 job boards. */
   boardSearch: { limit: relaxed ? 500 : 30, windowMs: 60 * 60_000 },
+  /** Tailored resumes and cover letters may call the AI provider. */
+  generate: { limit: relaxed ? 500 : 40, windowMs: 60 * 60_000 },
   mutation: { limit: 120, windowMs: 60_000 },
 } as const;

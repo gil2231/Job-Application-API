@@ -16,3 +16,4 @@ export * from "./repositories/integrations";
 export * from "./repositories/ingestion";
 export * from "./repositories/queue";
 export * from "./repositories/worker";
+export * from "./repositories/generated";

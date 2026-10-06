@@ -118,17 +118,20 @@ export async function countResumes(userId: string): Promise<number> {
   return prisma.resume.count({ where: { userId } });
 }
 
-/** The resume an application for this job should use: job-specific first, else the default. */
+/**
+ * The resume an application for this job should use: the newest job-specific
+ * one with a file (an unapproved generated draft has none), else the default.
+ */
 export async function resolveResumeForJob(userId: string, jobId: string) {
   return (
-    (await prisma.resume.findFirst({ where: { userId, jobId }, orderBy: { createdAt: "desc" } })) ??
+    (await prisma.resume.findFirst({ where: { userId, jobId, documentId: { not: null } }, orderBy: { updatedAt: "desc" } })) ??
     (await prisma.resume.findFirst({ where: { userId, isDefault: true, jobId: null } }))
   );
 }
 
 export async function resolveCoverLetterForJob(userId: string, jobId: string) {
   return (
-    (await prisma.coverLetter.findFirst({ where: { userId, jobId }, orderBy: { createdAt: "desc" } })) ??
+    (await prisma.coverLetter.findFirst({ where: { userId, jobId, documentId: { not: null } }, orderBy: { updatedAt: "desc" } })) ??
     (await prisma.coverLetter.findFirst({ where: { userId, isDefault: true, jobId: null } }))
   );
 }

@@ -17,6 +17,7 @@ import {
   type FieldKind,
   type ProfileFactsForForms,
 } from "@autoapply/automation";
+import { createApplicationAI, type ApplicationAI } from "@autoapply/ai";
 import { detectPlatformFromUrl, type AdapterContext, type AdapterRegistry, type AdapterStatus, type ApplicationAdapter, type DocumentsToUpload, type HumanStep, type ValidationResult } from "@autoapply/ats-adapters";
 import {
   addApplicationEvent,
@@ -111,6 +112,12 @@ function sleep(ms: number, signal: AbortSignal) {
   });
 }
 
+/** Skills from a stored job analysis, if it has run. */
+function jobAnalysisSkills(analysis: unknown): string[] | undefined {
+  const skills = (analysis as { skills?: unknown } | null)?.skills;
+  return Array.isArray(skills) ? skills.filter((s): s is string => typeof s === "string") : undefined;
+}
+
 const safeFileName = (name: string) => name.replace(/[^\w.\- ()]+/g, "_").slice(0, 120) || "document";
 
 /** Profile values worth keeping with the application for the record (no sensitive answers). */
@@ -173,6 +180,8 @@ class AttemptRun {
   private platform: Platform = "UNKNOWN";
   private readonly progress: ProgressReporter;
   private readonly facts: ProfileFactsForForms;
+  private ai: ApplicationAI | null = null;
+  private aiFailureLogged = false;
 
   constructor(
     private readonly deps: EngineDeps,
@@ -244,7 +253,14 @@ class AttemptRun {
       await this.log("PLATFORM_DETECTED", `${enumLabel(detection.platform)} detected (${detection.evidence})${usingFallback ? `; filling it with the ${adapter.displayName.toLowerCase()} adapter` : ""}`);
       await this.progress.done("detected", `Application detected: ${enumLabel(detection.platform)}`);
 
+      this.ai = createApplicationAI(
+        { provider: data.settings.aiProvider, model: data.settings.aiModel },
+        { profile: data.profile, job: { id: data.job.id, title: data.job.title, company: data.job.company, description: data.job.description, skills: jobAnalysisSkills(data.job.analysis) }, library: data.library },
+      );
+      if (this.ai.info.method === "ai") await this.log("NOTE", `AI field mapping and answer drafts are on (${this.ai.info.model}). AI drafts always wait for your approval.`);
       const resolver = new FieldResolver({
+        classifier: this.ai.classifier,
+        drafter: this.ai.drafter ?? undefined,
         profile: this.facts,
         library: data.library,
         stored: data.questions,
@@ -365,15 +381,27 @@ class AttemptRun {
     const fromProfile = final.filter((m) => m.source === "profile" && m.status === "ANSWERED").length;
     const questions = final.filter((m) => (m.mappedField === "answer.library" || m.mappedField === "unknown") && m.status === "ANSWERED");
     const flagged = final.filter((m) => m.status === "NEEDS_REVIEW").length;
-    await this.log("FIELDS_MAPPED", `Mapped ${final.length} field${final.length === 1 ? "" : "s"} on page ${ctx.pageIndex + 1}: ${fromProfile} from your profile, ${questions.length} from your answers${flagged ? `, ${flagged} need${flagged === 1 ? "s" : ""} review` : ""}`, {
-      data: final.map((m) => ({ label: displayLabel(m.detectedLabel), mappedField: m.mappedField, confidence: m.confidence, status: m.status })),
+    const aiMapped = final.filter((m) => m.mappedBy === "ai").length;
+    const drafts = final.filter((m) => m.source === "ai").length;
+    const extras = [aiMapped ? `${aiMapped} mapped with AI help` : null, flagged ? `${flagged} need${flagged === 1 ? "s" : ""} review${drafts ? ` (${drafts} with an AI draft to check)` : ""}` : null].filter(Boolean);
+    await this.log("FIELDS_MAPPED", `Mapped ${final.length} field${final.length === 1 ? "" : "s"} on page ${ctx.pageIndex + 1}: ${fromProfile} from your profile, ${questions.length} from your answers${extras.length ? `, ${extras.join(", ")}` : ""}`, {
+      data: final.map((m) => ({ label: displayLabel(m.detectedLabel), mappedField: m.mappedField, confidence: m.confidence, status: m.status, source: m.source, mappedBy: m.mappedBy ?? "heuristic" })),
     });
+    await this.noteAIFailures();
     await this.progress.done(`fields-${ctx.pageIndex}`, `${final.length} fields mapped${ctx.pageIndex ? ` on page ${ctx.pageIndex + 1}` : ""}`);
     if (questions.length) {
       await this.log("QUESTIONS_ANSWERED", `${questions.length} question${questions.length === 1 ? "" : "s"} answered from your Answer Library and approvals`);
       await this.progress.done(`questions-${ctx.pageIndex}`, `${questions.length} question${questions.length === 1 ? "" : "s"} answered`);
     }
     return final;
+  }
+
+  /** Say once when AI calls failed and the built-in mapper or a blank answer was used instead. */
+  private async noteAIFailures() {
+    const error = this.ai?.lastFailure();
+    if (!error || this.aiFailureLogged) return;
+    this.aiFailureLogged = true;
+    await this.log("NOTE", `AI was unavailable for some fields (${error}). The built-in mapper was used, and anything it couldn't answer is waiting for you.`, { level: "WARNING" });
   }
 
   private async decideAndSubmit(adapter: ApplicationAdapter<Page>, ctx: AdapterContext<Page>, mappings: FieldMapping[], detected: Platform): Promise<RunResult> {
