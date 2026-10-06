@@ -266,11 +266,17 @@ export const boardSearchSchema = z.object({
   query: z.string().trim().max(300, "Keep keywords under 300 characters"),
   location: optionalText(100),
   searchDescriptions: checkbox,
+  /** Match postings with any of the keywords instead of all of them. */
+  matchAny: checkbox,
 });
 export type BoardSearchFormInput = z.infer<typeof boardSearchSchema>;
 
 export const boardImportSchema = boardSearchSchema.extend({
   urls: z.array(z.string().trim().max(2048)).min(1, "Choose at least one job to add").max(200),
+});
+
+export const recommendationKeywordsSchema = z.object({
+  keywords: stringList(30, 100),
 });
 
 export const AI_PROVIDER_OPTIONS = ["anthropic"] as const;

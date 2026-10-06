@@ -62,6 +62,8 @@ Jobs come in four ways, all from the Jobs page:
 
 Duplicates are skipped by canonical URL (including the LinkedIn job id) and by company and title. Jobs you deleted, applied to or skipped are never re-added. Each import is listed on the Integrations page.
 
+**Recommended** lists the saved jobs that mention the keywords you set there (roles, industries, skills), ranked half by how many keywords they mention (title hits count double) and half by match score. Jobs that broke one of your rules are left out. **Find more on job boards** opens a board search for any of your keywords.
+
 The search box on the Jobs page looks in titles, companies, locations and descriptions, with the same `"phrase"` and `-word` syntax.
 
 Every new job is analyzed (seniority, location and arrangement, pay, required and preferred qualifications, experience, education, skills, industry, sponsorship, travel, platform), scored against your Master Profile with the weights on the Rules page, and marked Qualified, Not Qualified or Needs Details. On the Rules page, **Include keywords** require a job to mention at least one of them and **Exclude keywords** skip any job that mentions one. Analysis uses the AI provider when `AI_PROVIDER` and its key are set, and the built-in deterministic analyzer otherwise, so it works without a key. Changing your profile or rules re-scores waiting jobs without re-analyzing them.

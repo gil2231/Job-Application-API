@@ -14,6 +14,7 @@ export * from "./repositories/settings";
 export * from "./repositories/dashboard";
 export * from "./repositories/integrations";
 export * from "./repositories/ingestion";
+export * from "./repositories/recommendations";
 export * from "./repositories/queue";
 export * from "./repositories/worker";
 export * from "./repositories/tracker";

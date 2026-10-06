@@ -72,3 +72,37 @@ test("job board search only accepts public Greenhouse, Lever and Ashby boards", 
   await dialog.getByRole("button", { name: "Search" }).click();
   await expect(dialog.getByText("Enter keywords to search for").first()).toBeVisible();
 });
+
+test("recommends saved jobs that mention your keywords", async ({ page }) => {
+  await signUp(page);
+  await page.goto("/recommended");
+  await expect(page.getByText("No recommendations yet")).toBeVisible();
+
+  await page.goto("/jobs");
+  await page.getByRole("button", { name: "Import", exact: true }).click();
+  const dialog = page.getByRole("dialog");
+  await dialog.getByLabel("Export file").setInputFiles({ name: "jobs.csv", mimeType: "text/csv", buffer: Buffer.from(JOBS) });
+  await dialog.getByRole("button", { name: "Import", exact: true }).click();
+  await expect(dialog.getByTestId("import-result")).toContainText("Imported 3 new jobs");
+  await dialog.getByRole("button", { name: "Done" }).click();
+
+  await page.getByRole("link", { name: "Recommended" }).click();
+  const keywords = page.getByLabel("Your keywords");
+  await keywords.fill("medical devices");
+  await keywords.press("Enter");
+  await keywords.fill("customer success");
+  await keywords.press("Enter");
+  await page.getByRole("button", { name: "Save keywords" }).click();
+  await expect(page.getByText("Keywords saved. Recommendations updated.")).toBeVisible();
+
+  const list = page.getByTestId("recommendation");
+  await expect(list).toHaveCount(2);
+  await expect(list.filter({ hasText: "Customer Success Manager" })).toContainText("customer success");
+  await expect(list.filter({ hasText: "Globex" })).toContainText("medical devices");
+  await expect(page.getByTestId("recommendations")).not.toContainText("Acme");
+
+  // Board search opens with the keywords, matching any of them.
+  await page.getByRole("button", { name: "Find more on job boards" }).click();
+  await expect(page.getByRole("dialog").getByLabel("Keywords")).toHaveValue('"medical devices" "customer success"');
+  await expect(page.getByRole("dialog").getByLabel("Match any keyword, not all of them")).toBeChecked();
+});

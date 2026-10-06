@@ -268,6 +268,8 @@ export interface BoardSearchInput {
   location?: string | null;
   /** Match keywords in descriptions too, not just job titles. Exclusions always check the whole posting. */
   searchDescriptions?: boolean;
+  /** Match postings with any included term instead of all of them (used for recommendation keywords). */
+  matchAny?: boolean;
   /** Only return these postings (canonical or raw URLs), e.g. the ones the user picked from the results. */
   onlyUrls?: string[];
 }
@@ -294,13 +296,14 @@ function matchesLocation(job: RawJob, location: string): boolean {
   return job.location.toLowerCase().includes(wanted.toLowerCase()) || mentionsKeyword(job.location, wanted);
 }
 
-function matchKeywords(job: RawJob, descriptionText: string, query: KeywordQuery, searchDescriptions: boolean): BoardSearchHit["matchedIn"] | null {
+function matchKeywords(job: RawJob, descriptionText: string, query: KeywordQuery, options: { searchDescriptions: boolean; matchAny: boolean }): BoardSearchHit["matchedIn"] | null {
   const heading = [job.title, job.company].filter(Boolean).join("\n");
   const everything = `${heading}\n${job.location ?? ""}\n${descriptionText}`;
   if (query.exclude.length && !matchesKeywordQuery(everything, { include: [], exclude: query.exclude })) return null;
-  const include = { include: query.include, exclude: [] };
-  if (matchesKeywordQuery(heading, include)) return "title";
-  if (searchDescriptions && matchesKeywordQuery(everything, include)) return "description";
+  const includes = (text: string) =>
+    !query.include.length || (options.matchAny ? query.include.some((t) => mentionsKeyword(text, t)) : matchesKeywordQuery(text, { include: query.include, exclude: [] }));
+  if (includes(heading)) return "title";
+  if (options.searchDescriptions && includes(everything)) return "description";
   return null;
 }
 
@@ -338,7 +341,7 @@ export async function searchJobBoards(input: BoardSearchInput, http: HttpFetcher
       if (only && !only.has(safeCanonical(job.url))) continue;
       if (input.location && !matchesLocation(job, input.location)) continue;
       const text = job.description ? htmlToText(job.description) : "";
-      const matchedIn = matchKeywords(job, text, query, input.searchDescriptions ?? false);
+      const matchedIn = matchKeywords(job, text, query, { searchDescriptions: input.searchDescriptions ?? false, matchAny: input.matchAny ?? false });
       if (!matchedIn) continue;
       hits.push({ ...job, title: job.title.slice(0, 200), company: job.company?.slice(0, 200) ?? null, location: job.location?.slice(0, 200) ?? null, description: job.description?.slice(0, 100_000) ?? null, provider: board.provider, board: board.slug, matchedIn });
     }
