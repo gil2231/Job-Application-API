@@ -60,7 +60,7 @@ export function createProvider(id: string | null | undefined, config: { model?: 
 export const NO_PROVIDER = "No AI provider is configured";
 
 export interface AIConfig {
-  /** Provider id (e.g. "anthropic"), or "none". Defaults to the AI_PROVIDER environment variable. */
+  /** Provider id ("anthropic" or "openai"), or "none". Defaults to the AI_PROVIDER environment variable. */
   provider?: string | null;
   model?: string | null;
 }
@@ -74,8 +74,10 @@ export function resolveProvider(config: AIConfig = {}): { provider: AIProvider |
   const configured = config.provider || process.env.AI_PROVIDER || null;
   const providerId = configured === "none" ? null : configured;
   if (!providerId) return { provider: null, reason: NO_PROVIDER };
+  // AI_MODEL names a model of the server's AI_PROVIDER, so it isn't passed to a different provider.
+  const serverModel = providerId === process.env.AI_PROVIDER ? process.env.AI_MODEL : undefined;
   try {
-    return { provider: createProvider(providerId, { model: config.model || process.env.AI_MODEL || undefined }), reason: null };
+    return { provider: createProvider(providerId, { model: config.model || serverModel || undefined }), reason: null };
   } catch (error) {
     if (!(error instanceof AIUnavailableError)) throw error;
     return { provider: null, reason: error.message };

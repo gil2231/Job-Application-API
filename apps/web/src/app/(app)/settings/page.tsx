@@ -7,7 +7,7 @@ import { PageHeader } from "@/components/page-header";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { ANTHROPIC_DEFAULT_MODEL } from "@autoapply/ai";
+import { ANTHROPIC_DEFAULT_MODEL, OPENAI_DEFAULT_MODEL } from "@autoapply/ai";
 import { AccountForm, AnalysisForm, BrowserSessionList, PasswordForm, PreferencesForm, SessionList } from "./settings-forms";
 
 export const metadata: Metadata = { title: "Settings" };
@@ -62,7 +62,13 @@ export default async function SettingsPage() {
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <AnalysisForm settings={settings} anthropicConfigured={!!process.env.ANTHROPIC_API_KEY} defaultModel={ANTHROPIC_DEFAULT_MODEL} />
+          <AnalysisForm
+            settings={settings}
+            providers={[
+              { id: "anthropic", label: "Claude (Anthropic)", keyName: "ANTHROPIC_API_KEY", configured: !!process.env.ANTHROPIC_API_KEY, defaultModel: ANTHROPIC_DEFAULT_MODEL },
+              { id: "openai", label: "OpenAI", keyName: "OPENAI_API_KEY", configured: !!process.env.OPENAI_API_KEY, defaultModel: OPENAI_DEFAULT_MODEL },
+            ]}
+          />
         </CardContent>
       </Card>
       <Card>
