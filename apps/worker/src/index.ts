@@ -2,8 +2,7 @@ import { hostname } from "node:os";
 import { existsSync } from "node:fs";
 import { resolve } from "node:path";
 import { Worker } from "bullmq";
-import type { Page } from "playwright-core";
-import { AdapterRegistry, GenericWebFormAdapter } from "@autoapply/ats-adapters";
+import { createDefaultRegistry } from "@autoapply/ats-adapters";
 import { prisma } from "@autoapply/database";
 import { getStorage } from "@autoapply/documents";
 import { createApplicationQueue, createRedis, parseControlMessage, type ApplicationJobData } from "@autoapply/queue";
@@ -26,7 +25,7 @@ if (existsSync(rootEnv)) process.loadEnvFile(rootEnv);
 const config = loadConfig();
 const workerId = `${hostname()}:${process.pid}`;
 
-const registry = new AdapterRegistry<Page>().register(new GenericWebFormAdapter());
+const registry = createDefaultRegistry();
 const browsers = new BrowserPool(config);
 const connection = createRedis(config.redisUrl);
 const publisher = createRedis(config.redisUrl);

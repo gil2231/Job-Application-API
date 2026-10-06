@@ -154,3 +154,47 @@ test("Auto mode: an unknown required question goes to the user, and the saved an
   await page.goto("/answers");
   await expect(page.getByText("A spreadsheet that tracks my outreach follow-ups.")).toBeVisible();
 });
+
+test("Workday: the platform is detected, the sign-in goes to the user, and the application finishes after they sign in", async ({ page }) => {
+  test.setTimeout(150_000);
+  const { email } = await signUp(page);
+  const user = await seedApplicant(email, "AUTO");
+  for (const [questionKey, question, answer] of [
+    ["how_did_you_hear_about_us", "How did you hear about us?", "LinkedIn"],
+    ["have_you_previously_worked_for_example_corp", "Have you previously worked for Example Corp?", "No"],
+    ["phone_device_type", "Phone device type", "Mobile"],
+    ["i_have_read_and_consent_to_the_terms_and_conditions", "I have read and consent to the terms and conditions", "Yes"],
+  ] as const) {
+    await createAnswer(user.id, { questionKey, question, answer, category: "OTHER", confidence: 100, autoSubmitAllowed: true, requiresHumanReview: false });
+  }
+
+  await page.goto("/integrations");
+  await expect(page.getByTestId("platforms").locator("li", { hasText: "Workday" }).getByText("Automated")).toBeVisible();
+  await expect(page.getByTestId("platforms").locator("li", { hasText: "LinkedIn Easy Apply" }).getByText("Not automated")).toBeVisible();
+
+  await addMockJob(page, "/workday/examplecorp/job/New-York-NY/Business-Development-Representative_R12345", "Mock Workday BDR");
+  await page.getByRole("checkbox", { name: "Select all" }).check();
+  await page.getByRole("button", { name: "Apply", exact: true }).click();
+  await expect(page.getByText(/Queued 1 application in auto mode/)).toBeVisible();
+
+  await page.goto("/needs-attention");
+  const card = page.locator('[data-slot="card"]', { hasText: "Authentication required" });
+  await expect(async () => {
+    await page.reload();
+    await expect(card).toBeVisible({ timeout: 2_000 });
+  }).toPass({ timeout: 60_000 });
+  await expect(card.getByText(/candidate account/)).toBeVisible();
+
+  // The person signs in to Workday themselves, then tells Applyance to carry on.
+  await fetch(`${MOCK}/__login/grant`);
+  await card.getByRole("button", { name: "Continue" }).click();
+
+  const app = await prisma.application.findFirstOrThrow({ where: { userId: user.id } });
+  await expect.poll(async () => (await prisma.application.findUniqueOrThrow({ where: { id: app.id } })).status, { timeout: 90_000 }).toBe("SUBMITTED");
+  expect((await prisma.application.findUniqueOrThrow({ where: { id: app.id } })).platform).toBe("WORKDAY");
+  const sent = (await submissions()).filter((s) => s.form === "workday" && JSON.stringify(s).includes("jordan@example.com"));
+  expect(sent).toHaveLength(1);
+
+  await page.goto(`/applications/${app.id}`);
+  await expect(page.getByText(/Workday detected/).first()).toBeVisible();
+});

@@ -3,7 +3,8 @@ import { FileSpreadsheet, Globe, Link2, Sparkles } from "lucide-react";
 import { getUserSettings, listJobImports, listJobSources } from "@autoapply/database";
 import { createJobAnalyzer } from "@autoapply/ai";
 import Link from "next/link";
-import { enumLabel, PLATFORMS } from "@autoapply/shared";
+import { AUTOMATED_PLATFORMS } from "@autoapply/ats-adapters";
+import { enumLabel, PLATFORMS, type Platform } from "@autoapply/shared";
 import { requireUser } from "@/lib/auth";
 import { formatRelative } from "@/lib/format";
 import { getWorkerStatus } from "@/lib/worker-status";
@@ -12,6 +13,17 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 
 export const metadata: Metadata = { title: "Integrations" };
+
+/** What's worth knowing about how each platform is handled. */
+const PLATFORM_NOTES: Partial<Record<Platform, string>> = {
+  WORKDAY: "Asks for a candidate account per employer. You sign in once; the session is reused.",
+  GREENHOUSE: "Including boards embedded on employer career sites.",
+  LEVER: "Fields Lever fills from your resume are reset to your profile.",
+  ASHBY: "Resume autofill is skipped; answers come from your profile.",
+  SMARTRECRUITERS: "Never uses Apply with LinkedIn or Indeed.",
+  LINKEDIN_EASY_APPLY: "Needs your LinkedIn sign-in, so it's never automated. Add the employer's own link instead.",
+  GENERIC: "Any other application form, filled by its labels.",
+};
 
 export default async function IntegrationsPage() {
   const user = await requireUser();
@@ -113,19 +125,34 @@ export default async function IntegrationsPage() {
         <CardHeader>
           <CardTitle className="text-sm">Application platforms</CardTitle>
           <CardDescription>
-            Every job&apos;s platform is detected from its URL today. A platform shows as Automated once the running worker has an adapter for it.
+            Each job&apos;s platform is detected from its link, and again from the page when the worker opens it, so employer career sites that embed an ATS are recognized too.
+            {worker.state !== "online" && " The worker isn't running, so nothing is being filled right now."}
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
-            {PLATFORMS.filter((p) => p !== "UNKNOWN").map((p) => (
-              <div key={p} className="flex items-center gap-3 rounded-lg border px-3 py-2.5">
-                <Globe className="text-muted-foreground size-4" />
-                <span className="flex-1 text-sm">{p === "GENERIC" ? "Other web forms" : enumLabel(p)}</span>
-                {installed.has(p) ? <Badge variant="success">Automated</Badge> : <Badge variant="muted">Detection</Badge>}
-              </div>
-            ))}
-          </div>
+          <ul className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3" data-testid="platforms">
+            {PLATFORMS.filter((p) => p !== "UNKNOWN").map((p) => {
+              const supported = AUTOMATED_PLATFORMS.includes(p);
+              return (
+                <li key={p} className="flex items-start gap-3 rounded-lg border px-3 py-2.5">
+                  <Globe className="text-muted-foreground mt-0.5 size-4 shrink-0" />
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm">{p === "GENERIC" ? "Other web forms" : enumLabel(p)}</p>
+                    {PLATFORM_NOTES[p] && <p className="text-muted-foreground text-xs">{PLATFORM_NOTES[p]}</p>}
+                  </div>
+                  {installed.has(p) ? (
+                    <Badge variant="success">Automated</Badge>
+                  ) : supported ? (
+                    <Badge variant="info" title="Supported; start the worker to fill these applications">
+                      Supported
+                    </Badge>
+                  ) : (
+                    <Badge variant="muted">Not automated</Badge>
+                  )}
+                </li>
+              );
+            })}
+          </ul>
         </CardContent>
       </Card>
     </div>

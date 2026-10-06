@@ -1,5 +1,4 @@
-import type { Page } from "playwright-core";
-import { AdapterRegistry, GenericWebFormAdapter } from "@autoapply/ats-adapters";
+import { createDefaultRegistry } from "@autoapply/ats-adapters";
 import { claimApplication, createAnswer, createDocument, createManualJob, getUserSettings, prisma, queueApplications, updatePersonal, updateProfessional } from "@autoapply/database";
 import { buildStorageKey, getStorage, sha256Hex } from "@autoapply/documents";
 import type { AnswerCategory, AutomationMode } from "@autoapply/shared";
@@ -26,7 +25,7 @@ export class VisibleBrowserPool extends BrowserPool {
 export function makeEngine(options: { config?: WorkerConfig; browsers?: BrowserPool; workerId?: string } = {}) {
   const config = options.config ?? testConfig();
   const browsers = options.browsers ?? new BrowserPool({ ...config, headless: true });
-  const registry = new AdapterRegistry<Page>().register(new GenericWebFormAdapter());
+  const registry = createDefaultRegistry();
   const workerId = options.workerId ?? "test-worker";
   const engine = new ApplicationEngine({ config, browsers, registry, storage: getStorage(), redis: null, workerId });
   return { engine, browsers, config, workerId };

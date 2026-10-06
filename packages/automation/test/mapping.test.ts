@@ -18,6 +18,12 @@ describe("field classification", () => {
     ["E-mail address", "masterProfile.email"],
     ["Your LinkedIn profile URL", "masterProfile.linkedinUrl"],
     ["ZIP code", "masterProfile.postalCode"],
+    // Labels the ATS adapters meet: Greenhouse, Lever, SmartRecruiters, Ashby.
+    ["Location (City)", "masterProfile.city"],
+    ["Location", "masterProfile.city"],
+    ["Full name✱", "masterProfile.fullName"],
+    ["Confirm your email", "masterProfile.email"],
+    ["Current company", "masterProfile.currentCompany"],
   ])("%s → %s", (label, key) => {
     expect(classify(label).mappedField).toBe(key);
   });
@@ -142,6 +148,7 @@ describe("displayLabel", () => {
   it("drops the required marker for display", () => {
     expect(displayLabel("Email Address *")).toBe("Email Address");
     expect(displayLabel("Phone (required)")).toBe("Phone");
+    expect(displayLabel("Full name✱")).toBe("Full name");
     expect(displayLabel("Rate us 5* or more")).toBe("Rate us 5* or more");
     expect(displayLabel("*")).toBe("*");
   });
