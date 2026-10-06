@@ -32,9 +32,9 @@ export async function verifyPassword(passwordHash: string, password: string): Pr
 let dummyHash: Promise<string> | null = null;
 const getDummyHash = () => (dummyHash ??= hashPassword("autoapply-timing-equalizer-0"));
 
-export type PublicUser = Pick<User, "id" | "email" | "name" | "createdAt">;
+export type PublicUser = Pick<User, "id" | "email" | "name" | "role" | "createdAt">;
 
-const toPublicUser = (u: User): PublicUser => ({ id: u.id, email: u.email, name: u.name, createdAt: u.createdAt });
+export const toPublicUser = (u: User): PublicUser => ({ id: u.id, email: u.email, name: u.name, role: u.role, createdAt: u.createdAt });
 
 export class EmailTakenError extends Error {
   constructor() {

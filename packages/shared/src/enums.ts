@@ -62,6 +62,9 @@ export const PLATFORMS = [
 ] as const;
 export type Platform = (typeof PLATFORMS)[number];
 
+export const USER_ROLES = ["USER", "ADMIN"] as const;
+export type UserRole = (typeof USER_ROLES)[number];
+
 export const FAILURE_TYPES = [
   "NETWORK_ERROR",
   "TIMEOUT",

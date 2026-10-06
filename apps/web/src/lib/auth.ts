@@ -1,7 +1,7 @@
 import "server-only";
 import { cache } from "react";
 import { cookies } from "next/headers";
-import { redirect } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import { createSession, revokeSessionToken, validateSessionToken, type PublicUser } from "@autoapply/database";
 import { SESSION_COOKIE, sessionCookieOptions } from "./session-cookie";
 
@@ -30,4 +30,14 @@ export async function endSession() {
   const token = store.get(SESSION_COOKIE)?.value;
   if (token) await revokeSessionToken(token);
   store.delete(SESSION_COOKIE);
+}
+
+/**
+ * Use at the top of every admin page. Anyone who is not an admin gets a
+ * plain 404, so the panel's existence isn't revealed.
+ */
+export async function requireAdmin() {
+  const user = await requireUser();
+  if (user.role !== "ADMIN") notFound();
+  return user;
 }

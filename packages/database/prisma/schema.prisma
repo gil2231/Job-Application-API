@@ -250,10 +250,18 @@ enum BrowserSessionStatus {
 
 // ─── Identity & security ────────────────────────────────────────────────────
 
+enum UserRole {
+  USER
+  ADMIN
+}
+
 model User {
   id               String    @id @default(cuid())
   email            String    @unique
   name             String
+  /// ADMIN opens the owner admin panel (/admin). Granted only from the command
+  /// line (pnpm admin:grant), never from the app.
+  role             UserRole  @default(USER)
   /// argon2id hash. Plaintext passwords are never stored or logged.
   passwordHash     String
   emailVerifiedAt  DateTime?
@@ -280,6 +288,8 @@ model User {
   extensions      ExtensionConnection[]
   automationRule  AutomationRule?
   settings        UserSetting?
+
+  @@index([createdAt])
 }
 
 /// Server-side session. Only a SHA-256 hash of the cookie token is stored.
@@ -730,6 +740,7 @@ model Application {
   @@index([userId, updatedAt])
   @@index([status, nextAttemptAt])
   @@index([status, lockedUntil])
+  @@index([status, updatedAt])
 }
 
 /// A field or question found on an application form.

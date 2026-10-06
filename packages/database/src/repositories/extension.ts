@@ -2,7 +2,7 @@ import { randomInt } from "node:crypto";
 import { ATTENTION_APPLICATION_STATUSES } from "@autoapply/shared";
 import { prisma } from "../client";
 import { randomToken, sha256 } from "../crypto";
-import type { PublicUser } from "./auth";
+import { toPublicUser, type PublicUser } from "./auth";
 import { ConflictError, NotFoundError } from "./errors";
 import { markHumanStepComplete } from "./applications";
 import { addApplicationEvent, saveBrowserSession } from "./worker";
@@ -47,8 +47,7 @@ export async function connectExtension(code: string, meta: { browser?: string | 
     data: { tokenHash: sha256(token), pairingCodeHash: null, pairingExpiresAt: null, connectedAt: now, lastUsedAt: now, browser: meta.browser?.slice(0, 100) || null },
   });
   if (count !== 1) return null;
-  const u = pending.user;
-  return { token, connectionId: pending.id, user: { id: u.id, email: u.email, name: u.name, createdAt: u.createdAt } };
+  return { token, connectionId: pending.id, user: toPublicUser(pending.user) };
 }
 
 export async function validateExtensionToken(token: string | null | undefined): Promise<{ connectionId: string; user: PublicUser } | null> {
@@ -58,8 +57,7 @@ export async function validateExtensionToken(token: string | null | undefined): 
   if (!row.lastUsedAt || Date.now() - row.lastUsedAt.getTime() > LAST_USED_RESOLUTION_MS) {
     await prisma.extensionConnection.update({ where: { id: row.id }, data: { lastUsedAt: new Date() } });
   }
-  const u = row.user;
-  return { connectionId: row.id, user: { id: u.id, email: u.email, name: u.name, createdAt: u.createdAt } };
+  return { connectionId: row.id, user: toPublicUser(row.user) };
 }
 
 export async function listExtensionConnections(userId: string) {
@@ -74,6 +72,12 @@ export async function listExtensionConnections(userId: string) {
 export async function revokeExtensionConnection(userId: string, id: string): Promise<boolean> {
   const { count } = await prisma.extensionConnection.updateMany({ where: { id, userId, revokedAt: null }, data: { revokedAt: new Date(), tokenHash: null } });
   return count > 0;
+}
+
+/** Disconnect every extension, e.g. after a password change. */
+export async function revokeAllExtensionConnections(userId: string): Promise<number> {
+  const { count } = await prisma.extensionConnection.updateMany({ where: { userId, revokedAt: null, tokenHash: { not: null } }, data: { revokedAt: new Date(), tokenHash: null } });
+  return count;
 }
 
 // ─── Finishing applications in the person's own browser ────────────────────
