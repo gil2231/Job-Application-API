@@ -86,7 +86,7 @@ By default the worker only opens `localhost` and `127.0.0.1`. To run against rea
 
 ### AI
 
-AI is optional. Choose a provider in **Settings → AI** (and set `ANTHROPIC_API_KEY` on the server); without one, the built-in tools do everything below except write new text.
+AI is optional. Two providers are built in: Claude (`AI_PROVIDER=anthropic` with `ANTHROPIC_API_KEY`) and OpenAI (`AI_PROVIDER=openai` with `OPENAI_API_KEY`). Set the provider and its key in `.env`, or set the key and choose the provider in **Settings → AI**; `AI_MODEL` (or the Model box in Settings) overrides the default model. Without a provider, the built-in tools do everything below except write new text. The same checks apply whichever provider writes the text.
 
 - **Field mapping.** The built-in rules map each form field to your Master Profile first. Only fields they aren't sure about go to the model, which can answer only with a field from the fixed profile schema. A field only AI recognized gets at most 85% confidence, a disagreement between the two gets 40%, and anything under your review threshold (Settings) waits for you.
 - **Answers.** A required question with no saved answer gets a suggestion: a saved answer to a similarly worded question (never across different places, numbers or negations), else an AI draft built from your profile and saved answers. AI drafts always wait for your approval and are never auto-submitted. Questions about work authorization, sponsorship, demographics, pay, availability, relocation, travel or consent are never drafted.
@@ -142,6 +142,19 @@ Stages aren't stored separately: Flightpath derives them from the application's 
 **Email and other integrations.** Replies can't be read yet, so post-submit stages are set by you. An integration plugs in by implementing `StageSignalProvider` (`packages/shared/src/tracker.ts`) and handing its signals to `recordStageSignal` (`packages/database`). That matches the signal to one sent application, applies it only when the provider is confident and the move is forward, ignores repeats, and otherwise leaves a note on the timeline for you to act on, so an integration never overwrites what you set.
 
 The REST API exposes the same operations: `GET /v1/tracker/board`, `GET /v1/tracker/applications`, `PATCH /v1/applications/:id/stage`, and interview rounds under `/v1/applications/:id/interviews` and `/v1/interviews/:id`.
+
+## Admin panel
+
+`/admin` is for the owner of the Applyance service. It shows every user (when they joined, when they were last active, their jobs, submitted and failed applications), failures grouped by cause and by site, applications that have waited on their user for more than 3 days, and whether the worker is running. It never shows anyone's Master Profile, resumes, cover letters, answers, salary or work authorization. Plans and payments appear once billing is connected.
+
+Only admins see it; everyone else gets a 404. Roles can't be changed from inside the app. Sign up with your email first, then run this against the database you want (your `.env`, or set `DATABASE_URL` for production):
+
+```bash
+pnpm admin:grant you@example.com     # make an account an admin
+pnpm admin:revoke you@example.com    # take it away
+```
+
+Reload the app and **Admin** appears at the bottom of the sidebar. Each time an admin opens a user's page, it's written to the audit log.
 
 ## Checks
 

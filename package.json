@@ -16,6 +16,8 @@
     "db:migrate": "pnpm --filter @autoapply/database migrate:dev",
     "db:deploy": "pnpm --filter @autoapply/database migrate:deploy",
     "db:studio": "pnpm --filter @autoapply/database studio",
+    "admin:grant": "pnpm --filter @autoapply/database admin:grant",
+    "admin:revoke": "pnpm --filter @autoapply/database admin:revoke",
     "ops": "pnpm --silent --filter @autoapply/ops ops"
   },
   "devDependencies": {
