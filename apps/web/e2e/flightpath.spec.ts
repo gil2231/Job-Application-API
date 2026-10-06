@@ -53,7 +53,7 @@ test("drags cards between stages, confirms an outside application, and keeps the
 
   // Drag Linear from Submitted to Interviewing.
   await drag(page, column(page, "Submitted").getByTestId("flightpath-card").filter({ hasText: "Linear" }), column(page, "Interviewing"));
-  await expect(page.getByText("Moved to Interviewing")).toBeVisible();
+  await expect(page.getByText("Moved to Interviewing", { exact: true })).toBeVisible();
   await expect(column(page, "Interviewing").getByText("Linear")).toBeVisible();
   expect(await prisma.application.findUniqueOrThrow({ where: { id: linear.id } })).toMatchObject({ status: "SUBMITTED", outcome: "INTERVIEW" });
 
@@ -62,7 +62,7 @@ test("drags cards between stages, confirms an outside application, and keeps the
   await page.getByRole("menuitem", { name: "Offer" }).click();
   await expect(page.getByRole("alertdialog")).toContainText("marks the application as submitted by you");
   await page.getByRole("button", { name: "Yes, mark submitted" }).click();
-  await expect(page.getByText("Marked submitted and moved to Offer")).toBeVisible();
+  await expect(page.getByText("Marked submitted and moved to Offer", { exact: true })).toBeVisible();
   await expect(column(page, "Offer").getByText("Ramp")).toBeVisible();
   expect(await prisma.application.findUniqueOrThrow({ where: { id: ramp.id } })).toMatchObject({ status: "SUBMITTED", outcome: "OFFER", attentionReason: null });
 
@@ -112,7 +112,7 @@ test("records interview rounds and shows them on the board and dashboard", async
   await page.goto(`/applications/${linear.id}`);
   await page.getByRole("button", { name: "Actions for Intro with the VP of Sales" }).click();
   await page.getByRole("menuitem", { name: "Mark completed" }).click();
-  await expect(page.getByText("Marked completed")).toBeVisible();
+  await expect(page.getByText("Marked completed", { exact: true })).toBeVisible();
   await expect(round).toContainText("Completed");
 });
 
@@ -127,7 +127,7 @@ test("table view filters by stage and changes stages inline", async ({ page }) =
   await expect(page.getByTestId("flightpath-row")).toHaveCount(1);
   await page.getByRole("button", { name: "Stage: Submitted. Change stage" }).click();
   await page.getByRole("menuitem", { name: "Rejected" }).click();
-  await expect(page.getByText("Moved to Rejected")).toBeVisible();
+  await expect(page.getByText("Moved to Rejected", { exact: true })).toBeVisible();
   expect(await prisma.application.findUniqueOrThrow({ where: { id: linear.id } })).toMatchObject({ status: "REJECTED", outcome: "DECLINED" });
 
   await page.getByRole("tab", { name: /^Closed/ }).click();
