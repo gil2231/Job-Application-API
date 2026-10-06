@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { signInAction } from "@/actions/auth";
 import { Field, FormMessage, SubmitButton, useActionForm } from "@/components/form";
 import { Input } from "@/components/ui/input";
@@ -13,7 +14,16 @@ export function SignInForm({ next }: { next?: string }) {
       <Field label="Email" htmlFor="email" error={state.errors?.email}>
         <Input id="email" name="email" type="email" autoComplete="email" required autoFocus aria-invalid={!!state.errors?.email} />
       </Field>
-      <Field label="Password" htmlFor="password" error={state.errors?.password}>
+      <Field
+        label="Password"
+        htmlFor="password"
+        error={state.errors?.password}
+        hint={
+          <Link href="/forgot-password" className="text-primary hover:underline">
+            Forgot password?
+          </Link>
+        }
+      >
         <Input id="password" name="password" type="password" autoComplete="current-password" required aria-invalid={!!state.errors?.password} />
       </Field>
       <SubmitButton pending={pending} className="mt-2 w-full" pendingLabel="Signing in…">

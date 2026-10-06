@@ -6,6 +6,9 @@ import { writeCoverLetterForJob, writeResumeForJob } from "@autoapply/ai";
 import {
   approveGenerated,
   audit,
+  consumeUsage,
+  getEffectivePlan,
+  refundUsage,
   deleteGenerated,
   getFullProfile,
   getGenerated,
@@ -47,8 +50,19 @@ export async function generateDocumentAction(jobId: string, kind: GeneratedKind)
     const writingJob = { id: job.id, title: job.title, company: job.company, description: job.description, skills: Array.isArray(skills) ? skills.filter((s): s is string => typeof s === "string") : undefined };
     const ai = { provider: settings.aiProvider, model: settings.aiModel };
 
-    const { content } = kind === "resume" ? await writeResumeForJob(profile, writingJob, ai) : await writeCoverLetterForJob(profile, writingJob, ai);
-    const saved = kind === "resume" ? await saveGeneratedResume(user.id, job.id, content as ResumeContent) : await saveGeneratedCoverLetter(user.id, job.id, content as CoverLetterContent);
+    if ((await consumeUsage(user.id, "tailoredDocuments")) === 0) {
+      const plan = await getEffectivePlan(user.id);
+      return { ok: false, message: `You've used all ${plan.limits.tailoredDocuments} tailored resumes and cover letters on your plan this month. Upgrade on the Billing page, or more open up next month.` };
+    }
+    let saved: Awaited<ReturnType<typeof saveGeneratedResume>>;
+    let content: ResumeContent | CoverLetterContent;
+    try {
+      content = (kind === "resume" ? await writeResumeForJob(profile, writingJob, ai) : await writeCoverLetterForJob(profile, writingJob, ai)).content;
+      saved = kind === "resume" ? await saveGeneratedResume(user.id, job.id, content as ResumeContent) : await saveGeneratedCoverLetter(user.id, job.id, content as CoverLetterContent);
+    } catch (error) {
+      await refundUsage(user.id, "tailoredDocuments", 1);
+      throw error;
+    }
     await removeStored(saved.removedKey);
     await audit(user.id, `generated.${kind}_created`, { entityType: kind === "resume" ? "Resume" : "CoverLetter", entityId: saved.id, metadata: { jobId: job.id, method: content.generation.method, model: content.generation.model } });
     refresh(job.id);

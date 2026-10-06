@@ -53,6 +53,10 @@ export async function addJobAction(_prev: ActionResult<{ jobId: string; deleted?
   });
 }
 
+function limitMessage(limit: number | null): string {
+  return `You've used all ${limit ?? "the"} applications on your plan this month. Upgrade on the Billing page, or more open up next month.`;
+}
+
 export async function applyToJobsAction(jobIds: string[], mode?: AutomationMode): Promise<ActionResult> {
   return authedAction(async (user) => {
     const ids = parseIds(jobIds);
@@ -62,9 +66,13 @@ export async function applyToJobsAction(jobIds: string[], mode?: AutomationMode)
     await audit(user.id, "application.queued", { metadata: { jobIds: ids, ...result } });
     if (result.queued) await notifyWorker(user.id);
     refresh();
-    if (result.queued === 0) return { ok: false, message: result.duplicates ? "Already applied or queued. Each job gets one application." : "No jobs were queued." };
+    if (result.queued === 0) {
+      if (result.overLimit) return { ok: false, message: limitMessage(result.monthlyLimit) };
+      return { ok: false, message: result.duplicates ? "Already applied or queued. Each job gets one application." : "No jobs were queued." };
+    }
     const extra = result.duplicates ? ` (${plural(result.duplicates, "job")} already had one)` : "";
-    return { ok: true, message: `Queued ${plural(result.queued, "application")} in ${result.mode.toLowerCase()} mode${extra}` };
+    const limited = result.overLimit ? ` ${plural(result.overLimit, "job")} not queued. ${limitMessage(result.monthlyLimit)}` : "";
+    return { ok: true, message: `Queued ${plural(result.queued, "application")} in ${result.mode.toLowerCase()} mode${extra}.${limited}` };
   });
 }
 
@@ -74,8 +82,10 @@ export async function applyToAllQualifiedAction(): Promise<ActionResult> {
     await audit(user.id, "application.queued_all_qualified", { metadata: result });
     if (result.queued) await notifyWorker(user.id);
     refresh();
+    const limited = result.overLimit ? ` ${plural(result.overLimit, "job")} not queued. ${limitMessage(result.monthlyLimit)}` : "";
+    if (!result.queued && result.overLimit) return { ok: false, message: limitMessage(result.monthlyLimit) };
     return result.queued
-      ? { ok: true, message: `Queued ${plural(result.queued, "application")} in ${result.mode.toLowerCase()} mode` }
+      ? { ok: true, message: `Queued ${plural(result.queued, "application")} in ${result.mode.toLowerCase()} mode.${limited}` }
       : { ok: false, message: "There are no qualified jobs waiting to be applied to." };
   });
 }

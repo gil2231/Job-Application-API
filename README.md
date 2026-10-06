@@ -155,6 +155,28 @@ pnpm admin:revoke you@example.com    # take it away
 
 Reload the app and **Admin** appears at the bottom of the sidebar. Each time an admin opens a user's page, it's written to the audit log.
 
+## Plans and billing
+
+Applyance has a **Free** plan (25 applications and 10 tailored resumes or cover letters a month) and a **Pro** plan ($29 a month or $290 a year; 500 applications and 200 tailored documents). Names, prices, limits and feature lists live in one file, `packages/shared/src/plans.ts`, which the pricing page, the Billing page and the limit checks all read.
+
+- Payments go through Stripe Checkout, and **Plan & billing → Manage billing** opens Stripe's customer portal (card, invoices, cancel). Applyance never sees card numbers.
+- A Stripe webhook (`/api/stripe/webhook`, signature-checked, each event applied once) keeps the plan in step. Cancelling keeps Pro until the end of the paid period; a failed payment keeps Pro while Stripe retries.
+- Usage is counted per calendar month (UTC). Queueing more jobs than the plan has left queues as many as fit and says how many were left out; retries don't count again.
+- Without `STRIPE_SECRET_KEY` billing is off and every account gets Pro's limits, which suits local development and a private install.
+
+## Account security and data
+
+- **Two-factor sign-in** (Settings): any authenticator app (TOTP). The secret is encrypted, each code works once, and ten single-use recovery codes (stored as hashes) cover a lost phone. Turning it on signs out other sessions; turning it off needs the password and a code.
+- **Email:** new accounts get a confirmation link, and **Forgot password?** sends a reset link that works once, for an hour, and signs out every session. With `EMAIL_PROVIDER=resend` they're sent through Resend; in development they're printed and saved under `.storage/outbox`.
+- **Download my data** (Settings → Data & privacy) gives a ZIP with everything in the account as JSON (sensitive answers decrypted) plus the stored documents. Passwords, two-factor secrets, tokens and saved site cookies are left out.
+- **Delete account** needs the password, a two-factor code if it's on, and typing DELETE. It cancels any Stripe subscription first, then deletes every row and stored file (documents and screenshots).
+
+New accounts start on **Getting started** (`/welcome`): import a resume, check the profile, set rules, add jobs, turn on two-factor and, with billing on, pick a plan. Progress is worked out from the account, and the dashboard shows it until it's done or hidden.
+
+## Deploying
+
+`docs/deployment.md` walks through putting Applyance live on Render with `render.yaml` (web app, API, worker, Postgres, Redis), Cloudflare R2 for files, Resend for email and Stripe for payments. The Dockerfiles in `docker/` run on any container host.
+
 ## Checks
 
 ```bash
@@ -166,7 +188,7 @@ pnpm test:e2e    # Playwright browser tests against the dev server, then with th
 
 ## Security
 
-- Passwords are hashed with argon2id. Accounts lock for 15 minutes after 5 failed sign-ins.
+- Passwords are hashed with argon2id. Accounts lock for 15 minutes after 5 failed sign-ins. Optional two-factor sign-in (TOTP) with recovery codes.
 - Sessions live in the database, which stores only a SHA-256 hash of each token. The cookie is httpOnly, SameSite=Lax, and `__Host-` prefixed in production.
 - Sensitive answers (demographics, sponsorship) and browser session state are encrypted with AES-256-GCM.
 - Every mutation is checked for authorization, validated with zod, rate-limited, and written to the audit log (Settings → Security log).

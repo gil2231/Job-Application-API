@@ -1,0 +1,115 @@
+# Render Blueprint for Applyance: web app, API, browser worker, Postgres and
+# Redis (Key Value). In the Render dashboard: New → Blueprint → pick this
+# repository. Render creates everything below and asks for each value marked
+# `sync: false`. Step-by-step guide: docs/deployment.md.
+
+services:
+  - type: web
+    name: applyance-web
+    runtime: docker
+    dockerfilePath: ./docker/web.Dockerfile
+    dockerContext: .
+    plan: starter
+    healthCheckPath: /api/health
+    # Apply database migrations before each new version goes live.
+    preDeployCommand: pnpm db:deploy
+    envVars:
+      - fromGroup: applyance-shared
+      - key: DATABASE_URL
+        fromDatabase: { name: applyance-db, property: connectionString }
+      - key: REDIS_URL
+        fromService: { type: keyvalue, name: applyance-redis, property: connectionString }
+
+  - type: web
+    name: applyance-api
+    runtime: docker
+    dockerfilePath: ./docker/api.Dockerfile
+    dockerContext: .
+    plan: starter
+    healthCheckPath: /health
+    envVars:
+      - fromGroup: applyance-shared
+      - key: DATABASE_URL
+        fromDatabase: { name: applyance-db, property: connectionString }
+      - key: REDIS_URL
+        fromService: { type: keyvalue, name: applyance-redis, property: connectionString }
+
+  # Chromium needs memory: use at least the Standard plan (2 GB) for the worker.
+  - type: worker
+    name: applyance-worker
+    runtime: docker
+    dockerfilePath: ./docker/worker.Dockerfile
+    dockerContext: .
+    plan: standard
+    envVars:
+      - fromGroup: applyance-shared
+      - key: DATABASE_URL
+        fromDatabase: { name: applyance-db, property: connectionString }
+      - key: REDIS_URL
+        fromService: { type: keyvalue, name: applyance-redis, property: connectionString }
+      - key: WORKER_CONCURRENCY
+        value: "2"
+      # Real employer sites. Private and internal addresses stay blocked.
+      - key: AUTOMATION_ALLOW_ALL_HOSTS
+        value: "true"
+
+  - type: keyvalue
+    name: applyance-redis
+    plan: starter
+    # BullMQ needs Redis to never evict queue keys.
+    maxmemoryPolicy: noeviction
+    ipAllowList: []
+
+databases:
+  - name: applyance-db
+    databaseName: applyance
+    user: applyance
+    plan: basic-256mb
+    postgresMajorVersion: "16"
+
+envVarGroups:
+  - name: applyance-shared
+    envVars:
+      - key: NODE_ENV
+        value: production
+      # openssl rand -base64 32. Keep a copy somewhere safe: without it,
+      # encrypted answers and saved sign-ins can't be read.
+      - key: DATA_ENCRYPTION_KEY
+        sync: false
+      # The public address, e.g. https://app.applyance.com (no trailing slash).
+      - key: APP_URL
+        sync: false
+      # File storage: any S3-compatible service (AWS S3, Cloudflare R2...).
+      - key: STORAGE_DRIVER
+        value: s3
+      - key: S3_ENDPOINT
+        sync: false
+      - key: S3_REGION
+        value: auto
+      - key: S3_BUCKET
+        sync: false
+      - key: S3_ACCESS_KEY_ID
+        sync: false
+      - key: S3_SECRET_ACCESS_KEY
+        sync: false
+      - key: S3_FORCE_PATH_STYLE
+        value: "true"
+      # Email (password resets, email confirmation, alerts).
+      - key: EMAIL_PROVIDER
+        value: resend
+      - key: RESEND_API_KEY
+        sync: false
+      - key: EMAIL_FROM
+        sync: false
+      # Payments. Leave the Stripe values empty to run without paid plans.
+      - key: STRIPE_SECRET_KEY
+        sync: false
+      - key: STRIPE_WEBHOOK_SECRET
+        sync: false
+      - key: STRIPE_PRICE_PRO_MONTHLY
+        sync: false
+      - key: STRIPE_PRICE_PRO_YEARLY
+        sync: false
+      # Optional AI features.
+      - key: ANTHROPIC_API_KEY
+        sync: false

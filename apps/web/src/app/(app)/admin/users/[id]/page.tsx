@@ -35,7 +35,7 @@ export default async function AdminUserPage({ params }: { params: Promise<{ id: 
     ["Last active", detail.lastSeenAt ? <TimeAgo value={detail.lastSeenAt} /> : "No active session"],
     ["Signed-in devices", detail.activeSessions],
     ["Email verified", account.emailVerifiedAt ? formatDate(account.emailVerifiedAt) : "No"],
-    ["Plan", <span key="plan" className="text-muted-foreground">Billing not connected yet</span>],
+    ["Plan", detail.plan.renewsAt && detail.plan.label !== "Free" ? `${detail.plan.label}, ${detail.plan.cancelAtPeriodEnd ? "ends" : "renews"} ${formatDate(detail.plan.renewsAt)}` : detail.plan.label],
     ["Automation mode", detail.automationMode ? enumLabel(detail.automationMode) : "—"],
     ["Queue", detail.queuePaused ? "Paused" : "Running"],
     ["Jobs saved", detail.jobs],

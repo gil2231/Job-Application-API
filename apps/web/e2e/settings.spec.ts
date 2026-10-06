@@ -3,6 +3,7 @@ import { signUp } from "./helpers";
 
 test("answer library suggests only profile facts and saves answers", async ({ page }) => {
   await signUp(page);
+  await page.goto("/profile");
   await page.getByLabel("LinkedIn").fill("https://www.linkedin.com/in/tester");
   await page.getByRole("button", { name: "Save personal details" }).click();
   await expect(page.getByText("Personal details saved")).toBeVisible();

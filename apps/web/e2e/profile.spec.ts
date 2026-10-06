@@ -3,6 +3,7 @@ import { signUp } from "./helpers";
 
 test("fills every Master Profile section and persists it", async ({ page }) => {
   await signUp(page, "Ada Lovelace");
+  await page.goto("/profile");
 
   // Personal
   await page.getByLabel("First name").fill("Ada");

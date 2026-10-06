@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { getUserSettings, listAuditLogs, listBrowserSessions, listSessions } from "@autoapply/database";
+import { getSubscription, getTwoFactorStatus, getUserSettings, listAuditLogs, listBrowserSessions, listSessions } from "@autoapply/database";
 import { enumLabel } from "@autoapply/shared";
 import { requireUser } from "@/lib/auth";
 import { formatDate, formatRelative } from "@/lib/format";
@@ -8,6 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { ANTHROPIC_DEFAULT_MODEL, OPENAI_DEFAULT_MODEL } from "@autoapply/ai";
+import { DataPrivacySection, TwoFactorSection } from "./security-forms";
 import { AccountForm, AnalysisForm, BrowserSessionList, PasswordForm, PreferencesForm, SessionList } from "./settings-forms";
 
 export const metadata: Metadata = { title: "Settings" };
@@ -21,7 +22,14 @@ function describeAgent(ua: string | null): string {
 
 export default async function SettingsPage() {
   const user = await requireUser();
-  const [settings, sessions, logs, browserSessions] = await Promise.all([getUserSettings(user.id), listSessions(user.id), listAuditLogs(user.id, 40), listBrowserSessions(user.id)]);
+  const [settings, sessions, logs, browserSessions, twoFactor, subscription] = await Promise.all([
+    getUserSettings(user.id),
+    listSessions(user.id),
+    listAuditLogs(user.id, 40),
+    listBrowserSessions(user.id),
+    getTwoFactorStatus(user.id),
+    getSubscription(user.id),
+  ]);
 
   return (
     <div className="grid gap-5">
@@ -45,10 +53,19 @@ export default async function SettingsPage() {
           </CardContent>
         </Card>
       </div>
+      <Card id="security" className="scroll-mt-6">
+        <CardHeader>
+          <CardTitle className="text-sm">Two-factor sign-in</CardTitle>
+          <CardDescription>Ask for a code from an authenticator app each time you sign in, so a stolen password isn&apos;t enough.</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <TwoFactorSection enabled={twoFactor.enabled} enabledAt={twoFactor.enabledAt ? formatDate(twoFactor.enabledAt) : null} recoveryCodesLeft={twoFactor.recoveryCodesLeft} />
+        </CardContent>
+      </Card>
       <Card>
         <CardHeader>
           <CardTitle className="text-sm">Automation preferences</CardTitle>
-          <CardDescription>Thresholds below which AutoApply stops and asks you.</CardDescription>
+          <CardDescription>Thresholds below which Applyance stops and asks you.</CardDescription>
         </CardHeader>
         <CardContent>
           <PreferencesForm settings={settings} />
@@ -93,6 +110,14 @@ export default async function SettingsPage() {
               .filter((s) => s.status === "ACTIVE")
               .map((s) => ({ id: s.id, domain: s.domain, platform: enumLabel(s.platform), lastUsed: s.lastUsedAt ? formatRelative(s.lastUsedAt) : null, expires: s.expiresAt ? formatDate(s.expiresAt) : null }))}
           />
+        </CardContent>
+      </Card>
+      <Card id="data">
+        <CardHeader>
+          <CardTitle className="text-sm">Data &amp; privacy</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <DataPrivacySection twoFactorEnabled={twoFactor.enabled} hasSubscription={!!subscription?.stripeSubscriptionId && subscription.status !== "CANCELED"} />
         </CardContent>
       </Card>
       <Card className="gap-0 pb-0">

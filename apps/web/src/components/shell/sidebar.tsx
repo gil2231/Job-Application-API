@@ -60,7 +60,7 @@ function Brand() {
   return (
     <Link href="/dashboard" className="flex h-14 items-center gap-2 px-4">
       <div className="bg-primary text-primary-foreground grid size-7 place-items-center rounded-md text-xs font-bold">A</div>
-      <span className="font-semibold tracking-tight">AutoApply</span>
+      <span className="font-semibold tracking-tight">Applyance</span>
     </Link>
   );
 }
@@ -135,7 +135,7 @@ export function MobileNav({ user, attentionCount }: SidebarProps) {
           </div>
         </SheetContent>
       </Sheet>
-      <span className="font-semibold tracking-tight">AutoApply</span>
+      <span className="font-semibold tracking-tight">Applyance</span>
     </div>
   );
 }
