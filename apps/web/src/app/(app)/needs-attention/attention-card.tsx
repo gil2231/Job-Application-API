@@ -235,7 +235,7 @@ export function AttentionCard({ item }: { item: AttentionItem }) {
   return (
     <Card className="gap-4" data-testid="attention-card">
       <CardHeader className="gap-3">
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <heading.icon className="text-warning size-4" />
           <span className="text-xs font-semibold tracking-wider uppercase">{heading.title}</span>
           <Badge variant="outline" className="ml-auto">

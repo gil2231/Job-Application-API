@@ -35,6 +35,58 @@ const canSkip = (r: Row) => (!r.application && r.status !== "SKIPPED") || (!!r.a
 const canRetry = (r: Row) => r.application?.status === "FAILED";
 const canDelete = (r: Row) => r.application?.status !== "PROCESSING";
 
+function RowActions({ row: r, pending, run, onDelete }: { row: Row; pending: boolean; run: ReturnType<typeof useServerAction>["run"]; onDelete: () => void }) {
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button variant="ghost" size="icon-sm" aria-label={`Actions for ${r.title}`}>
+          <MoreHorizontal />
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end" className="w-44">
+        {canApply(r) && (
+          <DropdownMenuItem disabled={pending} onSelect={() => run(() => applyToJobsAction([r.id]))}>
+            <Send /> Apply
+          </DropdownMenuItem>
+        )}
+        <DropdownMenuItem asChild>
+          <Link href={r.application ? `/applications/${r.application.id}` : `/jobs/${r.id}`}>
+            <Eye /> Review
+          </Link>
+        </DropdownMenuItem>
+        {!r.application && r.status !== "ANALYZING" && (
+          <DropdownMenuItem disabled={pending} onSelect={() => run(() => reanalyzeJobsAction([r.id]))}>
+            <RefreshCw /> Re-analyze
+          </DropdownMenuItem>
+        )}
+        {canRetry(r) && (
+          <DropdownMenuItem disabled={pending} onSelect={() => run(() => retryJobsAction([r.id]))}>
+            <RotateCcw /> Retry
+          </DropdownMenuItem>
+        )}
+        {canSkip(r) && (
+          <DropdownMenuItem disabled={pending} onSelect={() => run(() => skipJobsAction([r.id]))}>
+            <SkipForward /> Skip
+          </DropdownMenuItem>
+        )}
+        <DropdownMenuItem asChild>
+          <a href={r.url} target="_blank" rel="noopener noreferrer">
+            <ExternalLink /> Open job
+          </a>
+        </DropdownMenuItem>
+        {canDelete(r) && (
+          <>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem variant="destructive" onSelect={onDelete}>
+              <Trash2 /> Delete
+            </DropdownMenuItem>
+          </>
+        )}
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+}
+
 export function JobsTable({ data, hasFilters }: { data: { rows: Row[]; total: number; page: number; pageCount: number; pageSize: number }; hasFilters: boolean }) {
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [confirmDelete, setConfirmDelete] = useState<string[] | null>(null);
@@ -44,6 +96,14 @@ export function JobsTable({ data, hasFilters }: { data: { rows: Row[]; total: nu
   const selectedRows = data.rows.filter((r) => selected.has(r.id));
   const allSelected = data.rows.length > 0 && selectedRows.length === data.rows.length;
   const clear = () => setSelected(new Set());
+  const toggle = (id: string, on: boolean) =>
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (on) next.add(id);
+      else next.delete(id);
+      return next;
+    });
+  const selectAll = (on: boolean) => setSelected(on ? new Set(data.rows.map((r) => r.id)) : new Set());
   const act = (fn: () => Promise<{ ok: boolean; message?: string }>) => run(fn, { onSuccess: clear });
 
   if (data.total === 0) {
@@ -90,7 +150,34 @@ export function JobsTable({ data, hasFilters }: { data: { rows: Row[]; total: nu
           </Button>
         </div>
       )}
-      <div className="bg-card rounded-xl border">
+      {/* Phones get a stacked list; the full table starts at tablet width. */}
+      <div className="bg-card rounded-xl border md:hidden" data-testid="jobs-list">
+        <label className="text-muted-foreground flex items-center gap-3 border-b px-3 py-2.5 text-xs font-medium">
+          <Checkbox aria-label="Select all" checked={allSelected ? true : selectedRows.length ? "indeterminate" : false} onCheckedChange={(v) => selectAll(v === true)} />
+          {data.total.toLocaleString()} job{data.total === 1 ? "" : "s"}
+        </label>
+        <ul className="divide-y">
+          {data.rows.map((r) => (
+            <li key={r.id} className="flex items-start gap-3 py-3 pr-1.5 pl-3" data-state={selected.has(r.id) ? "selected" : undefined}>
+              <Checkbox className="mt-0.5" aria-label={`Select ${r.title}`} checked={selected.has(r.id)} onCheckedChange={(v) => toggle(r.id, v === true)} />
+              <div className="min-w-0 flex-1">
+                <p className="text-muted-foreground truncate text-xs">{r.company}</p>
+                <Link href={`/jobs/${r.id}`} className="line-clamp-2 text-sm leading-snug font-medium">
+                  {r.title}
+                </Link>
+                <div className="text-muted-foreground mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs">
+                  <StatusBadge status={r.pipelineStatus} />
+                  <MatchScore score={r.matchScore} />
+                  {r.location && <span className="max-w-full truncate">{r.location}</span>}
+                  {formatSalary(r) !== "—" && <span className="tabular-nums">{formatSalary(r)}</span>}
+                </div>
+              </div>
+              <RowActions row={r} pending={pending} run={run} onDelete={() => setConfirmDelete([r.id])} />
+            </li>
+          ))}
+        </ul>
+      </div>
+      <div className="bg-card hidden rounded-xl border md:block">
         <Table>
           <TableHeader>
             <TableRow className="hover:bg-transparent">
@@ -98,7 +185,7 @@ export function JobsTable({ data, hasFilters }: { data: { rows: Row[]; total: nu
                 <Checkbox
                   aria-label="Select all"
                   checked={allSelected ? true : selectedRows.length ? "indeterminate" : false}
-                  onCheckedChange={(v) => setSelected(v ? new Set(data.rows.map((r) => r.id)) : new Set())}
+                  onCheckedChange={(v) => selectAll(v === true)}
                 />
               </TableHead>
               <SortableHead column="company" defaultSort="savedAt">Company</SortableHead>
@@ -120,14 +207,7 @@ export function JobsTable({ data, hasFilters }: { data: { rows: Row[]; total: nu
                   <Checkbox
                     aria-label={`Select ${r.title}`}
                     checked={selected.has(r.id)}
-                    onCheckedChange={(v) =>
-                      setSelected((prev) => {
-                        const next = new Set(prev);
-                        if (v) next.add(r.id);
-                        else next.delete(r.id);
-                        return next;
-                      })
-                    }
+                    onCheckedChange={(v) => toggle(r.id, v === true)}
                   />
                 </TableCell>
                 <TableCell className="font-medium">{r.company}</TableCell>
@@ -154,53 +234,7 @@ export function JobsTable({ data, hasFilters }: { data: { rows: Row[]; total: nu
                 <TableCell className="text-muted-foreground text-[13px]">{formatDate(r.savedAt, "MMM d")}</TableCell>
                 <TableCell className="text-muted-foreground text-[13px]">{formatDate(r.application?.submittedAt, "MMM d")}</TableCell>
                 <TableCell className="pr-3">
-                  <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                      <Button variant="ghost" size="icon-sm" aria-label={`Actions for ${r.title}`}>
-                        <MoreHorizontal />
-                      </Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end" className="w-44">
-                      {canApply(r) && (
-                        <DropdownMenuItem disabled={pending} onSelect={() => run(() => applyToJobsAction([r.id]))}>
-                          <Send /> Apply
-                        </DropdownMenuItem>
-                      )}
-                      <DropdownMenuItem asChild>
-                        <Link href={r.application ? `/applications/${r.application.id}` : `/jobs/${r.id}`}>
-                          <Eye /> Review
-                        </Link>
-                      </DropdownMenuItem>
-                      {!r.application && r.status !== "ANALYZING" && (
-                        <DropdownMenuItem disabled={pending} onSelect={() => run(() => reanalyzeJobsAction([r.id]))}>
-                          <RefreshCw /> Re-analyze
-                        </DropdownMenuItem>
-                      )}
-                      {canRetry(r) && (
-                        <DropdownMenuItem disabled={pending} onSelect={() => run(() => retryJobsAction([r.id]))}>
-                          <RotateCcw /> Retry
-                        </DropdownMenuItem>
-                      )}
-                      {canSkip(r) && (
-                        <DropdownMenuItem disabled={pending} onSelect={() => run(() => skipJobsAction([r.id]))}>
-                          <SkipForward /> Skip
-                        </DropdownMenuItem>
-                      )}
-                      <DropdownMenuItem asChild>
-                        <a href={r.url} target="_blank" rel="noopener noreferrer">
-                          <ExternalLink /> Open job
-                        </a>
-                      </DropdownMenuItem>
-                      {canDelete(r) && (
-                        <>
-                          <DropdownMenuSeparator />
-                          <DropdownMenuItem variant="destructive" onSelect={() => setConfirmDelete([r.id])}>
-                            <Trash2 /> Delete
-                          </DropdownMenuItem>
-                        </>
-                      )}
-                    </DropdownMenuContent>
-                  </DropdownMenu>
+                  <RowActions row={r} pending={pending} run={run} onDelete={() => setConfirmDelete([r.id])} />
                 </TableCell>
               </TableRow>
             ))}

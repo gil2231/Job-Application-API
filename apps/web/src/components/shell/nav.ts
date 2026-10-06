@@ -17,6 +17,8 @@ import {
 export interface NavItem {
   href: string;
   label: string;
+  /** Label in the phone tab bar, where space is tight. */
+  shortLabel?: string;
   icon: LucideIcon;
   badgeKey?: "attention";
 }
@@ -27,7 +29,7 @@ export const NAV_ITEMS: NavItem[] = [
   { href: "/recommended", label: "Recommended", icon: Sparkles },
   { href: "/jobs", label: "Jobs", icon: Briefcase },
   { href: "/applications", label: "Applications", icon: Send },
-  { href: "/needs-attention", label: "Needs Attention", icon: AlertCircle, badgeKey: "attention" },
+  { href: "/needs-attention", label: "Needs Attention", shortLabel: "Needs you", icon: AlertCircle, badgeKey: "attention" },
   { href: "/profile", label: "Master Profile", icon: UserRound },
   { href: "/documents", label: "Documents", icon: FileText },
   { href: "/answers", label: "Answer Library", icon: BookOpenText },
@@ -35,3 +37,6 @@ export const NAV_ITEMS: NavItem[] = [
   { href: "/integrations", label: "Integrations", icon: Plug },
   { href: "/settings", label: "Settings", icon: Settings },
 ];
+
+/** The pages in the phone tab bar; everything else is under More. */
+export const MOBILE_TABS = ["/dashboard", "/needs-attention", "/flightpath", "/jobs"];

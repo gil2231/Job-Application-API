@@ -72,7 +72,38 @@ export function FlightpathTable({ data }: { data: TrackerTable }) {
         </div>
       ) : (
         <>
-          <div className="bg-card rounded-xl border">
+          {/* Phones get a stacked list; the full table starts at tablet width. */}
+          <ul className="bg-card divide-y rounded-xl border md:hidden" data-testid="flightpath-list">
+            {rows.map((a) => {
+              const next = a.interviews[0];
+              return (
+                <li key={a.id} className="relative flex items-start gap-3 px-3 py-3">
+                  <div className="min-w-0 flex-1">
+                    <p className="text-muted-foreground truncate text-xs">{a.job.company}</p>
+                    <Link href={`/applications/${a.id}`} className="line-clamp-2 text-sm leading-snug font-medium after:absolute after:inset-0">
+                      {a.job.title}
+                    </Link>
+                    <div className="text-muted-foreground mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs">
+                      <MatchScore score={a.matchScore} />
+                      {next?.scheduledAt ? (
+                        <span className="text-foreground">
+                          {next.title || enumLabel(next.kind)} · <LocalTime value={next.scheduledAt} pattern="MMM d, h:mm a" />
+                        </span>
+                      ) : (
+                        <span>
+                          Moved <TimeAgo value={a.stageChangedAt ?? a.submittedAt ?? a.queuedAt} />
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                  <div className="relative z-10 shrink-0">
+                    <StageMenu card={a} onMove={(to) => mover.move(a, to)} variant="badge" align="end" />
+                  </div>
+                </li>
+              );
+            })}
+          </ul>
+          <div className="bg-card hidden rounded-xl border md:block">
             <Table>
               <TableHeader>
                 <TableRow className="hover:bg-transparent">

@@ -31,6 +31,10 @@ export default tseslint.config(
     },
   },
   {
+    files: ["apps/web/public/sw.js"],
+    languageOptions: { globals: { ...globals.serviceworker } },
+  },
+  {
     files: ["**/test/**", "**/e2e/**", "**/*.test.ts", "**/prisma/seed.ts"],
     rules: { "no-console": "off" },
   },
