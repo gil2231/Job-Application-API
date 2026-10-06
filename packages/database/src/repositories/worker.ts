@@ -34,12 +34,13 @@ export async function loadProcessingContext(applicationId: string) {
   ]);
 
   // Job-specific materials uploaded after the application was queued still win.
-  let resume = app.resume;
+  // A generated draft that hasn't been approved has no file; fall back to the job's approved or default one.
+  let resume = app.resume?.document ? app.resume : null;
   if (!resume) {
     const found = await resolveResumeForJob(userId, app.jobId);
     resume = found ? await prisma.resume.findUnique({ where: { id: found.id }, select: documentSelect }) : null;
   }
-  let coverLetter = app.coverLetter;
+  let coverLetter = app.coverLetter?.document ? app.coverLetter : null;
   if (!coverLetter) {
     const found = await resolveCoverLetterForJob(userId, app.jobId);
     coverLetter = found ? await prisma.coverLetter.findUnique({ where: { id: found.id }, select: documentSelect }) : null;
@@ -80,6 +81,8 @@ export async function loadProcessingContext(applicationId: string) {
       fieldConfidenceThreshold: settings.fieldConfidenceThreshold,
       answerConfidenceThreshold: settings.answerConfidenceThreshold,
       timezone: settings.timezone,
+      aiProvider: settings.aiProvider,
+      aiModel: settings.aiModel,
     },
     rule: { autoSubmitEnabled: rule?.autoSubmitEnabled ?? false, requiresSponsorship: rule?.requiresSponsorship ?? false },
     library: libraryRows.map((a) => ({

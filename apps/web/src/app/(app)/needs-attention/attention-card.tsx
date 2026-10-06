@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useState } from "react";
-import { Check, ExternalLink, KeyRound, Pencil, RefreshCw, RotateCcw, Send, ShieldAlert, SkipForward, TriangleAlert, Upload, UserCheck } from "lucide-react";
+import { Check, ExternalLink, KeyRound, Pencil, RefreshCw, RotateCcw, Send, ShieldAlert, SkipForward, Sparkles, TriangleAlert, Upload, UserCheck } from "lucide-react";
 import type { AttentionItem } from "@autoapply/database";
 import { isPlaceholderOption } from "@autoapply/automation";
 import { enumLabel } from "@autoapply/shared";
@@ -112,7 +112,13 @@ function QuestionRow({ question }: { question: Question }) {
         <AnswerInput question={question} value={value} onChange={setValue} />
       ) : (
         <div className="text-sm">
-          <span className="text-muted-foreground text-xs">Suggested answer</span>
+          {question.answer?.source === "AI_GENERATED" ? (
+            <Badge variant="info" className="mb-1" data-testid="ai-draft">
+              <Sparkles /> AI draft: check it before approving
+            </Badge>
+          ) : (
+            <span className="text-muted-foreground text-xs">Suggested answer</span>
+          )}
           <p className={suggestion ? "" : "text-muted-foreground italic"}>{suggestion || "No answer could be found in your profile."}</p>
         </div>
       )}

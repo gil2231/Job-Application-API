@@ -71,6 +71,8 @@ export interface FieldMapping {
   sensitive?: boolean;
   /** False when the value came from an answer the user didn't allow to be submitted unattended. */
   autoSubmitAllowed: boolean;
+  /** Which classifier mapped the field. */
+  mappedBy?: "heuristic" | "ai";
 }
 
 /** Sort locators by the preferred strategy order. */

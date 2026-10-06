@@ -56,8 +56,10 @@ export default async function SettingsPage() {
       </Card>
       <Card>
         <CardHeader>
-          <CardTitle className="text-sm">Job analysis</CardTitle>
-          <CardDescription>How imported postings are read. Analysis only describes the job; nothing about you is generated.</CardDescription>
+          <CardTitle className="text-sm">AI</CardTitle>
+          <CardDescription>
+            Reads job postings, maps form fields the built-in rules don&apos;t recognize, drafts answers for you to approve, and tailors resumes and cover letters. Anything it writes is checked against your Master Profile, and nothing it drafts is sent without your approval.
+          </CardDescription>
         </CardHeader>
         <CardContent>
           <AnalysisForm settings={settings} anthropicConfigured={!!process.env.ANTHROPIC_API_KEY} defaultModel={ANTHROPIC_DEFAULT_MODEL} />

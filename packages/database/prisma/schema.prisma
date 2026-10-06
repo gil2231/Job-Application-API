@@ -473,6 +473,8 @@ model CoverLetter {
   isDefault  Boolean  @default(false)
   generated  Boolean  @default(false)
   body       String?
+  /// Structured content for generated cover letters (paragraphs, header, how it was written).
+  content    Json?
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
 

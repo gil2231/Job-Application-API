@@ -55,3 +55,29 @@ export function createProvider(id: string | null | undefined, config: { model?: 
   if (!factory) throw new AIUnavailableError(`AI provider "${id}" is not installed`);
   return factory(config);
 }
+
+/** The reason given when AI is simply turned off. */
+export const NO_PROVIDER = "No AI provider is configured";
+
+export interface AIConfig {
+  /** Provider id (e.g. "anthropic"), or "none". Defaults to the AI_PROVIDER environment variable. */
+  provider?: string | null;
+  model?: string | null;
+}
+
+/**
+ * The provider a user's settings ask for, or null with the reason AI isn't in
+ * use. Never throws for missing configuration, so every caller can fall back to
+ * its deterministic path.
+ */
+export function resolveProvider(config: AIConfig = {}): { provider: AIProvider | null; reason: string | null } {
+  const configured = config.provider || process.env.AI_PROVIDER || null;
+  const providerId = configured === "none" ? null : configured;
+  if (!providerId) return { provider: null, reason: NO_PROVIDER };
+  try {
+    return { provider: createProvider(providerId, { model: config.model || process.env.AI_MODEL || undefined }), reason: null };
+  } catch (error) {
+    if (!(error instanceof AIUnavailableError)) throw error;
+    return { provider: null, reason: error.message };
+  }
+}

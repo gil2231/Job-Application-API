@@ -5,8 +5,8 @@ import type { DetectedField } from "./fields";
  * Deterministic field classification: maps a form field onto the controlled
  * Master Profile schema (or onto a standard Answer Library question) using
  * labels, autocomplete tokens and attribute names. No guessing: anything that
- * doesn't clearly match is "unknown" and goes to a person. An AI classifier can
- * be layered on later through the FieldClassifier interface.
+ * doesn't clearly match is "unknown" and goes to a person. The AI classifier in
+ * @autoapply/ai layers on top of this one through the FieldClassifier interface.
  */
 
 export interface Classification {
@@ -16,6 +16,8 @@ export interface Classification {
   /** Set when mappedField is "answer.library": the standard question key it matched. */
   questionKey?: string;
   evidence: string;
+  /** Which classifier decided; absent means the heuristic one. */
+  method?: "heuristic" | "ai";
 }
 
 export interface FieldClassifier {

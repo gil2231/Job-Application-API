@@ -2,7 +2,8 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { AlertTriangle, ArrowLeft, CheckCircle2, CircleHelp, ExternalLink, XCircle } from "lucide-react";
-import { getFullProfile, getJob, NotFoundError } from "@autoapply/database";
+import { resolveProvider } from "@autoapply/ai";
+import { getFullProfile, getGeneratedForJob, getJob, getUserSettings, NotFoundError } from "@autoapply/database";
 import {
   canonicalSkillKey,
   EDUCATION_LEVEL_LABELS,
@@ -23,6 +24,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { cn } from "@/lib/utils";
 import { EditJobDialog } from "./edit-job-dialog";
 import { JobActions, ReanalyzeButton } from "./job-actions";
+import { TailoredDocuments } from "./tailored-documents";
 
 export const metadata: Metadata = { title: "Job" };
 
@@ -49,13 +51,16 @@ function List({ items, empty }: { items: string[]; empty: string }) {
 export default async function JobPage({ params }: { params: Promise<{ id: string }> }) {
   const user = await requireUser();
   const { id } = await params;
-  const [job, profile] = await Promise.all([
+  const [job, profile, generated, settings] = await Promise.all([
     getJob(user.id, id).catch((e) => {
       if (e instanceof NotFoundError) notFound();
       throw e;
     }),
     getFullProfile(user.id),
+    getGeneratedForJob(user.id, id),
+    getUserSettings(user.id),
   ]);
+  const { provider } = resolveProvider({ provider: settings.aiProvider, model: settings.aiModel });
   const breakdown = (Array.isArray(job.matchBreakdown) ? job.matchBreakdown : []) as unknown as MatchBreakdownItem[];
   const analysis = (job.analysis && typeof job.analysis === "object" ? job.analysis : null) as unknown as JobAnalysis | null;
   const qualification = (job.qualification && typeof job.qualification === "object" ? job.qualification : null) as unknown as QualificationResult | null;
@@ -223,6 +228,8 @@ export default async function JobPage({ params }: { params: Promise<{ id: string
               </CardContent>
             </Card>
           )}
+
+          <TailoredDocuments jobId={job.id} generated={generated} ai={{ on: !!provider, model: provider?.model ?? null }} />
 
           <Card>
             <CardHeader>

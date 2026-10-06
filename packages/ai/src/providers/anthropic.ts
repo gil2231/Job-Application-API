@@ -37,7 +37,7 @@ export function createAnthropicProvider(
           ...(request.jsonSchema ? { format: { type: "json_schema" as const, schema: request.jsonSchema } } : {}),
         },
       });
-      if (response.stop_reason === "refusal") throw new Error("The AI provider declined to analyze this job");
+      if (response.stop_reason === "refusal") throw new Error("The AI provider declined the request");
       if (response.stop_reason === "max_tokens") throw new Error("The AI response was cut off");
       const text = response.content.map((block) => (block.type === "text" ? block.text : "")).join("");
       return {

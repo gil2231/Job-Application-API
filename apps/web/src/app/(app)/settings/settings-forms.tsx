@@ -167,17 +167,17 @@ export function AnalysisForm({ settings, anthropicConfigured, defaultModel }: { 
       <FormMessage state={state} />
       <div className="grid gap-4 sm:grid-cols-2">
         <Field
-          label="Analyzer"
+          label="Provider"
           htmlFor="aiProvider"
           error={e.aiProvider}
-          hint={anthropicConfigured ? "AI reads requirements more accurately. The built-in analyzer is used whenever AI is off or fails." : "AI analysis needs ANTHROPIC_API_KEY set on the server. Until then the built-in analyzer is used."}
+          hint={anthropicConfigured ? "The built-in tools are used whenever AI is off or fails." : "AI needs ANTHROPIC_API_KEY set on the server. Until then the built-in tools are used."}
         >
           <Select name="aiProvider" defaultValue={settings.aiProvider ?? "none"}>
             <SelectTrigger id="aiProvider">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="none">Built-in analyzer (no AI)</SelectItem>
+              <SelectItem value="none">Built-in tools (no AI)</SelectItem>
               <SelectItem value="anthropic">Claude (Anthropic)</SelectItem>
             </SelectContent>
           </Select>
@@ -188,7 +188,7 @@ export function AnalysisForm({ settings, anthropicConfigured, defaultModel }: { 
       </div>
       <div className="flex justify-end">
         <SubmitButton pending={pending} size="sm">
-          Save analysis settings
+          Save AI settings
         </SubmitButton>
       </div>
     </form>

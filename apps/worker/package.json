@@ -11,6 +11,7 @@
     "mock-site": "tsx mock-site/cli.ts"
   },
   "dependencies": {
+    "@autoapply/ai": "workspace:*",
     "@autoapply/ats-adapters": "workspace:*",
     "@autoapply/automation": "workspace:*",
     "@autoapply/database": "workspace:*",

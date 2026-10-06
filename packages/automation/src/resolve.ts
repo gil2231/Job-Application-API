@@ -1,14 +1,18 @@
 import { computeYearsOfExperience, deriveAnswerFromProfile, type ProfileFieldKey } from "@autoapply/shared";
 import { HeuristicFieldClassifier, type Classification, type FieldClassifier } from "./classify";
+import { mayDraft, type AnswerDrafter } from "./drafts";
 import type { DetectedField, FieldMapping } from "./fields";
 import { requiresReview } from "./fields";
 import { answerMeansYes, chooseOption, isPlaceholderOption } from "./options";
+import { findSimilarAnswer } from "./similarity";
 
 /**
  * Turns detected form fields into values, using only what the user has told
  * AutoApply: the Master Profile, the Answer Library, and answers they approved
  * for this application. Nothing is invented; a field with no source is left
- * blank (optional) or sent to the user (required).
+ * blank (optional) or sent to the user (required). For a required question with
+ * no saved answer, a similarly worded saved answer or an AI draft built from the
+ * profile may be offered, but only as a suggestion the user must approve.
  */
 
 export interface ProfileFactsForForms {
@@ -63,7 +67,12 @@ export interface ResolverInput {
   /** 0..100 */
   answerConfidenceThreshold: number;
   classifier?: FieldClassifier;
+  /** Drafts suggestions for required questions nothing else answers. Optional. */
+  drafter?: AnswerDrafter;
 }
+
+/** Highest confidence a differently worded saved answer can carry: under the default threshold, so it's a suggestion. */
+export const SIMILAR_ANSWER_MAX_CONFIDENCE = 80;
 
 const LABELS: Partial<Record<ProfileFieldKey, string>> = {
   "masterProfile.firstName": "first name",
@@ -147,10 +156,16 @@ export class FieldResolver {
       return { ...base, mappedField: "unknown", value: null, confidence: 100, source: "user", status: "SKIPPED", autoSubmitAllowed: true };
     }
     const classification = await this.classifier.classify(field);
+    const mappedBy = classification.method ?? "heuristic";
     if (stored?.status === "APPROVED" && stored.answer) {
-      return this.withOption({ ...base, mappedField: classification.mappedField, questionKey: classification.questionKey, value: stored.answer.value, confidence: 100, source: "user", status: "ANSWERED", autoSubmitAllowed: true });
+      return this.withOption({ ...base, mappedField: classification.mappedField, questionKey: classification.questionKey, value: stored.answer.value, confidence: 100, source: "user", status: "ANSWERED", autoSubmitAllowed: true, mappedBy });
     }
 
+    const mapping = await this.route(field, classification);
+    return { ...mapping, mappedBy };
+  }
+
+  private async route(field: DetectedField, classification: Classification): Promise<FieldMapping> {
     switch (classification.mappedField) {
       case "documents.resume":
       case "documents.coverLetter":
@@ -180,10 +195,12 @@ export class FieldResolver {
       if (!field.required) return { ...base, value: null, confidence: c.confidence, source: "none", status: "SKIPPED" };
       return { ...base, value: null, confidence: 0, source: "none", status: "NEEDS_REVIEW", reviewReason: `Your Master Profile has no ${LABELS[c.mappedField] ?? "value for this field"}.` };
     }
-    return this.withOption(this.gate({ ...base, value, confidence: c.confidence, source: "profile", status: "ANSWERED" }, this.input.fieldConfidenceThreshold));
+    const threshold = this.input.fieldConfidenceThreshold;
+    const reviewReason = c.method === "ai" && c.confidence < threshold ? `Filled with your ${LABELS[c.mappedField] ?? "profile value"} at ${c.confidence}% confidence (${c.evidence}), below your ${threshold}% review threshold.` : undefined;
+    return this.withOption(this.gate({ ...base, value, confidence: c.confidence, source: "profile", status: "ANSWERED", reviewReason }, threshold));
   }
 
-  private resolveLibrary(field: DetectedField, c: Classification): FieldMapping {
+  private async resolveLibrary(field: DetectedField, c: Classification): Promise<FieldMapping> {
     const key = field.key ?? "";
     const answer = this.input.library.find((a) => a.questionKey === c.questionKey) ?? this.input.library.find((a) => a.questionKey === key);
     const base = { field, detectedLabel: field.label, mappedField: "answer.library" as const, questionKey: c.questionKey };
@@ -215,16 +232,67 @@ export class FieldResolver {
       );
     }
     if (!field.required) return { ...base, value: null, confidence: c.confidence, source: "none", status: "SKIPPED", autoSubmitAllowed: true };
+    const suggestion = await this.suggest(field, "answer.library", c.questionKey);
+    if (suggestion) return suggestion;
     return { ...base, value: null, confidence: 0, source: "none", status: "NEEDS_REVIEW", reviewReason: "No saved answer for this question. Answer it once and AutoApply can reuse it.", autoSubmitAllowed: false };
   }
 
-  private resolveUnknown(field: DetectedField): FieldMapping {
+  private async resolveUnknown(field: DetectedField): Promise<FieldMapping> {
     const key = field.key ?? "";
     const saved = this.input.library.find((a) => a.questionKey === key);
     if (saved) return this.resolveLibrary(field, { mappedField: "answer.library", confidence: 95, questionKey: saved.questionKey, evidence: "Saved answer" });
     const base = { field, detectedLabel: field.label, mappedField: "unknown" as const, value: null, source: "none" as const, autoSubmitAllowed: false };
     if (!field.required) return { ...base, confidence: 0, status: "SKIPPED", autoSubmitAllowed: true };
+    const suggestion = await this.suggest(field, "unknown");
+    if (suggestion) return suggestion;
     return { ...base, confidence: 0, status: "NEEDS_REVIEW", reviewReason: "AutoApply doesn't recognize this question and won't guess. Answer it to continue." };
+  }
+
+  /**
+   * A suggested answer for a required question with no saved answer: a saved
+   * answer to a similarly worded question, else an AI draft from the profile.
+   * Similar answers are capped below the default threshold; drafts always need
+   * review and never count as approved for unattended submission.
+   */
+  private async suggest(field: DetectedField, mappedField: "answer.library" | "unknown", questionKey?: string): Promise<FieldMapping | null> {
+    const base = { field, detectedLabel: field.label, mappedField, questionKey };
+    const similar = findSimilarAnswer(field.label, this.input.library);
+    if (similar) {
+      const { answer, score } = similar;
+      const confidence = Math.min(SIMILAR_ANSWER_MAX_CONFIDENCE, Math.round(score * 100), answer.confidence);
+      const mapping: FieldMapping = {
+        ...base,
+        mappedField: "answer.library",
+        value: answer.answer,
+        confidence,
+        source: "library",
+        status: "ANSWERED",
+        libraryAnswerId: answer.id,
+        autoSubmitAllowed: answer.autoSubmitAllowed && !answer.requiresHumanReview,
+        reviewReason: `Suggested from your saved answer to "${answer.question}". The wording differs, so check it fits.`,
+      };
+      const gated = this.withOption(this.gate(mapping, this.input.answerConfidenceThreshold));
+      if (gated.status === "ANSWERED") {
+        const { reviewReason: _unused, ...rest } = gated;
+        return answer.requiresHumanReview ? { ...gated, status: "NEEDS_REVIEW" } : rest;
+      }
+      return gated;
+    }
+    if (!this.input.drafter || !mayDraft(field)) return null;
+    const draft = await this.input.drafter.draft(field).catch(() => null);
+    if (!draft || !draft.value.trim()) return null;
+    const mapping = this.withOption({
+      ...base,
+      value: draft.value.trim(),
+      confidence: Math.max(0, Math.min(100, Math.round(draft.confidence))),
+      source: "ai",
+      status: "NEEDS_REVIEW",
+      reviewReason: `AI draft based on ${draft.basis}. Nothing is sent until you approve it.`,
+      autoSubmitAllowed: false,
+    });
+    // An option the draft couldn't be matched to is no suggestion at all.
+    if ((field.kind === "select" || field.kind === "radio") && !(field.options ?? []).includes(String(mapping.value))) return null;
+    return { ...mapping, status: "NEEDS_REVIEW" };
   }
 
   /** Apply the review threshold for this kind of value. */
