@@ -13,6 +13,7 @@ import { ABORT_REASONS, ApplicationEngine } from "./engine";
 import { startHeartbeat } from "./heartbeat";
 import { createProcessor, type ActiveRun } from "./processor";
 import { Scheduler } from "./scheduler";
+import { MailSyncLoop } from "./mail-sync";
 
 /**
  * AutoApply browser worker: claims queued applications, fills them with
@@ -34,6 +35,7 @@ const queue = createApplicationQueue(connection);
 const active = new Map<string, ActiveRun>();
 const engine = new ApplicationEngine({ config, browsers, registry, storage: getStorage(), redis: publisher, workerId });
 const scheduler = new Scheduler(queue, config.schedulerIntervalMs);
+const mailSync = new MailSyncLoop(config.mailSyncIntervalMs);
 
 const worker = new Worker<ApplicationJobData>(QUEUE_NAMES.applications, createProcessor({ engine, queue, config, workerId, active, onSettled: () => void scheduler.wake() }), {
   connection: createRedis(config.redisUrl),
@@ -56,6 +58,7 @@ subscriber.on("message", (_channel, raw) => {
 
 const heartbeat = startHeartbeat(publisher, { adapters: () => registry.list().map((a) => a.platform), activeJobs: () => active.size, interactive: () => browsers.interactive });
 scheduler.start();
+mailSync.start();
 console.warn(
   `[worker] ${workerId} running: concurrency ${config.concurrency}, ${config.headless ? "headless" : "visible"} browser, ` +
     (config.allowAllHosts ? "all public sites allowed" : `sites limited to ${config.allowedHosts.join(", ")}`),
@@ -67,6 +70,7 @@ async function shutdown(signal: string) {
   shuttingDown = true;
   console.warn(`[worker] ${signal} received; returning running applications to the queue`);
   scheduler.stop();
+  await mailSync.stop().catch(() => undefined);
   for (const run of active.values()) run.controller.abort(ABORT_REASONS.shutdown);
   await worker.close().catch(() => undefined);
   await heartbeat.stop().catch(() => undefined);

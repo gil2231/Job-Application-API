@@ -2,7 +2,7 @@
 
 import { startTransition, useActionState, useEffect, useState } from "react";
 import { format } from "date-fns";
-import { CalendarClock, CalendarPlus, Check, ExternalLink, MoreHorizontal, Pencil, Trash2, Users, X } from "lucide-react";
+import { CalendarCheck, CalendarClock, CalendarPlus, Check, ExternalLink, MoreHorizontal, Pencil, Trash2, Users, X } from "lucide-react";
 import { toast } from "sonner";
 import type { InterviewRound } from "@autoapply/database";
 import { enumLabel, INTERVIEW_KINDS, INTERVIEW_STATUSES, type InterviewKind, type InterviewStatus } from "@autoapply/shared";
@@ -46,7 +46,17 @@ const KIND_LABEL: Record<InterviewKind, string> = {
 
 const STATUS_VARIANT: Record<InterviewStatus, "info" | "success" | "muted"> = { SCHEDULED: "info", COMPLETED: "success", CANCELLED: "muted" };
 
-type Round = Pick<InterviewRound, "id" | "kind" | "title" | "scheduledAt" | "durationMinutes" | "location" | "interviewers" | "notes" | "status">;
+type Round = Pick<InterviewRound, "id" | "kind" | "title" | "scheduledAt" | "durationMinutes" | "location" | "interviewers" | "notes" | "status"> &
+  Partial<Pick<InterviewRound, "fromInvite" | "calendarEventId" | "calendarError">>;
+
+/** Where the round stands on the user's calendar, when email and calendar sync is on. */
+function CalendarNote({ round }: { round: Round }) {
+  if (round.status !== "SCHEDULED") return null;
+  if (round.fromInvite) return <span className="inline-flex items-center gap-1" data-testid="calendar-note"><CalendarCheck className="size-3.5" /> On your calendar from the invite</span>;
+  if (round.calendarEventId) return <span className="inline-flex items-center gap-1" data-testid="calendar-note"><CalendarCheck className="size-3.5" /> On your calendar</span>;
+  if (round.calendarError) return <span className="text-destructive inline-flex items-center gap-1" title={round.calendarError} data-testid="calendar-note">Couldn&apos;t add to your calendar</span>;
+  return null;
+}
 
 export function InterviewsCard({ applicationId, rounds, canAdd }: { applicationId: string; rounds: Round[]; canAdd: boolean }) {
   const [editing, setEditing] = useState<Round | "new" | null>(null);
@@ -96,6 +106,7 @@ export function InterviewsCard({ applicationId, rounds, canAdd }: { applicationI
                             <Users className="size-3.5" /> {r.interviewers}
                           </span>
                         )}
+                        <CalendarNote round={r} />
                       </p>
                     </div>
                     <div className="flex shrink-0 items-center gap-1">

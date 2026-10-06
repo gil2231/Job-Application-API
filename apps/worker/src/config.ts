@@ -14,6 +14,8 @@ export interface WorkerConfig {
   allowAllHosts: boolean;
   chromiumExecutable?: string;
   navigationTimeoutMs: number;
+  /** How often each connected Gmail or Outlook account is synced. 0 turns email sync off in this worker. */
+  mailSyncIntervalMs: number;
 }
 
 const bool = (v: string | undefined, fallback: boolean) => (v == null || v === "" ? fallback : /^(1|true|yes|on)$/i.test(v));
@@ -37,5 +39,6 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): WorkerConfig {
     allowAllHosts: bool(env.AUTOMATION_ALLOW_ALL_HOSTS, false),
     chromiumExecutable: env.PLAYWRIGHT_CHROMIUM_EXECUTABLE || undefined,
     navigationTimeoutMs: int(env.WORKER_NAVIGATION_TIMEOUT_MS, 30_000, 1000),
+    mailSyncIntervalMs: int(env.MAIL_SYNC_INTERVAL_MS, 10 * 60_000, 0),
   };
 }

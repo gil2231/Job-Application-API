@@ -379,6 +379,10 @@ export async function deleteInterviewRound(userId: string, roundId: string) {
     prisma.applicationEvent.create({
       data: { applicationId: existing.applicationId, userId, type: "INTERVIEW_UPDATED", message: `Interview removed: ${roundName(existing)}`, data: { roundId } },
     }),
+    // The calendar sync deletes the event Applyance put on the user's calendar.
+    ...(existing.calendarEventId && existing.calendarConnectionId
+      ? [prisma.calendarEventRemoval.create({ data: { connectionId: existing.calendarConnectionId, eventId: existing.calendarEventId } })]
+      : []),
   ]);
   return existing;
 }
@@ -405,6 +409,8 @@ export async function getUpcomingInterviews(userId: string, options: { now?: Dat
 
 export type StageSignalResult =
   | { result: "applied"; applicationId: string; from: TrackerStage; to: TrackerStage }
+  | { result: "interview_added"; applicationId: string; roundId: string }
+  | { result: "no_change"; applicationId: string }
   | { result: "suggested"; applicationId: string; reason: "low_confidence" | "not_forward" }
   | { result: "duplicate"; applicationId: string }
   | { result: "unmatched" }
@@ -426,7 +432,51 @@ function isForward(from: TrackerStage, to: PostSubmitStage) {
  * timeline for the user to act on, so an integration can never silently
  * overwrite what the user set.
  */
-export async function recordStageSignal(userId: string, providerId: string, signal: StageSignal, options: { minConfidence?: number } = {}): Promise<StageSignalResult> {
+export interface StageSignalOptions {
+  /** Below this confidence (0-100) the signal is only suggested. 101 suggests everything. */
+  minConfidence?: number;
+  /**
+   * Ignore signals that point at the application's current stage or one it is
+   * already past (a scheduling email while Interviewing), instead of leaving a
+   * note. Email sync sets this; a closed application is never reopened either way.
+   */
+  quietWhenNotForward?: boolean;
+}
+
+/** Add an interview round from a signal, unless one is already scheduled at that time. */
+async function addSignalInterview(tx: Prisma.TransactionClient, userId: string, applicationId: string, providerId: string, signal: StageSignal) {
+  const interview = signal.interview!;
+  if (interview.scheduledAt) {
+    const existing = await tx.interviewRound.findFirst({ where: { applicationId, userId, scheduledAt: interview.scheduledAt }, select: { id: true } });
+    if (existing) return null;
+  }
+  const kind = interview.kind && (INTERVIEW_KINDS as readonly string[]).includes(interview.kind) ? interview.kind : "OTHER";
+  const evidence = signal.evidence.slice(0, 300);
+  const round = await tx.interviewRound.create({
+    data: {
+      applicationId,
+      userId,
+      kind,
+      scheduledAt: interview.scheduledAt ?? null,
+      durationMinutes: interview.durationMinutes ?? null,
+      location: interview.location?.slice(0, 500) ?? null,
+      fromInvite: interview.fromInvite ?? false,
+      notes: `Added from ${providerId}: ${evidence}`,
+    },
+  });
+  await tx.applicationEvent.create({
+    data: {
+      applicationId,
+      userId,
+      type: "INTERVIEW_SCHEDULED",
+      message: `Interview added: ${roundName(round)} (from ${providerId})`,
+      data: { roundId: round.id, source: "integration", provider: providerId, externalId: `${providerId}:${signal.externalId}`, scheduledAt: round.scheduledAt?.toISOString() ?? null },
+    },
+  });
+  return round;
+}
+
+export async function recordStageSignal(userId: string, providerId: string, signal: StageSignal, options: StageSignalOptions = {}): Promise<StageSignalResult> {
   const minConfidence = options.minConfidence ?? 90;
   const sent = { userId, status: { in: [...SENT_STATUSES] } };
   let candidates: Array<{ id: string }>;
@@ -457,7 +507,21 @@ export async function recordStageSignal(userId: string, providerId: string, sign
   const externalId = `${providerId}:${signal.externalId}`;
   const evidence = signal.evidence.slice(0, 300);
 
-  if (signal.confidence < minConfidence || !isForward(from, signal.stage)) {
+  const confident = signal.confidence >= minConfidence;
+  const forward = isForward(from, signal.stage);
+
+  // A new round for an application that is already interviewing.
+  if (confident && !forward && from === "INTERVIEWING" && signal.stage === "INTERVIEWING" && signal.interview) {
+    const round = await prisma.$transaction((tx) => addSignalInterview(tx, userId, applicationId, providerId, signal));
+    return round ? { result: "interview_added", applicationId, roundId: round.id } : { result: "no_change", applicationId };
+  }
+  if (!forward && options.quietWhenNotForward) {
+    const closed = (CLOSED_STAGES as readonly string[]).includes(from);
+    const behind = progressRank(signal.stage) >= 0 && progressRank(signal.stage) <= progressRank(from);
+    if (closed || behind || signal.stage === from) return { result: "no_change", applicationId };
+  }
+
+  if (!confident || !forward) {
     await prisma.applicationEvent.create({
       data: {
         applicationId,
@@ -467,26 +531,18 @@ export async function recordStageSignal(userId: string, providerId: string, sign
         data: { externalId, suggestedStage: signal.stage, confidence: signal.confidence, source: "integration", provider: providerId },
       },
     });
-    return { result: "suggested", applicationId, reason: signal.confidence < minConfidence ? "low_confidence" : "not_forward" };
+    return { result: "suggested", applicationId, reason: confident ? "not_forward" : "low_confidence" };
   }
 
   await prisma.$transaction(async (tx) => {
     await applySentMove(tx, userId, app, signal.stage, { source: "integration", provider: providerId, at: signal.occurredAt, note: evidence, data: { externalId, confidence: signal.confidence } }, false);
-    if (signal.interview) {
-      const kind = signal.interview.kind && (INTERVIEW_KINDS as readonly string[]).includes(signal.interview.kind) ? signal.interview.kind : "OTHER";
-      const round = await tx.interviewRound.create({
-        data: { applicationId, userId, kind, scheduledAt: signal.interview.scheduledAt ?? null, location: signal.interview.location?.slice(0, 500) ?? null, notes: `Added from ${providerId}: ${evidence}` },
-      });
-      await tx.applicationEvent.create({
-        data: { applicationId, userId, type: "INTERVIEW_SCHEDULED", message: `Interview added: ${roundName(round)} (from ${providerId})`, data: { roundId: round.id, source: "integration", provider: providerId } },
-      });
-    }
+    if (signal.interview && signal.stage === "INTERVIEWING") await addSignalInterview(tx, userId, applicationId, providerId, signal);
   });
   return { result: "applied", applicationId, from, to: signal.stage };
 }
 
 /** Pull one provider's signals for a user and record each. */
-export async function syncStageSignals(provider: StageSignalProvider, userId: string, since: Date, options: { minConfidence?: number } = {}) {
+export async function syncStageSignals(provider: StageSignalProvider, userId: string, since: Date, options: StageSignalOptions = {}) {
   const signals = await provider.fetchSignals(userId, since);
   const results: StageSignalResult[] = [];
   for (const signal of signals) results.push(await recordStageSignal(userId, provider.id, signal, options));

@@ -278,6 +278,8 @@ model User {
   browserSessions BrowserSession[]
   automationRule  AutomationRule?
   settings        UserSetting?
+  mailConnections MailConnection[]
+  emailMessages   EmailMessage[]
 }
 
 /// Server-side session. Only a SHA-256 hash of the cookie token is stored.
@@ -338,11 +340,11 @@ model MasterProfile {
   githubUrl     String?
 
   // Professional
-  currentTitle    String?
-  targetTitles    String[]
-  summary         String?
-  industries      String[]
-  yearsExperience Decimal? @db.Decimal(4, 1)
+  currentTitle           String?
+  targetTitles           String[]
+  summary                String?
+  industries             String[]
+  yearsExperience        Decimal? @db.Decimal(4, 1)
   /// Keywords the user wants jobs recommended by (Recommended page).
   recommendationKeywords String[]
 
@@ -569,7 +571,7 @@ model JobImport {
 }
 
 model Job {
-  id             String          @id @default(cuid())
+  id             String        @id @default(cuid())
   userId         String
   sourceId       String?
   importId       String?
@@ -585,10 +587,10 @@ model Job {
   location       String?
   description    String?
   postedAt       DateTime?
-  savedAt        DateTime        @default(now())
-  easyApply      Boolean         @default(false)
-  platform       Platform        @default(UNKNOWN)
-  status         JobStatus       @default(IMPORTED)
+  savedAt        DateTime      @default(now())
+  easyApply      Boolean       @default(false)
+  platform       Platform      @default(UNKNOWN)
+  status         JobStatus     @default(IMPORTED)
 
   // Analysis (populated by the analysis pipeline)
   department              String?
@@ -700,6 +702,7 @@ model Application {
   events      ApplicationEvent[]
   attempts    ApplicationAttempt[]
   interviews  InterviewRound[]
+  emails      EmailMessage[]
 
   @@index([userId, status, priority, queuedAt])
   @@index([userId, status, outcome])
@@ -740,17 +743,17 @@ model ApplicationQuestion {
 
 /// The value actually used for one question on one application.
 model ApplicationAnswerInstance {
-  id                  String       @id @default(cuid())
-  questionId          String       @unique
-  libraryAnswerId     String?
+  id              String       @id @default(cuid())
+  questionId      String       @unique
+  libraryAnswerId String?
   /// Encrypted (prefix "enc:v1:") when the source answer is sensitive.
-  value               String
-  source              AnswerSource
-  confidence          Int
-  approvedByUser      Boolean      @default(false)
-  approvedAt          DateTime?
-  createdAt           DateTime     @default(now())
-  updatedAt           DateTime     @updatedAt
+  value           String
+  source          AnswerSource
+  confidence      Int
+  approvedByUser  Boolean      @default(false)
+  approvedAt      DateTime?
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
 
   question      ApplicationQuestion @relation(fields: [questionId], references: [id], onDelete: Cascade)
   libraryAnswer ApplicationAnswer?  @relation(fields: [libraryAnswerId], references: [id], onDelete: SetNull)
@@ -778,23 +781,33 @@ model ApplicationEvent {
 
 /// One interview round on an application (Flightpath).
 model InterviewRound {
-  id              String          @id @default(cuid())
-  applicationId   String
-  userId          String
-  kind            InterviewKind   @default(OTHER)
-  title           String?
-  scheduledAt     DateTime?
-  durationMinutes Int?
+  id                   String          @id @default(cuid())
+  applicationId        String
+  userId               String
+  kind                 InterviewKind   @default(OTHER)
+  title                String?
+  scheduledAt          DateTime?
+  durationMinutes      Int?
   /// Address or meeting link.
-  location        String?
-  interviewers    String?
-  notes           String?
-  status          InterviewStatus @default(SCHEDULED)
-  createdAt       DateTime        @default(now())
-  updatedAt       DateTime        @updatedAt
+  location             String?
+  interviewers         String?
+  notes                String?
+  status               InterviewStatus @default(SCHEDULED)
+  /// Came with a calendar invite in the user's email, so it is already on their calendar.
+  fromInvite           Boolean         @default(false)
+  /// The event Applyance put on the user's calendar for this round.
+  calendarConnectionId String?
+  calendarEventId      String?
+  /// Hash of what was last written to the calendar; a change means the event needs updating.
+  calendarHash         String?
+  calendarSyncedAt     DateTime?
+  calendarError        String?
+  createdAt            DateTime        @default(now())
+  updatedAt            DateTime        @updatedAt
 
-  application Application @relation(fields: [applicationId], references: [id], onDelete: Cascade)
-  user        User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  application        Application     @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+  user               User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  calendarConnection MailConnection? @relation(fields: [calendarConnectionId], references: [id], onDelete: SetNull)
 
   @@index([applicationId, scheduledAt])
   @@index([userId, status, scheduledAt])
@@ -890,4 +903,128 @@ model UserSetting {
   updatedAt                 DateTime @updatedAt
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+// ─── Email and calendar sync ─────────────────────────────────────────────────
+
+enum MailProvider {
+  GOOGLE
+  MICROSOFT
+}
+
+enum MailConnectionStatus {
+  ACTIVE
+  /// The provider refused the saved sign-in (revoked, expired or password changed).
+  NEEDS_RECONNECT
+}
+
+/// What a job-related email says.
+enum EmailKind {
+  CONFIRMATION
+  RESPONSE
+  INTERVIEW
+  OFFER
+  REJECTION
+}
+
+/// What Applyance did with a job-related email.
+enum EmailOutcome {
+  /// The application moved stage.
+  MOVED
+  /// An interview round was added to an application already interviewing.
+  INTERVIEW_ADDED
+  /// Left as a note on the application for the user to act on.
+  SUGGESTED
+  /// Nothing to change (for example an application-received email).
+  NO_CHANGE
+  /// No sent application matched.
+  UNMATCHED
+  /// More than one application could match.
+  AMBIGUOUS
+  /// The user dismissed it.
+  DISMISSED
+}
+
+/// A user's Gmail or Outlook account. Tokens are encrypted (enc:v1).
+model MailConnection {
+  id              String               @id @default(cuid())
+  userId          String
+  provider        MailProvider
+  email           String
+  accessToken     String
+  refreshToken    String?
+  tokenExpiresAt  DateTime?
+  scopes          String[]
+  status          MailConnectionStatus @default(ACTIVE)
+  /// Read job-related email and update Flightpath.
+  readEmail       Boolean              @default(true)
+  /// Apply confident forward moves; when off every update is left as a suggestion.
+  autoUpdate      Boolean              @default(true)
+  /// Put interview rounds on this account's calendar. At most one connection per user has it on.
+  calendarSync    Boolean              @default(false)
+  /// When the last sync finished (successful or not); the worker schedules from it.
+  lastSyncedAt    DateTime?
+  /// Email has been read up to here. Only a successful email sync moves it.
+  syncedThrough   DateTime?
+  lastError       String?
+  /// Sync lease, so the worker and a "Sync now" click never run together.
+  syncLockedUntil DateTime?
+  createdAt       DateTime             @default(now())
+  updatedAt       DateTime             @updatedAt
+
+  user             User                   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  messages         EmailMessage[]
+  calendarRounds   InterviewRound[]
+  calendarRemovals CalendarEventRemoval[]
+
+  @@unique([userId, provider])
+  @@index([status, readEmail, lastSyncedAt])
+}
+
+/// A job-related email Applyance read. Only the sender, subject and a short
+/// snippet are kept; other email is never stored.
+model EmailMessage {
+  id            String       @id @default(cuid())
+  userId        String
+  connectionId  String
+  /// The provider's message id.
+  externalId    String
+  threadId      String?
+  fromName      String?
+  fromAddress   String
+  subject       String
+  snippet       String
+  receivedAt    DateTime
+  kind          EmailKind
+  /// Flightpath stage the email points to.
+  stage         String?
+  confidence    Int
+  outcome       EmailOutcome
+  applicationId String?
+  /// { scheduledAt, location, kind, durationMinutes } when it is an interview invite.
+  interview     Json?
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
+
+  user        User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  connection  MailConnection @relation(fields: [connectionId], references: [id], onDelete: Cascade)
+  application Application?   @relation(fields: [applicationId], references: [id], onDelete: SetNull)
+
+  @@unique([connectionId, externalId])
+  @@index([userId, receivedAt])
+  @@index([userId, outcome])
+  @@index([connectionId, threadId])
+}
+
+/// A calendar event to delete because its interview round was deleted.
+model CalendarEventRemoval {
+  id           String   @id @default(cuid())
+  connectionId String
+  eventId      String
+  attempts     Int      @default(0)
+  createdAt    DateTime @default(now())
+
+  connection MailConnection @relation(fields: [connectionId], references: [id], onDelete: Cascade)
+
+  @@index([connectionId])
 }

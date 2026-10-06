@@ -1,13 +1,16 @@
+import { Suspense } from "react";
 import type { Metadata } from "next";
 import { FileSpreadsheet, Globe, Link2, Sparkles } from "lucide-react";
-import { getUserSettings, listJobImports, listJobSources } from "@autoapply/database";
+import { getUserSettings, listJobImports, listJobSources, listMailConnections, countEmailsToReview } from "@autoapply/database";
 import { createJobAnalyzer } from "@autoapply/ai";
 import Link from "next/link";
 import { AUTOMATED_PLATFORMS } from "@autoapply/ats-adapters";
 import { enumLabel, PLATFORMS, type Platform } from "@autoapply/shared";
 import { requireUser } from "@/lib/auth";
 import { formatRelative } from "@/lib/format";
+import { mailProviderSetup } from "@/lib/mail";
 import { getWorkerStatus } from "@/lib/worker-status";
+import { MailConnectNotice, MailConnections } from "./mail-connections";
 import { PageHeader } from "@/components/page-header";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -27,13 +30,35 @@ const PLATFORM_NOTES: Partial<Record<Platform, string>> = {
 
 export default async function IntegrationsPage() {
   const user = await requireUser();
-  const [sources, worker, imports, settings] = await Promise.all([listJobSources(user.id), getWorkerStatus(), listJobImports(user.id, 10), getUserSettings(user.id)]);
+  const [sources, worker, imports, settings, mail, toReview] = await Promise.all([
+    listJobSources(user.id),
+    getWorkerStatus(),
+    listJobImports(user.id, 10),
+    getUserSettings(user.id),
+    listMailConnections(user.id),
+    countEmailsToReview(user.id),
+  ]);
   const analyzer = createJobAnalyzer({ provider: settings.aiProvider, model: settings.aiModel }).info;
   const installed = new Set(worker.state === "online" ? worker.heartbeat.adapters : []);
 
   return (
     <div className="grid gap-5">
-      <PageHeader title="Integrations" description="Where jobs come from, and which application platforms AutoApply can work with." />
+      <PageHeader title="Integrations" description="Where jobs come from, your email and calendar, and which application platforms Applyance can work with." />
+      <Suspense>
+        <MailConnectNotice />
+      </Suspense>
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-sm">Email and calendar</CardTitle>
+          <CardDescription>
+            Connect Gmail or Outlook and Applyance keeps Flightpath up to date from employers&apos; replies: rejections, interview invites and offers. It only opens emails that mention a company
+            you applied to or come from a hiring system, and keeps just the sender, subject and a short preview. Interviews can go on your calendar too.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <MailConnections connections={mail} setup={mailProviderSetup()} toReview={toReview} />
+        </CardContent>
+      </Card>
       <Card>
         <CardHeader>
           <CardTitle className="text-sm">Job sources</CardTitle>
