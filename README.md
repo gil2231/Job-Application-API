@@ -142,6 +142,19 @@ Stages aren't stored separately: Flightpath derives them from the application's 
 
 The REST API exposes the same operations: `GET /v1/tracker/board`, `GET /v1/tracker/applications`, `PATCH /v1/applications/:id/stage`, and interview rounds under `/v1/applications/:id/interviews` and `/v1/interviews/:id`.
 
+## Admin panel
+
+`/admin` is for the owner of the Applyance service. It shows every user (when they joined, when they were last active, their jobs, submitted and failed applications), failures grouped by cause and by site, applications that have waited on their user for more than 3 days, and whether the worker is running. It never shows anyone's Master Profile, resumes, cover letters, answers, salary or work authorization. Plans and payments appear once billing is connected.
+
+Only admins see it; everyone else gets a 404. Roles can't be changed from inside the app. Sign up with your email first, then run this against the database you want (your `.env`, or set `DATABASE_URL` for production):
+
+```bash
+pnpm admin:grant you@example.com     # make an account an admin
+pnpm admin:revoke you@example.com    # take it away
+```
+
+Reload the app and **Admin** appears at the bottom of the sidebar. Each time an admin opens a user's page, it's written to the audit log.
+
 ## Checks
 
 ```bash
