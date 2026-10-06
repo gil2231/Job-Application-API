@@ -16,7 +16,9 @@
     "studio": "prisma studio",
     "typecheck": "tsc -p tsconfig.json",
     "test": "vitest run",
-    "postinstall": "prisma generate"
+    "postinstall": "prisma generate",
+    "admin:grant": "tsx scripts/admin-role.ts grant",
+    "admin:revoke": "tsx scripts/admin-role.ts revoke"
   },
   "dependencies": {
     "@autoapply/shared": "workspace:*",

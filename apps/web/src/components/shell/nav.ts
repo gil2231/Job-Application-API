@@ -8,6 +8,7 @@ import {
   Plug,
   Send,
   Settings,
+  ShieldCheck,
   SlidersHorizontal,
   Sparkles,
   UserRound,
@@ -21,6 +22,8 @@ export interface NavItem {
   shortLabel?: string;
   icon: LucideIcon;
   badgeKey?: "attention";
+  /** Only shown to admins (the pages themselves also check). */
+  adminOnly?: boolean;
 }
 
 export const NAV_ITEMS: NavItem[] = [
@@ -36,6 +39,7 @@ export const NAV_ITEMS: NavItem[] = [
   { href: "/rules", label: "Rules", icon: SlidersHorizontal },
   { href: "/integrations", label: "Integrations", icon: Plug },
   { href: "/settings", label: "Settings", icon: Settings },
+  { href: "/admin", label: "Admin", icon: ShieldCheck, adminOnly: true },
 ];
 
 /** The pages in the phone tab bar; everything else is under More. */

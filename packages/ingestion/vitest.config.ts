@@ -18,6 +18,7 @@ export default defineConfig({
       // Analysis must be deterministic in tests, whatever the developer's environment has.
       AI_PROVIDER: "none",
       ANTHROPIC_API_KEY: "",
+      OPENAI_API_KEY: "",
     },
     testTimeout: 20_000,
   },
