@@ -19,6 +19,8 @@ const pairs: Array<[string, Record<string, string>, readonly string[]]> = [
   ["JobSourceType", $Enums.JobSourceType, shared.JOB_SOURCE_TYPES],
   ["ApplicationEventType", $Enums.ApplicationEventType, shared.APPLICATION_EVENT_TYPES],
   ["EventLevel", $Enums.EventLevel, shared.EVENT_LEVELS],
+  ["InterviewKind", $Enums.InterviewKind, shared.INTERVIEW_KINDS],
+  ["InterviewStatus", $Enums.InterviewStatus, shared.INTERVIEW_STATUSES],
 ];
 
 describe("shared enums mirror the Prisma schema", () => {

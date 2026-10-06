@@ -14,7 +14,7 @@ AutoApply imports the jobs you've saved, scores them against your Master Profile
 ```
 apps/
   web/        Next.js 16 dashboard (App Router, server actions, SSE live updates)
-  api/        Fastify REST API (/v1/me, /v1/dashboard, /v1/jobs, /v1/applications)
+  api/        Fastify REST API (/v1/me, /v1/dashboard, /v1/jobs, /v1/applications, /v1/tracker)
   worker/     Playwright/BullMQ worker that fills applications, plus mock application pages for tests
 packages/
   database/   Prisma schema, migrations, repositories (all queries are scoped to the user)
@@ -62,6 +62,8 @@ Jobs come in four ways, all from the Jobs page:
 - **Search job boards** finds open jobs by keyword on the companies' boards you list (Greenhouse, Lever and Ashby links such as `boards.greenhouse.io/acme`, `jobs.lever.co/acme` or `jobs.ashbyhq.com/acme`, up to 25 per search). It reads the public job board APIs those platforms publish for anyone; none of them offers a cross-company search, so you choose the companies. Keywords match job titles (optionally descriptions too), `"quotes"` match a phrase, and `-word` skips postings that mention it anywhere. You pick which results to add. The last search is remembered.
 
 Duplicates are skipped by canonical URL (including the LinkedIn job id) and by company and title. Jobs you deleted, applied to or skipped are never re-added. Each import is listed on the Integrations page.
+
+**Recommended** lists the saved jobs that mention the keywords you set there (roles, industries, skills), ranked half by how many keywords they mention (title hits count double) and half by match score. Jobs that broke one of your rules are left out. **Find more on job boards** opens a board search for any of your keywords.
 
 The search box on the Jobs page looks in titles, companies, locations and descriptions, with the same `"phrase"` and `-word` syntax.
 
@@ -122,6 +124,24 @@ Adding an ATS is one class that describes the site (its buttons, where questions
 | `AUTOMATION_ALLOW_ALL_HOSTS` | `false` | Allow public employer sites |
 | `PLAYWRIGHT_CHROMIUM_EXECUTABLE` | | Chromium to launch, if not Playwright's own |
 
+## Flightpath: tracking every application
+
+**Flightpath** (in the sidebar) follows each application from the queue to the final answer, as a board or a table:
+
+Queued → Processing → Needs you / Failed → **Submitted** → Responded → Interviewing → Offer → Accepted, Rejected or Withdrawn
+
+- Up to Submitted, the automation moves applications. After that you do: drag a card to another column, or use its **Move to** menu (also on the table and on the application page). Moving a card back corrects a mistake, and the dashboard funnel follows.
+- Moving an application that wasn't sent yet past Submitted means you applied yourself. You're asked to confirm, and automation stops for it. Failed cards can be dropped on Queued to retry, and skipped ones queued again from the table.
+- Every move is recorded on the application's timeline and activity log.
+- On an application's page, **Add interview** records each round (type, date and time in your time zone, length, link or address, interviewers, notes). The first round moves the application to Interviewing, and scheduled rounds show on the board, the table and the dashboard.
+- The dashboard's stage counts, funnel, response, interview and offer rates, days to first reply, and upcoming interviews come from the same stages and update live.
+
+Stages aren't stored separately: Flightpath derives them from the application's automation status and the outcome you set (`packages/shared/src/tracker.ts`), so the worker and the board always agree. Each application also keeps the first time it reached Responded, Interviewing and Offer, which is what the funnel and rates count.
+
+**Email and other integrations.** Replies can't be read yet, so post-submit stages are set by you. An integration plugs in by implementing `StageSignalProvider` (`packages/shared/src/tracker.ts`) and handing its signals to `recordStageSignal` (`packages/database`). That matches the signal to one sent application, applies it only when the provider is confident and the move is forward, ignores repeats, and otherwise leaves a note on the timeline for you to act on, so an integration never overwrites what you set.
+
+The REST API exposes the same operations: `GET /v1/tracker/board`, `GET /v1/tracker/applications`, `PATCH /v1/applications/:id/stage`, and interview rounds under `/v1/applications/:id/interviews` and `/v1/interviews/:id`.
+
 ## Checks
 
 ```bash
@@ -149,3 +169,4 @@ pnpm test:e2e    # Playwright browser tests against the dev server, then with th
 | 4 | ATS adapters (Workday, Greenhouse, Lever, Ashby, SmartRecruiters) and platform detection | Done |
 | 5 | AI field mapping, answer drafting, resume/cover-letter generation | Done |
 | 6 | Analytics, retries, real-time hardening | Next |
+| — | Flightpath application tracker: stages after submission, interview rounds, board and table, dashboard metrics | Done |

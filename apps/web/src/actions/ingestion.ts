@@ -167,7 +167,7 @@ export async function searchJobBoardsAction(input: BoardSearchFormInput): Promis
     const limit = rateLimit(`board-search:${user.id}`, LIMITS.boardSearch.limit, LIMITS.boardSearch.windowMs);
     if (!limit.allowed) return { ok: false, message: `Search limit reached. Try again in ${Math.ceil(limit.retryAfterSeconds / 60)} minutes.` };
 
-    const search = { boards: read.boards, query: parsed.data.query, location: parsed.data.location ?? null, searchDescriptions: parsed.data.searchDescriptions };
+    const search = { boards: read.boards, query: parsed.data.query, location: parsed.data.location ?? null, searchDescriptions: parsed.data.searchDescriptions, matchAny: parsed.data.matchAny };
     let result;
     try {
       result = await searchJobBoards(search);
@@ -175,7 +175,7 @@ export async function searchJobBoardsAction(input: BoardSearchFormInput): Promis
       if (error instanceof BoardSearchError) return { ok: false, message: error.message };
       throw error;
     }
-    await saveBoardSearch(user.id, { boards: read.boards.map(boardUrl), query: search.query, location: search.location, searchDescriptions: search.searchDescriptions });
+    await saveBoardSearch(user.id, { boards: read.boards.map(boardUrl), query: search.query, location: search.location, searchDescriptions: search.searchDescriptions, matchAny: search.matchAny });
 
     const canonical = result.jobs.map((j) => canonicalizeJobUrl(j.url));
     const known = await findKnownJobUrls(user.id, canonical);
@@ -228,6 +228,7 @@ export async function importBoardJobsAction(input: BoardSearchFormInput & { urls
         query: parsed.data.query,
         location: parsed.data.location ?? null,
         searchDescriptions: parsed.data.searchDescriptions,
+        matchAny: parsed.data.matchAny,
         onlyUrls: parsed.data.urls,
       });
     } catch (error) {

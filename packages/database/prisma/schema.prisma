@@ -41,12 +41,35 @@ enum ApplicationStatus {
   SKIPPED
 }
 
+/// What happened after submission, set by the user. Maps to the Flightpath
+/// stages after Submitted (see packages/shared/src/tracker.ts).
 enum ApplicationOutcome {
   NONE
   RESPONDED
   INTERVIEW
   OFFER
+  ACCEPTED
   DECLINED
+  WITHDRAWN
+}
+
+enum InterviewKind {
+  PHONE_SCREEN
+  RECRUITER
+  HIRING_MANAGER
+  TECHNICAL
+  BEHAVIORAL
+  CASE_STUDY
+  PANEL
+  ONSITE
+  FINAL
+  OTHER
+}
+
+enum InterviewStatus {
+  SCHEDULED
+  COMPLETED
+  CANCELLED
 }
 
 enum AutomationMode {
@@ -176,6 +199,9 @@ enum ApplicationEventType {
   STATUS_CHANGED
   OUTCOME_UPDATED
   NOTE
+  STAGE_CHANGED
+  INTERVIEW_SCHEDULED
+  INTERVIEW_UPDATED
 }
 
 enum EventLevel {
@@ -248,6 +274,7 @@ model User {
   jobs            Job[]
   applications    Application[]
   events          ApplicationEvent[]
+  interviewRounds InterviewRound[]
   browserSessions BrowserSession[]
   automationRule  AutomationRule?
   settings        UserSetting?
@@ -316,6 +343,8 @@ model MasterProfile {
   summary         String?
   industries      String[]
   yearsExperience Decimal? @db.Decimal(4, 1)
+  /// Keywords the user wants jobs recommended by (Recommended page).
+  recommendationKeywords String[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -647,6 +676,15 @@ model Application {
   lockedUntil        DateTime?
   outcome            ApplicationOutcome @default(NONE)
   outcomeAt          DateTime?
+  /// Flightpath: when the application last changed stage (null until the user moves it).
+  stageChangedAt     DateTime?
+  /// Flightpath milestones: first time each stage was reached. Moving back
+  /// (correcting a mistake) clears the milestones past the new stage.
+  respondedAt        DateTime?
+  interviewingAt     DateTime?
+  offerAt            DateTime?
+  /// Set when the application reaches Accepted, Rejected or Withdrawn.
+  closedAt           DateTime?
   queuedAt           DateTime           @default(now())
   startedAt          DateTime?
   submittedAt        DateTime?
@@ -661,8 +699,10 @@ model Application {
   questions   ApplicationQuestion[]
   events      ApplicationEvent[]
   attempts    ApplicationAttempt[]
+  interviews  InterviewRound[]
 
   @@index([userId, status, priority, queuedAt])
+  @@index([userId, status, outcome])
   @@index([userId, submittedAt])
   @@index([userId, updatedAt])
   @@index([status, nextAttemptAt])
@@ -734,6 +774,30 @@ model ApplicationEvent {
 
   @@index([applicationId, createdAt])
   @@index([userId, createdAt])
+}
+
+/// One interview round on an application (Flightpath).
+model InterviewRound {
+  id              String          @id @default(cuid())
+  applicationId   String
+  userId          String
+  kind            InterviewKind   @default(OTHER)
+  title           String?
+  scheduledAt     DateTime?
+  durationMinutes Int?
+  /// Address or meeting link.
+  location        String?
+  interviewers    String?
+  notes           String?
+  status          InterviewStatus @default(SCHEDULED)
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+
+  application Application @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+  user        User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([applicationId, scheduledAt])
+  @@index([userId, status, scheduledAt])
 }
 
 /// One run of the worker against an application. Retries create new attempts.
