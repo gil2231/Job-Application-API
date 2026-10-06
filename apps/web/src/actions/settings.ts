@@ -11,6 +11,7 @@ import {
   updateUserName,
 } from "@autoapply/database";
 import { automationRuleSchema, changePasswordSchema, MATCH_DIMENSIONS, userSettingsSchema } from "@autoapply/shared";
+import { rescoreJobs } from "@autoapply/ingestion";
 import { authedAction, formToObject, validationFailed, type ActionResult } from "@/lib/action";
 
 export async function saveRulesAction(_prev: ActionResult, formData: FormData): Promise<ActionResult> {
@@ -26,8 +27,15 @@ export async function saveRulesAction(_prev: ActionResult, formData: FormData): 
     if (!parsed.success) return validationFailed(parsed.error);
     await saveAutomationRule(user.id, parsed.data);
     await audit(user.id, "rules.updated", { entityType: "AutomationRule", metadata: { autoSubmitEnabled: parsed.data.autoSubmitEnabled, minMatchScore: parsed.data.minMatchScore } });
+    // Rules decide scores and qualification, so every waiting job is re-checked now.
+    const result = await rescoreJobs(user.id);
     revalidatePath("/rules");
-    return { ok: true, message: "Rules saved" };
+    revalidatePath("/jobs");
+    revalidatePath("/dashboard");
+    return {
+      ok: true,
+      message: result.rescored ? `Rules saved. ${result.qualified} of ${result.rescored} waiting jobs qualify.` : "Rules saved",
+    };
   });
 }
 

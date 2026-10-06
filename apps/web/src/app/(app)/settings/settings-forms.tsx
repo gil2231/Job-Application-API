@@ -1,6 +1,7 @@
 "use client";
 
 import type { UserSettingsView } from "@autoapply/database";
+import { saveAiSettingsAction } from "@/actions/ingestion";
 import { changePasswordAction, revokeOtherSessionsAction, revokeSessionAction, saveSettingsAction, updateNameAction } from "@/actions/settings";
 import { ActionButton } from "@/components/action-button";
 import { Field, FormMessage, SubmitButton, useActionForm } from "@/components/form";
@@ -8,6 +9,7 @@ import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToastOnSuccess } from "../profile/use-toast-on-success";
 
 export function AccountForm({ name, email }: { name: string; email: string }) {
@@ -128,5 +130,42 @@ export function SessionList({ sessions, currentId }: { sessions: Array<{ id: str
         </div>
       )}
     </div>
+  );
+}
+
+export function AnalysisForm({ settings, anthropicConfigured, defaultModel }: { settings: UserSettingsView; anthropicConfigured: boolean; defaultModel: string }) {
+  const { state, onSubmit, pending } = useActionForm(saveAiSettingsAction, { ok: false });
+  useToastOnSuccess(state);
+  const e = state.errors ?? {};
+  return (
+    <form onSubmit={onSubmit} className="grid gap-4" noValidate>
+      <FormMessage state={state} />
+      <div className="grid gap-4 sm:grid-cols-2">
+        <Field
+          label="Analyzer"
+          htmlFor="aiProvider"
+          error={e.aiProvider}
+          hint={anthropicConfigured ? "AI reads requirements more accurately. The built-in analyzer is used whenever AI is off or fails." : "AI analysis needs ANTHROPIC_API_KEY set on the server. Until then the built-in analyzer is used."}
+        >
+          <Select name="aiProvider" defaultValue={settings.aiProvider ?? "none"}>
+            <SelectTrigger id="aiProvider">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="none">Built-in analyzer (no AI)</SelectItem>
+              <SelectItem value="anthropic">Claude (Anthropic)</SelectItem>
+            </SelectContent>
+          </Select>
+        </Field>
+        <Field label="Model" htmlFor="aiModel" error={e.aiModel} hint={`Leave blank for ${defaultModel}.`}>
+          <Input id="aiModel" name="aiModel" defaultValue={settings.aiModel ?? ""} placeholder={defaultModel} />
+        </Field>
+      </div>
+      <div className="flex justify-end">
+        <SubmitButton pending={pending} size="sm">
+          Save analysis settings
+        </SubmitButton>
+      </div>
+    </form>
   );
 }

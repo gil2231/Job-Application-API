@@ -4,8 +4,11 @@ import { jobFiltersSchema } from "@autoapply/shared";
 import { requireUser } from "@/lib/auth";
 import { ActionButton } from "@/components/action-button";
 import { PageHeader } from "@/components/page-header";
+import { analyzePendingAction } from "@/actions/ingestion";
 import { applyToAllQualifiedAction } from "@/actions/jobs";
+import { Loader2 } from "lucide-react";
 import { AddJobDialog } from "./add-job-dialog";
+import { ImportDialog } from "./import-dialog";
 import { JobsTable } from "./jobs-table";
 import { JobsToolbar } from "./jobs-toolbar";
 
@@ -15,10 +18,11 @@ export default async function JobsPage({ searchParams }: { searchParams: Promise
   const user = await requireUser();
   const raw = await searchParams;
   const filters = jobFiltersSchema.parse(Object.fromEntries(Object.entries(raw).map(([k, v]) => [k, Array.isArray(v) ? v[0] : v])));
-  const [data, options, qualifiedWaiting] = await Promise.all([
+  const [data, options, qualifiedWaiting, analyzing] = await Promise.all([
     listJobs(user.id, filters),
     getJobFilterOptions(user.id),
     prisma.job.count({ where: { userId: user.id, deletedAt: null, status: "QUALIFIED", application: null } }),
+    prisma.job.count({ where: { userId: user.id, deletedAt: null, status: { in: ["IMPORTED", "ANALYZING"] } } }),
   ]);
   const hasFilters = ["q", "status", "platform", "remote", "minMatch", "company", "location", "minSalary", "savedFrom", "savedTo"].some((k) => raw[k]);
 
@@ -32,10 +36,22 @@ export default async function JobsPage({ searchParams }: { searchParams: Promise
             <ActionButton variant="outline" size="sm" disabled={qualifiedWaiting === 0} action={applyToAllQualifiedAction}>
               Apply to all qualified ({qualifiedWaiting})
             </ActionButton>
+            <ImportDialog />
             <AddJobDialog />
           </>
         }
       />
+      {analyzing > 0 && (
+        <div role="status" className="bg-primary/5 border-primary/20 flex flex-wrap items-center gap-3 rounded-lg border px-3 py-2 text-sm">
+          <Loader2 className="text-primary size-4 animate-spin" />
+          <span className="flex-1">
+            Analyzing {analyzing} job{analyzing === 1 ? "" : "s"} against your profile and rules. Scores appear as each one finishes.
+          </span>
+          <ActionButton size="xs" variant="ghost" action={analyzePendingAction}>
+            Restart analysis
+          </ActionButton>
+        </div>
+      )}
       <JobsToolbar companies={options.companies} platforms={options.platforms} />
       <JobsTable data={data} hasFilters={hasFilters} />
     </div>

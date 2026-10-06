@@ -13,3 +13,4 @@ export * from "./repositories/rules";
 export * from "./repositories/settings";
 export * from "./repositories/dashboard";
 export * from "./repositories/integrations";
+export * from "./repositories/ingestion";

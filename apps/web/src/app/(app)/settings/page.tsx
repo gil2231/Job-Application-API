@@ -6,7 +6,8 @@ import { PageHeader } from "@/components/page-header";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { AccountForm, PasswordForm, PreferencesForm, SessionList } from "./settings-forms";
+import { ANTHROPIC_DEFAULT_MODEL } from "@autoapply/ai";
+import { AccountForm, AnalysisForm, PasswordForm, PreferencesForm, SessionList } from "./settings-forms";
 
 export const metadata: Metadata = { title: "Settings" };
 
@@ -50,6 +51,15 @@ export default async function SettingsPage() {
         </CardHeader>
         <CardContent>
           <PreferencesForm settings={settings} />
+        </CardContent>
+      </Card>
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-sm">Job analysis</CardTitle>
+          <CardDescription>How imported postings are read. Analysis only describes the job; nothing about you is generated.</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <AnalysisForm settings={settings} anthropicConfigured={!!process.env.ANTHROPIC_API_KEY} defaultModel={ANTHROPIC_DEFAULT_MODEL} />
         </CardContent>
       </Card>
       <Card>

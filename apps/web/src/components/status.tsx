@@ -7,6 +7,7 @@ type Variant = "success" | "warning" | "destructive" | "info" | "muted" | "secon
 const STATUS_VARIANT: Record<PipelineStatus, Variant> = {
   IMPORTED: "secondary",
   ANALYZING: "info",
+  NEEDS_DETAILS: "warning",
   QUALIFIED: "info",
   NOT_QUALIFIED: "muted",
   QUEUED: "outline",

@@ -14,12 +14,16 @@ import {
 } from "@autoapply/database";
 import { educationSchema, employmentSchema, personalSchema, professionalSchema } from "@autoapply/shared";
 import { authedAction, formToObject, validationFailed, type ActionResult } from "@/lib/action";
+import { rescoreInBackground } from "@/lib/pipeline";
 
 const ID = /^[a-z0-9]{20,40}$/i;
 
-function done(message: string): ActionResult {
+/** Every profile change can move match scores, so jobs are re-scored after the response. */
+function done(userId: string, message: string): ActionResult {
+  rescoreInBackground(userId);
   revalidatePath("/profile");
   revalidatePath("/dashboard");
+  revalidatePath("/jobs");
   return { ok: true, message };
 }
 
@@ -29,7 +33,7 @@ export async function savePersonalAction(_prev: ActionResult, formData: FormData
     if (!parsed.success) return validationFailed(parsed.error);
     await updatePersonal(user.id, parsed.data);
     await audit(user.id, "profile.personal_updated", { entityType: "MasterProfile" });
-    return done("Personal details saved");
+    return done(user.id, "Personal details saved");
   });
 }
 
@@ -39,7 +43,7 @@ export async function saveProfessionalAction(_prev: ActionResult, formData: Form
     if (!parsed.success) return validationFailed(parsed.error);
     await updateProfessional(user.id, parsed.data);
     await audit(user.id, "profile.professional_updated", { entityType: "MasterProfile" });
-    return done("Professional details saved");
+    return done(user.id, "Professional details saved");
   });
 }
 
@@ -55,7 +59,7 @@ export async function saveEducationAction(_prev: ActionResult, formData: FormDat
       const created = await createEducation(user.id, parsed.data);
       await audit(user.id, "profile.education_added", { entityType: "Education", entityId: created.id });
     }
-    return done("Education saved");
+    return done(user.id, "Education saved");
   });
 }
 
@@ -64,7 +68,7 @@ export async function deleteEducationAction(id: string): Promise<ActionResult> {
     if (!ID.test(id)) return { ok: false, message: "Invalid id" };
     await deleteEducation(user.id, id);
     await audit(user.id, "profile.education_deleted", { entityType: "Education", entityId: id });
-    return done("Education removed");
+    return done(user.id, "Education removed");
   });
 }
 
@@ -80,7 +84,7 @@ export async function saveEmploymentAction(_prev: ActionResult, formData: FormDa
       const created = await createEmployment(user.id, parsed.data);
       await audit(user.id, "profile.employment_added", { entityType: "Employment", entityId: created.id });
     }
-    return done("Employment saved");
+    return done(user.id, "Employment saved");
   });
 }
 
@@ -89,6 +93,6 @@ export async function deleteEmploymentAction(id: string): Promise<ActionResult> 
     if (!ID.test(id)) return { ok: false, message: "Invalid id" };
     await deleteEmployment(user.id, id);
     await audit(user.id, "profile.employment_deleted", { entityType: "Employment", entityId: id });
-    return done("Employment removed");
+    return done(user.id, "Employment removed");
   });
 }

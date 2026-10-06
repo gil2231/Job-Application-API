@@ -1,11 +1,12 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useEffect, useMemo, useState } from "react";
-import { Plus } from "lucide-react";
+import { useEffect, useMemo, useState, useTransition } from "react";
+import { Loader2, Plus, Sparkles } from "lucide-react";
 import { toast } from "sonner";
 import { detectPlatformFromUrl } from "@autoapply/ats-adapters";
 import { enumLabel, WORK_ARRANGEMENTS } from "@autoapply/shared";
+import { lookupPostingAction, type PostingDetails } from "@/actions/ingestion";
 import { addJobAction, restoreJobAction } from "@/actions/jobs";
 import { useServerAction } from "@/components/action-button";
 import { Field, FormMessage, SubmitButton, useActionForm } from "@/components/form";
@@ -22,6 +23,18 @@ function AddJobForm({ onDone }: { onDone: () => void }) {
   const restore = useServerAction();
   const [url, setUrl] = useState("");
   const detection = useMemo(() => (url ? detectPlatformFromUrl(url) : null), [url]);
+  const [prefill, setPrefill] = useState<{ version: number; data: Partial<PostingDetails> }>({ version: 0, data: {} });
+  const [lookupPending, startLookup] = useTransition();
+  const isLinkedIn = /linkedin\.com/i.test(url);
+  const lookup = () =>
+    startLookup(async () => {
+      const result = await lookupPostingAction(url);
+      if (result.ok && result.data) {
+        setPrefill((p) => ({ version: p.version + 1, data: result.data! }));
+        toast.success(result.message);
+      } else toast.error(result.message ?? "Couldn't read the posting");
+    });
+  const d = prefill.data;
 
   useEffect(() => {
     if (state.ok) {
@@ -62,42 +75,55 @@ function AddJobForm({ onDone }: { onDone: () => void }) {
           )
         }
       >
-        <Input id="url" name="url" type="url" placeholder="https://…" value={url} onChange={(ev) => setUrl(ev.target.value)} aria-invalid={!!e.url} autoFocus />
+        <div className="flex gap-2">
+          <Input id="url" name="url" type="url" placeholder="https://…" value={url} onChange={(ev) => setUrl(ev.target.value)} aria-invalid={!!e.url} autoFocus />
+          <Button
+            type="button"
+            variant="outline"
+            disabled={!url || isLinkedIn || lookupPending}
+            onClick={lookup}
+            title={isLinkedIn ? "LinkedIn pages aren't read. Copy the details from the posting." : "Fill in the details from the public posting"}
+          >
+            {lookupPending ? <Loader2 className="animate-spin" /> : <Sparkles />} Fetch details
+          </Button>
+        </div>
       </Field>
-      <div className="grid gap-4 sm:grid-cols-2">
-        <Field label="Job title" htmlFor="title" error={e.title}>
-          <Input id="title" name="title" aria-invalid={!!e.title} />
-        </Field>
-        <Field label="Company" htmlFor="company" error={e.company}>
-          <Input id="company" name="company" aria-invalid={!!e.company} />
-        </Field>
-        <Field label="Location" htmlFor="location" error={e.location}>
-          <Input id="location" name="location" placeholder="e.g. New York, NY" />
-        </Field>
-        <Field label="Work arrangement" htmlFor="workArrangement">
-          <Select name="workArrangement" defaultValue="UNKNOWN">
-            <SelectTrigger id="workArrangement">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {WORK_ARRANGEMENTS.map((w) => (
-                <SelectItem key={w} value={w}>
-                  {w === "UNKNOWN" ? "Not specified" : enumLabel(w)}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </Field>
-        <Field label="Salary" htmlFor="salaryText" error={e.salaryText} hint='As listed, e.g. "$70,000 – $80,000".'>
-          <Input id="salaryText" name="salaryText" />
-        </Field>
-        <Field label="Application URL" htmlFor="applicationUrl" error={e.applicationUrl} hint="If applying happens on a different page.">
-          <Input id="applicationUrl" name="applicationUrl" type="url" placeholder="https://…" aria-invalid={!!e.applicationUrl} />
+      <div key={prefill.version} className="grid gap-4">
+        <div className="grid gap-4 sm:grid-cols-2">
+          <Field label="Job title" htmlFor="title" error={e.title}>
+            <Input id="title" name="title" defaultValue={d.title ?? ""} aria-invalid={!!e.title} />
+          </Field>
+          <Field label="Company" htmlFor="company" error={e.company}>
+            <Input id="company" name="company" defaultValue={d.company ?? ""} aria-invalid={!!e.company} />
+          </Field>
+          <Field label="Location" htmlFor="location" error={e.location}>
+            <Input id="location" name="location" defaultValue={d.location ?? ""} placeholder="e.g. New York, NY" />
+          </Field>
+          <Field label="Work arrangement" htmlFor="workArrangement">
+            <Select name="workArrangement" defaultValue={d.workArrangement ?? "UNKNOWN"}>
+              <SelectTrigger id="workArrangement">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {WORK_ARRANGEMENTS.map((w) => (
+                  <SelectItem key={w} value={w}>
+                    {w === "UNKNOWN" ? "Not specified" : enumLabel(w)}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </Field>
+          <Field label="Salary" htmlFor="salaryText" error={e.salaryText} hint='As listed, e.g. "$70,000 – $80,000".'>
+            <Input id="salaryText" name="salaryText" defaultValue={d.salaryText ?? ""} />
+          </Field>
+          <Field label="Application URL" htmlFor="applicationUrl" error={e.applicationUrl} hint="If applying happens on a different page.">
+            <Input id="applicationUrl" name="applicationUrl" type="url" defaultValue={d.applicationUrl ?? ""} placeholder="https://…" aria-invalid={!!e.applicationUrl} />
+          </Field>
+        </div>
+        <Field label="Job description" htmlFor="description" error={e.description} hint="Paste it to enable matching against your profile.">
+          <Textarea id="description" name="description" rows={5} defaultValue={d.description ?? ""} />
         </Field>
       </div>
-      <Field label="Job description" htmlFor="description" error={e.description} hint="Paste it to enable matching against your profile.">
-        <Textarea id="description" name="description" rows={5} />
-      </Field>
       <div className="flex justify-end gap-2">
         <Button type="button" variant="outline" onClick={onDone}>
           Cancel
@@ -122,7 +148,7 @@ export function AddJobDialog() {
       <DialogContent className="sm:max-w-2xl">
         <DialogHeader>
           <DialogTitle>Add a job</DialogTitle>
-          <DialogDescription>Paste a job posting URL and the details you see on it.</DialogDescription>
+          <DialogDescription>Paste a job posting URL. Fetch details fills in public postings; for LinkedIn, copy the details from the posting.</DialogDescription>
         </DialogHeader>
         {open && <AddJobForm onDone={() => setOpen(false)} />}
       </DialogContent>

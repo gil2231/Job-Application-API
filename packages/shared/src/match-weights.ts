@@ -43,4 +43,8 @@ export interface MatchBreakdownItem {
   /** 0..1 */
   score: number;
   reason: string;
+  /** False when the job didn't say enough to judge this dimension; it then gets neutral partial credit. */
+  known: boolean;
+  /** Supporting evidence, e.g. matched and missing skills. */
+  details?: string[];
 }

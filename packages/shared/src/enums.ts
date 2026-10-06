@@ -6,7 +6,7 @@
  * worker can import them without pulling in the Prisma client.
  */
 
-export const JOB_STATUSES = ["IMPORTED", "ANALYZING", "QUALIFIED", "NOT_QUALIFIED", "SKIPPED"] as const;
+export const JOB_STATUSES = ["IMPORTED", "ANALYZING", "NEEDS_DETAILS", "QUALIFIED", "NOT_QUALIFIED", "SKIPPED"] as const;
 export type JobStatus = (typeof JOB_STATUSES)[number];
 
 export const APPLICATION_STATUSES = [
@@ -164,6 +164,7 @@ const titleCase = (value: string) =>
 const LABEL_OVERRIDES: Record<string, string> = {
   WAITING_FOR_USER: "Waiting for User",
   NOT_QUALIFIED: "Not Qualified",
+  NEEDS_DETAILS: "Needs Details",
   LINKEDIN_EASY_APPLY: "LinkedIn Easy Apply",
   SMARTRECRUITERS: "SmartRecruiters",
   FULL_TIME: "Full-time",
