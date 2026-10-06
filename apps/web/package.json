@@ -19,6 +19,7 @@
     "@autoapply/documents": "workspace:*",
     "@autoapply/ingestion": "workspace:*",
     "@autoapply/matching": "workspace:*",
+    "@autoapply/notifications": "workspace:*",
     "@autoapply/queue": "workspace:*",
     "@autoapply/shared": "workspace:*",
     "class-variance-authority": "^0.7.1",

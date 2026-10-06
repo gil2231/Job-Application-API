@@ -1,7 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { SESSION_COOKIE, sessionCookieOptions } from "./lib/session-cookie";
 
-const PUBLIC_PATHS = ["/sign-in", "/sign-up", "/api/health"];
+const PUBLIC_PATHS = ["/sign-in", "/sign-up", "/api/health", "/unsubscribe", "/api/unsubscribe"];
 
 /**
  * Optimistic routing only: sends visitors without a session cookie to sign-in.

@@ -2,7 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useMemo, useState, useTransition } from "react";
-import { AlertCircle, ArrowLeft, ExternalLink, Globe, Loader2, Plus, Search } from "lucide-react";
+import { AlertCircle, ArrowLeft, BellRing, ExternalLink, Globe, Loader2, Plus, Search } from "lucide-react";
 import { toast } from "sonner";
 import type { BoardSearchFormInput } from "@autoapply/shared";
 import { enumLabel } from "@autoapply/shared";
@@ -18,6 +18,7 @@ import { Textarea } from "@/components/ui/textarea";
 import type { ActionResult } from "@/lib/action";
 import { formatRelative } from "@/lib/format";
 import { ImportResult } from "./import-dialog";
+import { SavedSearchForm, suggestSearchName } from "../job-alerts/saved-search-form";
 
 export interface SavedBoardSearchView {
   boards: string[];
@@ -141,6 +142,7 @@ function BoardSearch({ saved, onDone }: { saved: SavedBoardSearchView | null; on
   const [search, setSearch] = useState<ActionResult<BoardSearchData> | null>(null);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [imported, setImported] = useState<ActionResult<ImportResultData> | null>(null);
+  const [savingAlert, setSavingAlert] = useState(false);
   const [searching, startSearch] = useTransition();
   const [adding, startAdding] = useTransition();
   const errors = (search && !search.ok ? search.errors : undefined) ?? {};
@@ -174,14 +176,39 @@ function BoardSearch({ saved, onDone }: { saved: SavedBoardSearchView | null; on
 
   if (imported) return <ImportResult result={imported} onDone={onDone} />;
 
+  if (savingAlert && searched) {
+    return (
+      <div className="grid gap-3">
+        <p className="text-muted-foreground text-[13px]">Save this search and Applyance checks these boards every morning, then emails you the jobs posted since the day before.</p>
+        <SavedSearchForm
+          initial={{
+            name: suggestSearchName(searched.query, searched.location),
+            boards: searched.boards.split(/[\n,]+/).map((b) => b.trim()).filter(Boolean),
+            query: searched.query,
+            location: searched.location ?? null,
+            searchDescriptions: searched.searchDescriptions,
+            matchAny: searched.matchAny,
+            alertsEnabled: true,
+          }}
+          onDone={() => setSavingAlert(false)}
+        />
+      </div>
+    );
+  }
+
   if (search?.ok && search.data) {
     return (
       <div className="grid gap-4">
         <SearchResults data={search.data} message={search.message} selected={selected} setSelected={setSelected} />
         <div className="flex flex-wrap justify-between gap-2">
-          <Button type="button" variant="outline" onClick={() => setSearch(null)}>
-            <ArrowLeft /> Change search
-          </Button>
+          <div className="flex flex-wrap gap-2">
+            <Button type="button" variant="outline" onClick={() => setSearch(null)}>
+              <ArrowLeft /> Change search
+            </Button>
+            <Button type="button" variant="outline" onClick={() => setSavingAlert(true)}>
+              <BellRing /> Email me new matches
+            </Button>
+          </div>
           <Button type="button" onClick={add} disabled={adding || selected.size === 0}>
             {adding ? <Loader2 className="animate-spin" /> : <Plus />}
             {adding ? "Adding…" : selected.size === 1 ? "Add 1 job" : `Add ${selected.size} jobs`}

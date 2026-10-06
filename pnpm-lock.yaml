@@ -90,6 +90,9 @@ importers:
       '@autoapply/matching':
         specifier: workspace:*
         version: link:../../packages/matching
+      '@autoapply/notifications':
+        specifier: workspace:*
+        version: link:../../packages/notifications
       '@autoapply/queue':
         specifier: workspace:*
         version: link:../../packages/queue
@@ -187,6 +190,9 @@ importers:
       '@autoapply/ingestion':
         specifier: workspace:*
         version: link:../../packages/ingestion
+      '@autoapply/notifications':
+        specifier: workspace:*
+        version: link:../../packages/notifications
       '@autoapply/queue':
         specifier: workspace:*
         version: link:../../packages/queue
@@ -329,6 +335,22 @@ importers:
 
   packages/matching:
     dependencies:
+      '@autoapply/shared':
+        specifier: workspace:*
+        version: link:../shared
+    devDependencies:
+      vitest:
+        specifier: ^3.2.4
+        version: 3.2.7(@types/node@26.6.4)(jiti@2.7.0)(lightningcss@1.32.0)(tsx@4.23.15)
+
+  packages/notifications:
+    dependencies:
+      '@autoapply/database':
+        specifier: workspace:*
+        version: link:../database
+      '@autoapply/ingestion':
+        specifier: workspace:*
+        version: link:../ingestion
       '@autoapply/shared':
         specifier: workspace:*
         version: link:../shared
