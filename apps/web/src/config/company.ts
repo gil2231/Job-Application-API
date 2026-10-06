@@ -40,7 +40,7 @@ export const COMPANY = {
   serviceProviders: [
     { name: "[Hosting provider, e.g. Vercel, AWS or Render]", purpose: "Runs the web app, background worker and database" },
     { name: "[File storage provider, e.g. AWS S3 or Cloudflare R2]", purpose: "Stores uploaded and generated documents and application screenshots" },
-    { name: "Anthropic", purpose: "AI features, when AI is turned on (reading job postings and resumes, mapping form fields, drafting answers and documents)" },
+    { name: "Anthropic or OpenAI (whichever AI provider is selected)", purpose: "AI features, when AI is turned on (reading job postings and resumes, mapping form fields, drafting answers and documents)" },
     { name: "Stripe", purpose: "Payment processing for paid plans" },
     { name: "Google and Microsoft", purpose: "Email and calendar sync, only if you connect an account" },
     { name: "[Email delivery provider, e.g. Postmark or Resend]", purpose: "Sends account and notification emails" },

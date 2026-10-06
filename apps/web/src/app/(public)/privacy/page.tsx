@@ -146,6 +146,10 @@ export default function PrivacyPage() {
           <li>meet our legal obligations.</li>
         </ul>
         <p>We do not use your resume, profile or application content to advertise to you, and we do not sell it.</p>
+        <p>
+          A small number of our staff can see account details, plan and billing status, and application failures in an internal admin panel, so they can support you
+          and keep the service running. Each time staff open an account&apos;s details, it is recorded in a log.
+        </p>
         <ReviewNote>
           If users are in the EU, UK or a similar jurisdiction, add the legal basis for each use (for example contract, legitimate interests, consent for demographic
           answers).
@@ -154,7 +158,7 @@ export default function PrivacyPage() {
 
       <LegalSection {...section("ai")}>
         <p>
-          When AI is turned on in Settings, {name} sends the information needed for each task to our AI provider (currently Anthropic). Depending on the task this
+          When AI is turned on in Settings, {name} sends the information needed for each task to our AI provider (Anthropic or OpenAI, depending on the AI setting). Depending on the task this
           includes job postings, the questions on an application form, and relevant parts of your profile, Answer Library and resume. AI is used to read job postings,
           read a resume you import, recognize form fields, draft answers, and tailor resumes and cover letters.
         </p>
