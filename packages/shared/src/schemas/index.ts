@@ -288,7 +288,7 @@ export const recommendationKeywordsSchema = z.object({
   keywords: stringList(30, 100),
 });
 
-export const AI_PROVIDER_OPTIONS = ["anthropic"] as const;
+export const AI_PROVIDER_OPTIONS = ["anthropic", "openai"] as const;
 export const aiSettingsSchema = z.object({
   aiProvider: z
     .string()

@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import type { UserSettingsView } from "@autoapply/database";
 import { revokeBrowserSessionAction } from "@/actions/applications";
 import { saveNotificationSettingsAction, sendTestEmailAction } from "@/actions/alerts";
@@ -154,10 +155,20 @@ export function BrowserSessionList({ sessions }: { sessions: Array<{ id: string;
   );
 }
 
-export function AnalysisForm({ settings, anthropicConfigured, defaultModel }: { settings: UserSettingsView; anthropicConfigured: boolean; defaultModel: string }) {
+export interface AIProviderChoice {
+  id: string;
+  label: string;
+  keyName: string;
+  configured: boolean;
+  defaultModel: string;
+}
+
+export function AnalysisForm({ settings, providers }: { settings: UserSettingsView; providers: AIProviderChoice[] }) {
   const { state, onSubmit, pending } = useActionForm(saveAiSettingsAction, { ok: false });
   useToastOnSuccess(state);
   const e = state.errors ?? {};
+  const [providerId, setProviderId] = useState(settings.aiProvider ?? "none");
+  const chosen = providers.find((p) => p.id === providerId);
   return (
     <form onSubmit={onSubmit} className="grid gap-4" noValidate>
       <FormMessage state={state} />
@@ -166,20 +177,24 @@ export function AnalysisForm({ settings, anthropicConfigured, defaultModel }: { 
           label="Provider"
           htmlFor="aiProvider"
           error={e.aiProvider}
-          hint={anthropicConfigured ? "The built-in tools are used whenever AI is off or fails." : "AI needs ANTHROPIC_API_KEY set on the server. Until then the built-in tools are used."}
+          hint={!chosen || chosen.configured ? "The built-in tools are used whenever AI is off or fails." : `${chosen.label} needs ${chosen.keyName} set on the server. Until then the built-in tools are used.`}
         >
-          <Select name="aiProvider" defaultValue={settings.aiProvider ?? "none"}>
+          <Select name="aiProvider" value={providerId} onValueChange={setProviderId}>
             <SelectTrigger id="aiProvider">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="none">Built-in tools (no AI)</SelectItem>
-              <SelectItem value="anthropic">Claude (Anthropic)</SelectItem>
+              {providers.map((p) => (
+                <SelectItem key={p.id} value={p.id}>
+                  {p.label}
+                </SelectItem>
+              ))}
             </SelectContent>
           </Select>
         </Field>
-        <Field label="Model" htmlFor="aiModel" error={e.aiModel} hint={`Leave blank for ${defaultModel}.`}>
-          <Input id="aiModel" name="aiModel" defaultValue={settings.aiModel ?? ""} placeholder={defaultModel} />
+        <Field label="Model" htmlFor="aiModel" error={e.aiModel} hint={chosen ? `Leave blank for ${chosen.defaultModel}.` : "Not used by the built-in tools."}>
+          <Input id="aiModel" name="aiModel" defaultValue={settings.aiModel ?? ""} placeholder={chosen?.defaultModel ?? ""} />
         </Field>
       </div>
       <div className="flex justify-end">
