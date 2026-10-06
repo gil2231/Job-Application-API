@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { prisma } from "@autoapply/database";
+import { prisma, setUserRole } from "@autoapply/database";
 import { addJob, signUp } from "./helpers";
 
 test.afterAll(() => prisma.$disconnect());
@@ -36,6 +36,8 @@ test.describe("on a phone", () => {
     const app = await prisma.application.findFirstOrThrow({ where: { userId: user.id } });
     const pages = ["/dashboard", "/needs-attention", "/flightpath", "/flightpath?view=table", "/recommended", "/jobs", `/jobs/${app.jobId}`, "/applications", `/applications/${app.id}`];
     pages.push("/profile", "/documents", "/answers", "/rules", "/integrations", "/settings");
+    await setUserRole(email, "ADMIN");
+    pages.push("/admin", "/admin/users", `/admin/users/${user.id}`, "/admin/failures");
     for (const path of pages) {
       await page.goto(path);
       const overflow = (await page.evaluate(() => document.documentElement.scrollWidth)) - 390;
