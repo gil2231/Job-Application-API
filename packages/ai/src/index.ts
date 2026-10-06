@@ -10,3 +10,4 @@ export * from "./field-mapping";
 export * from "./answers";
 export * from "./application";
 export * from "./writing";
+export * from "./resume-import";
