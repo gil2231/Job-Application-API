@@ -3,10 +3,12 @@
 import { useState } from "react";
 import type { UserSettingsView } from "@autoapply/database";
 import { revokeBrowserSessionAction } from "@/actions/applications";
+import { saveNotificationSettingsAction, sendTestEmailAction } from "@/actions/alerts";
 import { saveAiSettingsAction } from "@/actions/ingestion";
 import { changePasswordAction, revokeOtherSessionsAction, revokeSessionAction, saveSettingsAction, updateNameAction } from "@/actions/settings";
 import { ActionButton } from "@/components/action-button";
 import { Field, FormMessage, SubmitButton, useActionForm } from "@/components/form";
+import { TimeAgo } from "@/components/local-time";
 import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
@@ -85,12 +87,6 @@ export function PreferencesForm({ settings }: { settings: UserSettingsView }) {
             ))}
           </datalist>
         </Field>
-      </div>
-      <div className="flex items-center gap-2">
-        <Checkbox id="emailNotifications" name="emailNotifications" defaultChecked={settings.emailNotifications} />
-        <Label htmlFor="emailNotifications" className="font-normal">
-          Email me when an application needs my attention
-        </Label>
       </div>
       <div className="flex justify-end">
         <SubmitButton pending={pending} size="sm">
@@ -207,5 +203,83 @@ export function AnalysisForm({ settings, providers }: { settings: UserSettingsVi
         </SubmitButton>
       </div>
     </form>
+  );
+}
+
+const HOURS = Array.from({ length: 24 }, (_, h) => ({ value: String(h), label: `${h % 12 === 0 ? 12 : h % 12}:00 ${h < 12 ? "AM" : "PM"}` }));
+
+export function NotificationsForm({ settings, emailReady }: { settings: UserSettingsView; emailReady: boolean }) {
+  const { state, onSubmit, pending } = useActionForm(saveNotificationSettingsAction, { ok: false });
+  useToastOnSuccess(state);
+  const e = state.errors ?? {};
+  return (
+    <form onSubmit={onSubmit} className="grid gap-4" noValidate>
+      <FormMessage state={state} />
+      <div className="flex items-start gap-2">
+        <Checkbox id="emailNotifications" name="emailNotifications" defaultChecked={settings.emailNotifications} className="mt-0.5" />
+        <Label htmlFor="emailNotifications" className="grid gap-0.5 font-normal">
+          <span>Needs Attention emails</span>
+          <span className="text-muted-foreground text-xs">When an application stops for a CAPTCHA, sign-in, questions or your final review. Several at once arrive as one email.</span>
+        </Label>
+      </div>
+      <div className="flex items-start gap-2">
+        <Checkbox id="jobAlertEmails" name="jobAlertEmails" defaultChecked={settings.jobAlertEmails} className="mt-0.5" />
+        <Label htmlFor="jobAlertEmails" className="grid gap-0.5 font-normal">
+          <span>Daily job alerts</span>
+          <span className="text-muted-foreground text-xs">Your saved searches on the Job alerts page run every morning. You only get an email when something new is posted.</span>
+        </Label>
+      </div>
+      <Field label="Send job alerts at" htmlFor="jobAlertHour" error={e.jobAlertHour} hint={`Your time zone: ${settings.timezone}.`} className="max-w-56">
+        <Select name="jobAlertHour" defaultValue={String(settings.jobAlertHour)}>
+          <SelectTrigger id="jobAlertHour">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {HOURS.map((h) => (
+              <SelectItem key={h.value} value={h.value}>
+                {h.label}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </Field>
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <ActionButton type="button" size="sm" variant="outline" action={sendTestEmailAction} disabled={!emailReady}>
+          Send me a test email
+        </ActionButton>
+        <SubmitButton pending={pending} size="sm">
+          Save notifications
+        </SubmitButton>
+      </div>
+    </form>
+  );
+}
+
+export interface NotificationHistoryRow {
+  id: string;
+  kind: string;
+  subject: string;
+  status: "SENT" | "FAILED" | "SKIPPED";
+  error: string | null;
+  createdAt: string;
+}
+
+export function NotificationHistory({ rows }: { rows: NotificationHistoryRow[] }) {
+  if (!rows.length) return <p className="text-muted-foreground text-sm">No alerts sent yet.</p>;
+  return (
+    <ul className="divide-y rounded-lg border">
+      {rows.map((r) => (
+        <li key={r.id} className="flex flex-wrap items-center gap-3 px-4 py-2.5">
+          <div className="min-w-0 flex-1">
+            <p className="truncate text-[13px] font-medium">{r.subject}</p>
+            <p className="text-muted-foreground text-xs">
+              {r.kind} · <TimeAgo value={r.createdAt} />
+              {r.error && ` · ${r.error}`}
+            </p>
+          </div>
+          <Badge variant={r.status === "SENT" ? "success" : r.status === "FAILED" ? "destructive" : "muted"}>{r.status === "SENT" ? "Sent" : r.status === "FAILED" ? "Failed" : "Not sent"}</Badge>
+        </li>
+      ))}
+    </ul>
   );
 }

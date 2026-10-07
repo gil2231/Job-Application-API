@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { signUpAction } from "@/actions/auth";
 import { Field, FormMessage, SubmitButton, useActionForm } from "@/components/form";
 import { Input } from "@/components/ui/input";
@@ -21,6 +22,17 @@ export function SignUpForm() {
       <SubmitButton pending={pending} className="mt-2 w-full" pendingLabel="Creating account…">
         Create account
       </SubmitButton>
+      <p className="text-muted-foreground text-center text-xs">
+        By creating an account, you agree to the{" "}
+        <Link href="/terms" target="_blank" className="text-foreground underline underline-offset-2">
+          Terms of Service
+        </Link>{" "}
+        and{" "}
+        <Link href="/privacy" target="_blank" className="text-foreground underline underline-offset-2">
+          Privacy Policy
+        </Link>
+        .
+      </p>
     </form>
   );
 }
