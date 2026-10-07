@@ -10,6 +10,7 @@ import { prisma } from "../client";
 import { decryptString, encryptString } from "../crypto";
 import { ConflictError, NotFoundError } from "./errors";
 import { resolveCoverLetterForJob, resolveResumeForJob } from "./documents";
+import { consumeUsage, getEffectivePlan, refundUsage } from "./billing";
 
 /**
  * Queue applications for jobs. The unique constraint on Application.jobId means
@@ -30,12 +31,12 @@ export async function queueApplications(userId: string, jobIds: string[], option
   if (mode === "AUTO" && !rule?.autoSubmitEnabled) mode = "REVIEW";
 
   const queued: string[] = [];
-  const duplicates: string[] = [];
-  for (const job of jobs) {
-    if (job.application) {
-      duplicates.push(job.id);
-      continue;
-    }
+  const duplicates: string[] = jobs.filter((j) => j.application).map((j) => j.id);
+  const candidates = jobs.filter((j) => !j.application);
+  // Each new application counts against the plan's monthly allowance; jobs past it aren't queued.
+  const granted = await consumeUsage(userId, "applications", candidates.length);
+  const overLimit = candidates.length - granted;
+  for (const job of candidates.slice(0, granted)) {
     const [resume, coverLetter] = await Promise.all([resolveResumeForJob(userId, job.id), resolveCoverLetterForJob(userId, job.id)]);
     try {
       await prisma.$transaction(async (tx) => {
@@ -57,11 +58,17 @@ export async function queueApplications(userId: string, jobIds: string[], option
       });
       queued.push(job.id);
     } catch (error) {
-      if (typeof error === "object" && error && "code" in error && error.code === "P2002") duplicates.push(job.id);
-      else throw error;
+      if (typeof error === "object" && error && "code" in error && error.code === "P2002") {
+        duplicates.push(job.id);
+        await refundUsage(userId, "applications", 1);
+      } else {
+        await refundUsage(userId, "applications", granted - queued.length);
+        throw error;
+      }
     }
   }
-  return { queued: queued.length, duplicates: duplicates.length, notFound: jobIds.length - jobs.length, mode };
+  const monthlyLimit = overLimit > 0 ? (await getEffectivePlan(userId)).limits.applications : null;
+  return { queued: queued.length, duplicates: duplicates.length, notFound: jobIds.length - jobs.length, overLimit, monthlyLimit, mode };
 }
 
 /** Queue every qualified job that has no application yet. */

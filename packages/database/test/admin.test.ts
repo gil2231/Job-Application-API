@@ -113,7 +113,7 @@ describe("admin users list", () => {
     await makeUser();
     const { users } = await listAdminUsers();
     expect(Object.keys(users[0]!).sort()).toEqual(
-      ["applications", "createdAt", "email", "failed", "id", "jobs", "lastActiveAt", "lastLoginAt", "locked", "lockedUntil", "name", "role", "submitted"].sort(),
+      ["applications", "createdAt", "email", "failed", "id", "jobs", "lastActiveAt", "lastLoginAt", "locked", "lockedUntil", "name", "plan", "role", "submitted"].sort(),
     );
   });
 });

@@ -4,6 +4,7 @@ import {
   BellRing,
   BookOpenText,
   Briefcase,
+  CreditCard,
   FileText,
   LayoutDashboard,
   PlaneTakeoff,
@@ -42,6 +43,7 @@ export const NAV_ITEMS: NavItem[] = [
   { href: "/answers", label: "Answer Library", icon: BookOpenText },
   { href: "/rules", label: "Rules", icon: SlidersHorizontal },
   { href: "/integrations", label: "Integrations", icon: Plug },
+  { href: "/billing", label: "Plan & billing", icon: CreditCard },
   { href: "/settings", label: "Settings", icon: Settings },
   { href: "/admin", label: "Admin", icon: ShieldCheck, adminOnly: true },
 ];

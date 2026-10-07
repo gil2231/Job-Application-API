@@ -275,22 +275,32 @@ enum UserRole {
 }
 
 model User {
-  id               String    @id @default(cuid())
-  email            String    @unique
-  name             String
+  id                    String    @id @default(cuid())
+  email                 String    @unique
+  name                  String
   /// ADMIN opens the owner admin panel (/admin). Granted only from the command
   /// line (pnpm admin:grant), never from the app.
-  role             UserRole  @default(USER)
+  role                  UserRole  @default(USER)
   /// argon2id hash. Plaintext passwords are never stored or logged.
-  passwordHash     String
-  emailVerifiedAt  DateTime?
-  lastLoginAt      DateTime?
-  failedLoginCount Int       @default(0)
-  lockedUntil      DateTime?
-  createdAt        DateTime  @default(now())
-  updatedAt        DateTime  @updatedAt
+  passwordHash          String
+  emailVerifiedAt       DateTime?
+  lastLoginAt           DateTime?
+  failedLoginCount      Int       @default(0)
+  lockedUntil           DateTime?
+  /// TOTP secret, encrypted (enc:v1). Set while setting up; active once totpEnabledAt is set.
+  totpSecret            String?
+  totpEnabledAt         DateTime?
+  /// Last accepted TOTP time step, so a code can't be used twice.
+  totpLastStep          Int?
+  onboardingDismissedAt DateTime?
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
 
   sessions        Session[]
+  recoveryCodes   RecoveryCode[]
+  authTokens      AuthToken[]
+  subscription    Subscription?
+  usageCounters   UsageCounter[]
   auditLogs       AuditLog[]
   profile         MasterProfile?
   documents       Document[]
@@ -331,6 +341,84 @@ model Session {
 
   @@index([userId])
   @@index([expiresAt])
+}
+
+/// Single-use two-factor recovery codes. Only the sha256 of each code is stored.
+model RecoveryCode {
+  id        String    @id @default(cuid())
+  userId    String
+  codeHash  String
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, codeHash])
+}
+
+enum AuthTokenKind {
+  EMAIL_VERIFY
+  PASSWORD_RESET
+}
+
+/// Emailed single-use links. Only the sha256 of the token is stored.
+model AuthToken {
+  id        String        @id @default(cuid())
+  userId    String
+  kind      AuthTokenKind
+  tokenHash String        @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime      @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, kind])
+}
+
+enum SubscriptionStatus {
+  ACTIVE
+  TRIALING
+  PAST_DUE
+  CANCELED
+  INCOMPLETE
+}
+
+/// The account's paid plan, kept in sync from Stripe webhooks. No row means the free plan.
+model Subscription {
+  id                   String             @id @default(cuid())
+  userId               String             @unique
+  plan                 String
+  status               SubscriptionStatus
+  interval             String?
+  stripeCustomerId     String             @unique
+  stripeSubscriptionId String?            @unique
+  stripePriceId        String?
+  currentPeriodEnd     DateTime?
+  cancelAtPeriodEnd    Boolean            @default(false)
+  createdAt            DateTime           @default(now())
+  updatedAt            DateTime           @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+/// Stripe webhook events already handled, so a redelivered event is ignored.
+model StripeEvent {
+  id          String   @id
+  type        String
+  processedAt DateTime @default(now())
+}
+
+/// Plan usage per calendar month (UTC), e.g. period "2026-10".
+model UsageCounter {
+  userId String
+  metric String
+  period String
+  count  Int    @default(0)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([userId, metric, period])
 }
 
 /// A browser extension linked to the account. The person creates a one-time

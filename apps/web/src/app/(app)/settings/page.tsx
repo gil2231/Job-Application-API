@@ -1,5 +1,14 @@
 import type { Metadata } from "next";
-import { getUserSettings, listAuditLogs, listBrowserSessions, listExtensionConnections, listNotifications, listSessions } from "@autoapply/database";
+import {
+  getSubscription,
+  getTwoFactorStatus,
+  getUserSettings,
+  listAuditLogs,
+  listBrowserSessions,
+  listExtensionConnections,
+  listNotifications,
+  listSessions,
+} from "@autoapply/database";
 import { createEmailSender } from "@autoapply/notifications";
 import { enumLabel } from "@autoapply/shared";
 import { requireUser } from "@/lib/auth";
@@ -9,6 +18,7 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { ANTHROPIC_DEFAULT_MODEL, OPENAI_DEFAULT_MODEL } from "@autoapply/ai";
+import { DataPrivacySection, TwoFactorSection } from "./security-forms";
 import { ExtensionCard } from "./extension-card";
 import { AccountForm, AnalysisForm, BrowserSessionList, NotificationHistory, NotificationsForm, PasswordForm, PreferencesForm, SessionList } from "./settings-forms";
 
@@ -23,13 +33,15 @@ function describeAgent(ua: string | null): string {
 
 export default async function SettingsPage() {
   const user = await requireUser();
-  const [settings, sessions, logs, browserSessions, extensions, notifications] = await Promise.all([
+  const [settings, sessions, logs, browserSessions, extensions, notifications, twoFactor, subscription] = await Promise.all([
     getUserSettings(user.id),
     listSessions(user.id),
     listAuditLogs(user.id, 40),
     listBrowserSessions(user.id),
     listExtensionConnections(user.id),
     listNotifications(user.id, 10),
+    getTwoFactorStatus(user.id),
+    getSubscription(user.id),
   ]);
   const serverAddress = process.env.API_PUBLIC_URL ?? `http://localhost:${process.env.API_PORT ?? 4000}`;
   const email = createEmailSender();
@@ -56,10 +68,19 @@ export default async function SettingsPage() {
           </CardContent>
         </Card>
       </div>
+      <Card id="security" className="scroll-mt-6">
+        <CardHeader>
+          <CardTitle className="text-sm">Two-factor sign-in</CardTitle>
+          <CardDescription>Ask for a code from an authenticator app each time you sign in, so a stolen password isn&apos;t enough.</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <TwoFactorSection enabled={twoFactor.enabled} enabledAt={twoFactor.enabledAt ? formatDate(twoFactor.enabledAt) : null} recoveryCodesLeft={twoFactor.recoveryCodesLeft} />
+        </CardContent>
+      </Card>
       <Card>
         <CardHeader>
           <CardTitle className="text-sm">Automation preferences</CardTitle>
-          <CardDescription>Thresholds below which AutoApply stops and asks you.</CardDescription>
+          <CardDescription>Thresholds below which Applyance stops and asks you.</CardDescription>
         </CardHeader>
         <CardContent>
           <PreferencesForm settings={settings} />
@@ -136,6 +157,14 @@ export default async function SettingsPage() {
               .filter((s) => s.status === "ACTIVE")
               .map((s) => ({ id: s.id, domain: s.domain, platform: enumLabel(s.platform), lastUsed: s.lastUsedAt ? formatRelative(s.lastUsedAt) : null, expires: s.expiresAt ? formatDate(s.expiresAt) : null }))}
           />
+        </CardContent>
+      </Card>
+      <Card id="data">
+        <CardHeader>
+          <CardTitle className="text-sm">Data &amp; privacy</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <DataPrivacySection twoFactorEnabled={twoFactor.enabled} hasSubscription={!!subscription?.stripeSubscriptionId && subscription.status !== "CANCELED"} />
         </CardContent>
       </Card>
       <Card className="gap-0 pb-0">

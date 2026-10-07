@@ -3,6 +3,7 @@ import { addJob, signUp } from "./helpers";
 
 test("tailors, edits, exports and approves a resume and cover letter for a job", async ({ page }) => {
   await signUp(page, "Jordan Rivera");
+  await page.goto("/profile");
   await page.getByLabel("First name").fill("Jordan");
   await page.getByLabel("Last name").fill("Rivera");
   await page.getByRole("button", { name: "Save personal details" }).click();

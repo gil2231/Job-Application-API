@@ -6,7 +6,7 @@ import { Providers } from "@/components/providers";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: { default: "AutoApply", template: "%s · AutoApply" },
+  title: { default: "Applyance", template: "%s · Applyance" },
   description: "Job application automation with a human in the loop.",
   applicationName: "Applyance",
   appleWebApp: { capable: true, title: "Applyance", statusBarStyle: "default" },

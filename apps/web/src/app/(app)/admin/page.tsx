@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { ArrowRight, CreditCard } from "lucide-react";
-import { countOpenSupportRequests, getAdminOverview } from "@autoapply/database";
+import { countOpenSupportRequests, getAdminOverview, getBillingSummary } from "@autoapply/database";
 import { backupHealthChecks } from "@autoapply/ops";
 import { enumLabel } from "@autoapply/shared";
 import { requireAdmin } from "@/lib/auth";
@@ -15,11 +15,12 @@ export const metadata: Metadata = { title: "Admin" };
 
 export default async function AdminOverviewPage() {
   await requireAdmin();
-  const [overview, worker, openReports, backups] = await Promise.all([
+  const [overview, worker, openReports, backups, billing] = await Promise.all([
     getAdminOverview(),
     getWorkerStatus(),
     countOpenSupportRequests(),
     backupHealthChecks().catch(() => ({ backups: { state: "fail" as const, note: "can't reach the backup bucket" }, restoreTest: { state: "off" as const } })),
+    getBillingSummary(),
   ]);
   const { users, applications } = overview;
 
@@ -150,7 +151,11 @@ export default async function AdminOverviewPage() {
               <CardTitle className="flex items-center gap-2 text-sm">
                 <CreditCard className="text-muted-foreground size-4" /> Plans and payments
               </CardTitle>
-              <CardDescription>Billing isn&apos;t connected yet. Once it is, each user&apos;s plan, revenue and payment history show here.</CardDescription>
+              <CardDescription>
+                {billing.enabled
+                  ? `${billing.paying} paying ${billing.paying === 1 ? "account" : "accounts"}, about $${billing.mrr.toLocaleString("en-US")} a month at list price. ${billing.pastDue} with a payment due, ${billing.canceling} canceling at period end. Payment details are in Stripe.`
+                  : "Billing is off on this server (no Stripe keys), so every account has the Pro plan's limits. See docs/deployment.md."}
+              </CardDescription>
             </CardHeader>
           </Card>
         </div>

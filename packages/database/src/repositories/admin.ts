@@ -2,6 +2,7 @@ import { ATTENTION_APPLICATION_STATUSES, SENT_STATUSES, type FailureType, type P
 import type { Prisma } from "@prisma/client";
 import { prisma } from "../client";
 import { audit, type AuditContext } from "./audit";
+import { planLabel } from "./billing";
 import { NotFoundError } from "./errors";
 
 /*
@@ -91,6 +92,7 @@ export async function listAdminUsers(filters: AdminUserFilters = {}) {
         createdAt: true,
         lastLoginAt: true,
         lockedUntil: true,
+        subscription: { select: { plan: true, status: true } },
         _count: { select: { jobs: { where: { deletedAt: null } }, applications: true } },
       },
     }),
@@ -119,8 +121,9 @@ export async function listAdminUsers(filters: AdminUserFilters = {}) {
     total,
     page,
     pageCount: Math.max(1, Math.ceil(total / ADMIN_PAGE_SIZE)),
-    users: users.map(({ _count, ...u }) => ({
+    users: users.map(({ _count, subscription, ...u }) => ({
       ...u,
+      plan: planLabel(subscription),
       locked: u.lockedUntil != null && u.lockedUntil > new Date(),
       lastActiveAt: latest(u.lastLoginAt, lastSeen.get(u.id) ?? null),
       jobs: _count.jobs,
@@ -148,6 +151,7 @@ export async function getAdminUserDetail(adminId: string, userId: string, contex
       lastLoginAt: true,
       lockedUntil: true,
       failedLoginCount: true,
+      subscription: { select: { plan: true, status: true, currentPeriodEnd: true, cancelAtPeriodEnd: true } },
       settings: { select: { queuePaused: true } },
       automationRule: { select: { defaultMode: true } },
       _count: { select: { jobs: { where: { deletedAt: null } }, documents: true } },
@@ -169,8 +173,9 @@ export async function getAdminUserDetail(adminId: string, userId: string, contex
 
   await audit(adminId, "admin.view_user", { entityType: "User", entityId: userId, context });
 
-  const { _count, settings, automationRule, ...account } = user;
+  const { _count, settings, automationRule, subscription, ...account } = user;
   return {
+    plan: { label: planLabel(subscription), renewsAt: subscription?.currentPeriodEnd ?? null, cancelAtPeriodEnd: subscription?.cancelAtPeriodEnd ?? false },
     account: { ...account, locked: account.lockedUntil != null && account.lockedUntil > new Date() },
     jobs: _count.jobs,
     documents: _count.documents,

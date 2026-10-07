@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { LegalLinks } from "@/components/legal/legal";
 
 export default function AuthLayout({ children }: { children: React.ReactNode }) {
@@ -5,10 +6,10 @@ export default function AuthLayout({ children }: { children: React.ReactNode }) 
     <div className="grid min-h-screen lg:grid-cols-2">
       <div className="flex flex-col justify-center px-6 py-12 sm:px-12">
         <div className="mx-auto w-full max-w-sm">
-          <div className="mb-10 flex items-center gap-2">
+          <Link href="/" className="mb-10 flex w-fit items-center gap-2">
             <div className="bg-primary text-primary-foreground grid size-8 place-items-center rounded-lg text-sm font-bold">A</div>
-            <span className="text-lg font-semibold tracking-tight">AutoApply</span>
-          </div>
+            <span className="text-lg font-semibold tracking-tight">Applyance</span>
+          </Link>
           {children}
           <LegalLinks className="mt-10 justify-center" />
         </div>
@@ -17,7 +18,7 @@ export default function AuthLayout({ children }: { children: React.ReactNode }) 
         <div className="absolute inset-0 bg-[linear-gradient(to_right,#ffffff0a_1px,transparent_1px),linear-gradient(to_bottom,#ffffff0a_1px,transparent_1px)] bg-[size:32px_32px]" />
         <div className="relative flex h-full flex-col justify-end p-12 text-zinc-100">
           <p className="max-w-md text-2xl leading-snug font-medium tracking-tight">
-            Save jobs once. AutoApply analyzes, fills and tracks every application, and stops for you whenever a human is needed.
+            Save jobs once. Applyance analyzes, fills and tracks every application, and stops for you whenever a human is needed.
           </p>
           <ul className="mt-8 space-y-2 text-sm text-zinc-400">
             <li>Never bypasses CAPTCHAs, MFA or other security checks</li>

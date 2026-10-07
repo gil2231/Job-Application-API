@@ -124,6 +124,32 @@ export const changePasswordSchema = z
   })
   .refine((v) => v.newPassword === v.confirmPassword, { message: "Passwords do not match", path: ["confirmPassword"] });
 
+export const forgotPasswordSchema = z.object({ email: emailSchema });
+
+export const resetPasswordSchema = z
+  .object({
+    token: z.string().min(20).max(200),
+    password: passwordSchema,
+    confirmPassword: z.string(),
+  })
+  .refine((v) => v.password === v.confirmPassword, { message: "Passwords do not match", path: ["confirmPassword"] });
+
+/** A 6-digit authenticator code or a recovery code (xxxxx-xxxxx). */
+export const twoFactorCodeSchema = z.object({
+  code: z
+    .string()
+    .trim()
+    .min(6, "Enter the 6-digit code")
+    .max(20, "Enter the 6-digit code")
+    .transform((v) => v.replace(/\s+/g, "")),
+});
+
+export const deleteAccountSchema = z.object({
+  password: z.string().min(1, "Enter your password").max(200),
+  code: z.string().trim().max(20).optional(),
+  confirm: z.literal("DELETE", { error: "Type DELETE to confirm" }),
+});
+
 // ── Master Profile ──────────────────────────────────────────────────────────
 
 export const personalSchema = z.object({

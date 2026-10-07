@@ -80,6 +80,12 @@ export const LIMITS = {
   /** Tailored resumes and cover letters may call the AI provider. */
   generate: { limit: relaxed ? 500 : 40, windowMs: 60 * 60_000 },
   mutation: { limit: 120, windowMs: 60_000 },
+  /** Two-factor codes per account; with 3 valid codes at a time, guessing stays hopeless. */
+  twoFactor: { limit: 10, windowMs: 15 * 60_000 },
+  /** Verification and password reset emails per address. */
+  emailSend: { limit: relaxed ? 100 : 5, windowMs: 60 * 60_000 },
+  /** Data exports are heavy; a few an hour is plenty. */
+  dataExport: { limit: relaxed ? 100 : 5, windowMs: 60 * 60_000 },
   /** "Report a problem" messages, per account or, when signed out, per IP. */
   support: { limit: relaxed ? 500 : 10, windowMs: 60 * 60_000 },
 } as const;

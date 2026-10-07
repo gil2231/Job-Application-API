@@ -102,8 +102,11 @@ test("asks to connect again when access is revoked", async ({ page }) => {
   const connection = await prisma.mailConnection.findFirstOrThrow({ where: { userId: me.id, provider: "MICROSOFT" } });
   // Expire the saved token and make the refresh token invalid, as when the user removes access in their Microsoft account.
   await prisma.mailConnection.update({ where: { id: connection.id }, data: { tokenExpiresAt: new Date(0), refreshToken: null } });
-  await outlook.getByRole("button", { name: "Sync now" }).click();
-  await expect(page.getByText("The sign-in for this account has expired. Connect it again.").first()).toBeVisible();
+  // Retry the click in case it lands before the page has hydrated (seen when the whole suite runs in parallel).
+  await expect(async () => {
+    await outlook.getByRole("button", { name: "Sync now" }).click({ timeout: 2000 });
+    await expect(page.getByText("The sign-in for this account has expired. Connect it again.").first()).toBeVisible({ timeout: 5000 });
+  }).toPass({ timeout: 30_000 });
   await page.reload();
   await expect(outlook.getByText("Reconnect needed")).toBeVisible();
   await expect(outlook.getByRole("link", { name: "Connect again" })).toBeVisible();

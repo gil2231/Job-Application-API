@@ -2,7 +2,22 @@ import { NextResponse, type NextRequest } from "next/server";
 import { contentSecurityPolicy, createNonce } from "./lib/csp";
 import { SESSION_COOKIE, sessionCookieOptions } from "./lib/session-cookie";
 
-const PUBLIC_PATHS = ["/sign-in", "/sign-up", "/api/health", "/api/client-errors", "/unsubscribe", "/api/unsubscribe", "/terms", "/privacy", "/help"];
+const PUBLIC_PATHS = [
+  "/sign-in",
+  "/sign-up",
+  "/forgot-password",
+  "/reset-password",
+  "/verify-email",
+  "/pricing",
+  "/terms",
+  "/privacy",
+  "/help",
+  "/unsubscribe",
+  "/api/unsubscribe",
+  "/api/health",
+  "/api/client-errors",
+  "/api/stripe/webhook",
+];
 
 /**
  * Optimistic routing only: sends visitors without a session cookie to sign-in.
@@ -14,7 +29,8 @@ const PUBLIC_PATHS = ["/sign-in", "/sign-up", "/api/health", "/api/client-errors
 export function proxy(request: NextRequest) {
   const { pathname, search } = request.nextUrl;
   const token = request.cookies.get(SESSION_COOKIE)?.value;
-  const isPublic = PUBLIC_PATHS.some((p) => pathname === p || pathname.startsWith(`${p}/`));
+  // "/" is the public landing page.
+  const isPublic = pathname === "/" || PUBLIC_PATHS.some((p) => pathname === p || pathname.startsWith(`${p}/`));
 
   if (!token && !isPublic) {
     if (pathname.startsWith("/api/")) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
