@@ -72,6 +72,15 @@ The search box on the Jobs page looks in titles, companies, locations and descri
 
 Every new job is analyzed (seniority, location and arrangement, pay, required and preferred qualifications, experience, education, skills, industry, sponsorship, travel, platform), scored against your Master Profile with the weights on the Rules page, and marked Qualified, Not Qualified or Needs Details. On the Rules page, **Include keywords** require a job to mention at least one of them and **Exclude keywords** skip any job that mentions one. Analysis uses the AI provider when `AI_PROVIDER` and its key are set, and the built-in deterministic analyzer otherwise, so it works without a key. Changing your profile or rules re-scores waiting jobs without re-analyzing them.
 
+## Importing your resume
+
+**Master Profile → Import from resume** (`/profile/import`) fills the profile from a resume: upload a PDF, Word (.docx) or text file, or pick a resume already in Documents. Nothing is saved until you confirm.
+
+- The file is read on the server (PDF text by position, so right-aligned dates stay on their line; Word paragraphs with list bullets). Scanned images and old .doc files are refused with a message.
+- With an AI provider set in Settings, the model copies fields out of the resume; otherwise the built-in reader finds the contact block, summary, work history, education and skills sections. If the model fails, the built-in reader is used.
+- Every value is checked against the resume text before you see it. Anything the AI suggested that isn't in the resume (an employer, a skill, a GPA, a country it inferred) is dropped and listed. A month the resume doesn't write is flagged for you to check.
+- On the review page you edit any field and tick what to keep. Personal fields replace the profile's value (a value that differs from your profile starts unticked), skills are added to your lists, and jobs and schools already in your profile start unticked. You can also save the file to Documents as a resume.
+
 ## Running applications
 
 Choose **Apply** on the Jobs page (the arrow next to it picks Manual, Review or Auto mode for that batch; otherwise your default mode from Rules is used), or **Apply to all qualified**. Applications are queued, and the worker (`pnpm dev:worker`) picks them up.
