@@ -25,6 +25,8 @@ const pairs: Array<[string, Record<string, string>, readonly string[]]> = [
   ["NotificationKind", $Enums.NotificationKind, shared.NOTIFICATION_KINDS],
   ["NotificationChannel", $Enums.NotificationChannel, shared.NOTIFICATION_CHANNELS],
   ["NotificationStatus", $Enums.NotificationStatus, shared.NOTIFICATION_STATUSES],
+  ["SupportCategory", $Enums.SupportCategory, shared.SUPPORT_CATEGORIES],
+  ["SupportStatus", $Enums.SupportStatus, shared.SUPPORT_STATUSES],
 ];
 
 describe("shared enums mirror the Prisma schema", () => {
