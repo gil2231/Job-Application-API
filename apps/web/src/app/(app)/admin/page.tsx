@@ -2,7 +2,6 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { ArrowRight, CreditCard } from "lucide-react";
 import { countOpenSupportRequests, getAdminOverview } from "@autoapply/database";
-import { getAdminOverview } from "@autoapply/database";
 import { backupHealthChecks } from "@autoapply/ops";
 import { enumLabel } from "@autoapply/shared";
 import { requireAdmin } from "@/lib/auth";
@@ -16,10 +15,10 @@ export const metadata: Metadata = { title: "Admin" };
 
 export default async function AdminOverviewPage() {
   await requireAdmin();
-  const [overview, worker, openReports] = await Promise.all([getAdminOverview(), getWorkerStatus(), countOpenSupportRequests()]);
-  const [overview, worker, backups] = await Promise.all([
+  const [overview, worker, openReports, backups] = await Promise.all([
     getAdminOverview(),
     getWorkerStatus(),
+    countOpenSupportRequests(),
     backupHealthChecks().catch(() => ({ backups: { state: "fail" as const, note: "can't reach the backup bucket" }, restoreTest: { state: "off" as const } })),
   ]);
   const { users, applications } = overview;

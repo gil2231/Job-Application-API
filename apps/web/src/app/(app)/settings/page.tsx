@@ -1,6 +1,5 @@
 import type { Metadata } from "next";
-import { getUserSettings, listAuditLogs, listBrowserSessions, listExtensionConnections, listSessions } from "@autoapply/database";
-import { getUserSettings, listAuditLogs, listBrowserSessions, listNotifications, listSessions } from "@autoapply/database";
+import { getUserSettings, listAuditLogs, listBrowserSessions, listExtensionConnections, listNotifications, listSessions } from "@autoapply/database";
 import { createEmailSender } from "@autoapply/notifications";
 import { enumLabel } from "@autoapply/shared";
 import { requireUser } from "@/lib/auth";
@@ -10,7 +9,6 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { ANTHROPIC_DEFAULT_MODEL, OPENAI_DEFAULT_MODEL } from "@autoapply/ai";
-import { AccountForm, AnalysisForm, BrowserSessionList, PasswordForm, PreferencesForm, SessionList } from "./settings-forms";
 import { ExtensionCard } from "./extension-card";
 import { AccountForm, AnalysisForm, BrowserSessionList, NotificationHistory, NotificationsForm, PasswordForm, PreferencesForm, SessionList } from "./settings-forms";
 
@@ -25,17 +23,15 @@ function describeAgent(ua: string | null): string {
 
 export default async function SettingsPage() {
   const user = await requireUser();
-  const [settings, sessions, logs, browserSessions, extensions] = await Promise.all([
-  const [settings, sessions, logs, browserSessions, notifications] = await Promise.all([
+  const [settings, sessions, logs, browserSessions, extensions, notifications] = await Promise.all([
     getUserSettings(user.id),
     listSessions(user.id),
     listAuditLogs(user.id, 40),
     listBrowserSessions(user.id),
     listExtensionConnections(user.id),
-  ]);
-  const serverAddress = process.env.API_PUBLIC_URL ?? `http://localhost:${process.env.API_PORT ?? 4000}`;
     listNotifications(user.id, 10),
   ]);
+  const serverAddress = process.env.API_PUBLIC_URL ?? `http://localhost:${process.env.API_PORT ?? 4000}`;
   const email = createEmailSender();
 
   return (

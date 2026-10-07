@@ -206,19 +206,5 @@ export function MobileNav({ user, attentionCount }: SidebarProps) {
         </button>
       </nav>
     </Sheet>
-        <SheetContent side="left" className="bg-sidebar w-64 gap-0 p-0">
-          <SheetTitle className="sr-only">Navigation</SheetTitle>
-          <Brand />
-          <div className="flex-1 overflow-y-auto py-2">
-            <NavLinks attentionCount={attentionCount} isAdmin={user.role === "ADMIN"} onNavigate={() => setOpen(false)} />
-          </div>
-          <div className="border-t p-2">
-            <SupportLinks onNavigate={() => setOpen(false)} />
-            <UserMenu user={user} />
-          </div>
-        </SheetContent>
-      </Sheet>
-      <span className="font-semibold tracking-tight">AutoApply</span>
-    </div>
   );
 }
