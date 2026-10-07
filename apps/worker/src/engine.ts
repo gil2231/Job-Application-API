@@ -49,6 +49,7 @@ import type { StorageDriver } from "@autoapply/documents";
 import { APPLICATION_EVENT_TYPES, enumLabel, FAILURE_INFO, type ApplicationEventType, type AttentionReason, type EventLevel, type Platform } from "@autoapply/shared";
 import type { BrowserPool } from "./browser";
 import type { WorkerConfig } from "./config";
+import type { LiveSolveHub, LiveWindow } from "./live-solve";
 import { ProgressReporter } from "./progress";
 import { SiteHealth } from "./site-health";
 import { checkSite } from "./site-policy";
@@ -62,6 +63,8 @@ export interface EngineDeps {
   workerId: string;
   /** Per-site circuit breaker; built from `redis` when not given. */
   siteHealth?: SiteHealth;
+  /** Set when CAPTCHAs can be solved live from the app's CAPTCHA screen. */
+  liveSolve?: LiveSolveHub | null;
 }
 
 export interface RunInput {
@@ -486,37 +489,58 @@ class AttemptRun {
     await ctx.screenshot(label);
     await this.progress.waiting("human", `Waiting for you: ${label}`);
     await this.saveSession();
-    if (!deps.browsers.interactive) {
+    // A CAPTCHA can be solved live from the app; sign-ins and codes still need the visible browser.
+    const live = status.reason === "CAPTCHA" && this.page ? (deps.liveSolve ?? null) : null;
+    if (!deps.browsers.interactive && !live) {
       const action = status.reason === "CAPTCHA" ? "complete the CAPTCHA" : "sign in";
       return this.attention("WAITING_FOR_USER", status.reason, `${status.detail} Open the application to ${action} and finish it yourself, then mark it submitted. If the check was a one-off, press I've completed it and AutoApply will look again.`);
     }
 
-    const detail = `${status.detail} Finish it in the AutoApply browser window, then press ${status.reason === "CAPTCHA" ? "I've completed it" : "Continue"}. AutoApply carries on from there.`;
+    const detail = live
+      ? `${status.detail} Solve it on the CAPTCHA screen in Applyance. The application carries on by itself as soon as it's solved.`
+      : `${status.detail} Finish it in the AutoApply browser window, then press ${status.reason === "CAPTCHA" ? "I've completed it" : "Continue"}. AutoApply carries on from there.`;
     const kept = await finishAttempt({ applicationId: input.applicationId, attemptId: input.attemptId, userId: input.userId, workerId: deps.workerId, outcome: { kind: "attention", status: "WAITING_FOR_USER", reason: status.reason, detail, keepLease: { leaseMs: deps.config.leaseMs } } });
     if (!kept) return { result: "cancelled" };
 
-    const deadline = Date.now() + deps.config.interactiveWaitMs;
-    while (Date.now() < deadline) {
-      await sleep(POLL_MS, input.signal);
-      await renewLease(input.applicationId, deps.workerId, deps.config.leaseMs);
-      const held = await getHeldState(input.applicationId);
-      if (!held || held.lockedBy !== deps.workerId || (held.status !== "WAITING_FOR_USER" && held.status !== "QUEUED")) {
-        await cancelAttempt(input.applicationId, input.attemptId, deps.workerId, "The application was changed while waiting");
-        return { result: "cancelled" };
+    const waitMs = live ? deps.config.liveSolveWaitMs : deps.config.interactiveWaitMs;
+    const deadline = Date.now() + waitMs;
+    let window: LiveWindow | null = null;
+    let ended: "solved" | "timed_out" | "stopped" = "stopped";
+    try {
+      if (live) {
+        window = await live.open(this.page!, { applicationId: input.applicationId, userId: input.userId, company: this.data.job.company, title: this.data.job.title, expiresAt: new Date(deadline) });
+        await this.log("NOTE", "Live CAPTCHA window opened on the CAPTCHA screen");
       }
-      const now = await adapter.getStatus(ctx).catch(() => null);
-      if (now && now.state !== "needs_human") {
-        await resumeHeldApplication(input.applicationId, input.attemptId, input.userId, deps.workerId, `${label.replace(" detected", "").replace(" required", "")} completed in the browser; continuing`, deps.config.leaseMs);
-        await this.saveSession();
-        await this.progress.resume();
-        return "resumed";
+      while (Date.now() < deadline) {
+        await sleep(POLL_MS, input.signal);
+        await renewLease(input.applicationId, deps.workerId, deps.config.leaseMs);
+        const held = await getHeldState(input.applicationId);
+        if (!held || held.lockedBy !== deps.workerId || (held.status !== "WAITING_FOR_USER" && held.status !== "QUEUED")) {
+          await cancelAttempt(input.applicationId, input.attemptId, deps.workerId, "The application was changed while waiting");
+          return { result: "cancelled" };
+        }
+        const now = await adapter.getStatus(ctx).catch(() => null);
+        if (now && now.state !== "needs_human") {
+          ended = "solved";
+          const where = live && !deps.browsers.interactive ? "on the CAPTCHA screen" : "in the browser";
+          await resumeHeldApplication(input.applicationId, input.attemptId, input.userId, deps.workerId, `${label.replace(" detected", "").replace(" required", "")} completed ${where}; continuing`, deps.config.leaseMs);
+          await this.saveSession();
+          await this.progress.resume();
+          return "resumed";
+        }
+        if (held.status === "QUEUED") {
+          await markStillWaiting(input.applicationId, input.userId, deps.workerId, `The page still shows the ${status.reason === "CAPTCHA" ? "CAPTCHA" : "sign-in"}. ${live ? "Solve it on the CAPTCHA screen" : "Finish it in the AutoApply browser window"} first.`);
+        }
       }
-      if (held.status === "QUEUED") await markStillWaiting(input.applicationId, input.userId, deps.workerId, `The page still shows the ${status.reason === "CAPTCHA" ? "CAPTCHA" : "sign-in"}. Finish it in the AutoApply browser window first.`);
+      ended = "timed_out";
+      await this.saveSession();
+      await releaseHeldApplication(input.applicationId, input.attemptId, deps.workerId);
+      if (live) await this.log("NOTE", "Nobody solved the CAPTCHA in time, so its live window closed. Open it again from the CAPTCHA screen.");
+      await this.progress.finish("waiting");
+      return { result: "released" };
+    } finally {
+      await window?.close(ended);
     }
-    await this.saveSession();
-    await releaseHeldApplication(input.applicationId, input.attemptId, deps.workerId);
-    await this.progress.finish("waiting");
-    return { result: "released" };
   }
 
   /** Manual mode with a visible browser: leave the filled form open and record it when the person submits. */

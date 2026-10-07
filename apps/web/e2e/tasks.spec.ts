@@ -42,11 +42,13 @@ test("Tasks: Start, Pause and the live task list drive the existing queue", asyn
   await expect(deck).toHaveAttribute("data-state", "running");
   expect(await prisma.userSetting.findUniqueOrThrow({ where: { userId: user.id } })).toMatchObject({ queuePaused: false });
 
-  // A task that stops for the person shows under Needs you with a Finish link.
+  // A task that stops on a CAPTCHA shows under Needs you with a Solve link to the CAPTCHA screen.
   await prisma.application.update({ where: { id: app.id }, data: { status: "WAITING_FOR_USER", attentionReason: "CAPTCHA" } });
   await page.reload();
   await page.getByRole("tab", { name: /Needs you/ }).click();
   await expect(table.getByText("CAPTCHA")).toBeVisible();
-  await expect(table.getByRole("link", { name: /Open Solutions Engineer/ })).toHaveAttribute("href", "/needs-attention");
+  const solve = table.getByRole("link", { name: /Open Solutions Engineer/ });
+  await expect(solve).toHaveAttribute("href", "/captcha");
+  await expect(solve).toHaveText(/Solve/);
   await expect(page.getByTestId("activity-log")).toContainText("Bolt Labs");
 });

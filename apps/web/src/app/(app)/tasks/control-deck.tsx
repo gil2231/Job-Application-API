@@ -191,7 +191,11 @@ export function ControlDeck({ run, counts, qualifiedWaiting, usage, worker }: Co
           </div>
 
           <p className="text-muted-foreground text-xs">
-            CAPTCHAs, sign-ins and questions Applyance isn&apos;t sure about always stop in Needs Attention for you. It never skips a site&apos;s security checks.
+            CAPTCHAs pop up live on{" "}
+            <Link href="/captcha" className="text-primary hover:underline">
+              Solve CAPTCHAs
+            </Link>{" "}
+            for you to solve, and sign-ins and questions Applyance isn&apos;t sure about stop in Needs Attention. It never skips a site&apos;s security checks.
           </p>
         </div>
       </div>

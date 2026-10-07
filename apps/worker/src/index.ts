@@ -8,11 +8,12 @@ import { getStorage } from "@autoapply/documents";
 import { createEmailSender } from "@autoapply/notifications";
 import { captureException, flushErrorReports, initErrorReporting, installProcessHandlers } from "@autoapply/ops";
 import { createApplicationQueue, createRedis, parseControlMessage, type ApplicationJobData } from "@autoapply/queue";
-import { checkEnvironment, CONTROL_CHANNEL, createLogger, QUEUE_NAMES } from "@autoapply/shared";
+import { checkEnvironment, CONTROL_CHANNEL, createLogger, LIVE_SOLVE_INPUT_CHANNEL, parseLiveSolveInputMessage, QUEUE_NAMES } from "@autoapply/shared";
 import { BrowserPool } from "./browser";
 import { loadConfig } from "./config";
 import { ABORT_REASONS, ApplicationEngine } from "./engine";
 import { startHeartbeat } from "./heartbeat";
+import { LiveSolveHub } from "./live-solve";
 import { MailSyncLoop } from "./mail-sync";
 import { startMaintenance } from "./maintenance";
 import { Notifier } from "./notifier";
@@ -51,8 +52,9 @@ const publisher = createRedis(config.redisUrl);
 const subscriber = createRedis(config.redisUrl);
 const queue = createApplicationQueue(connection);
 const active = new Map<string, ActiveRun>();
+const liveSolve = config.liveSolve ? new LiveSolveHub(publisher) : null;
 const siteHealth = new SiteHealth(publisher);
-const engine = new ApplicationEngine({ config, browsers, registry, storage: getStorage(), redis: publisher, workerId, siteHealth });
+const engine = new ApplicationEngine({ config, browsers, registry, storage: getStorage(), redis: publisher, workerId, siteHealth, liveSolve });
 const scheduler = new Scheduler(queue, config.schedulerIntervalMs);
 const mailSync = new MailSyncLoop(config.mailSyncIntervalMs);
 const emailSender = createEmailSender();
@@ -74,8 +76,13 @@ worker.on("error", (error) => {
   captureException(error, { tags: { queue: QUEUE_NAMES.applications, kind: "worker-error" } });
 });
 
-await subscriber.subscribe(CONTROL_CHANNEL);
-subscriber.on("message", (_channel, raw) => {
+await subscriber.subscribe(CONTROL_CHANNEL, ...(liveSolve ? [LIVE_SOLVE_INPUT_CHANNEL] : []));
+subscriber.on("message", (channel, raw) => {
+  if (channel === LIVE_SOLVE_INPUT_CHANNEL) {
+    const input = parseLiveSolveInputMessage(raw);
+    if (input) liveSolve?.dispatch(input);
+    return;
+  }
   const message = parseControlMessage(raw);
   if (!message) return;
   if (message.type === "stop") {
@@ -85,7 +92,7 @@ subscriber.on("message", (_channel, raw) => {
   }
 });
 
-const heartbeat = startHeartbeat(publisher, { adapters: () => registry.list().map((a) => a.platform), activeJobs: () => active.size, interactive: () => browsers.interactive });
+const heartbeat = startHeartbeat(publisher, { adapters: () => registry.list().map((a) => a.platform), activeJobs: () => active.size, interactive: () => browsers.interactive, liveSolve: !!liveSolve });
 scheduler.start();
 mailSync.start();
 notifier?.start();
@@ -112,6 +119,7 @@ async function shutdown(signal: string) {
   await mailSync.stop().catch(() => undefined);
   await notifier?.stop().catch(() => undefined);
   for (const run of active.values()) run.controller.abort(ABORT_REASONS.shutdown);
+  await liveSolve?.closeAll();
   await worker.close().catch(() => undefined);
   await maintenance?.close();
   await heartbeat.stop().catch(() => undefined);

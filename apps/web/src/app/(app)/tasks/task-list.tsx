@@ -60,11 +60,12 @@ function TaskDetail({ task, position }: { task: Task; position: number | null })
 }
 
 function TaskAction({ task }: { task: Task }) {
-  const href = NEEDS_YOU.includes(task.status) ? "/needs-attention" : `/applications/${task.id}`;
+  const captcha = task.status === "WAITING_FOR_USER" && task.attentionReason === "CAPTCHA";
+  const href = captcha ? "/captcha" : NEEDS_YOU.includes(task.status) ? "/needs-attention" : `/applications/${task.id}`;
   return (
     <Button asChild size="sm" variant={NEEDS_YOU.includes(task.status) ? "default" : "ghost"}>
       <Link href={href} aria-label={`Open ${task.job.title} at ${task.job.company}`}>
-        {NEEDS_YOU.includes(task.status) ? "Finish" : "Open"} <ArrowUpRight />
+        {captcha ? "Solve" : NEEDS_YOU.includes(task.status) ? "Finish" : "Open"} <ArrowUpRight />
       </Link>
     </Button>
   );

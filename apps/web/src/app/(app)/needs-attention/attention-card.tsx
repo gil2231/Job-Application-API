@@ -279,6 +279,11 @@ export function AttentionCard({ item }: { item: AttentionItem }) {
               </>
             ) : reason === "CAPTCHA" ? (
               <>
+                <Button size="sm" asChild>
+                  <Link href="/captcha">
+                    <ShieldAlert /> Solve in Applyance
+                  </Link>
+                </Button>
                 {open}
                 {retry("I've completed it", Check)}
                 {submittedMyself}

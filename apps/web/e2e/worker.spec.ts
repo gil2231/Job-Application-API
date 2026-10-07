@@ -242,3 +242,39 @@ test("A site outage is retried with backoff, shown on Automation health, and can
   await expect(kpis.getByText("1 of 1 failed applications recovered on a later try")).toBeVisible();
   await expect(page.getByText("Nothing is waiting to retry.")).toBeVisible();
 });
+
+test("CAPTCHA screen: the paused page shows up live, the user solves it there, and the application carries on", async ({ page, browser }) => {
+  test.setTimeout(150_000);
+  const { email } = await signUp(page);
+  const user = await seedApplicant(email, "AUTO");
+  await addMockJob(page, "/captcha", "Mock Captcha BDR");
+  await page.getByRole("checkbox", { name: "Select all" }).check();
+  await page.getByRole("button", { name: "Apply", exact: true }).click();
+  await expect(page.getByText(/Queued 1 application in auto mode/)).toBeVisible();
+
+  await page.goto("/captcha");
+  const panel = page.getByTestId("live-panel");
+  await expect(panel).toBeVisible({ timeout: 60_000 });
+  await expect(panel.getByText("Example Corp")).toBeVisible();
+  await expect(panel.getByText("127.0.0.1")).toBeVisible();
+  const app = await prisma.application.findFirstOrThrow({ where: { userId: user.id } });
+  expect((await prisma.application.findUniqueOrThrow({ where: { id: app.id } })).attentionReason).toBe("CAPTCHA");
+
+  // Where the "I'm not a robot" box sits on the worker's 1280×900 page.
+  const probe = await browser.newPage({ viewport: { width: 1280, height: 900 } });
+  await probe.goto(`${MOCK}/captcha`);
+  const box = (await probe.locator("#robot").boundingBox())!;
+  await probe.close();
+
+  // The person clicks it inside the live window in Applyance, once the page has settled.
+  await expect(page.getByTestId("solve-deck")).toHaveAttribute("data-connected", "true");
+  const view = (await panel.getByRole("img").boundingBox())!;
+  const scale = view.width / 1280;
+  await page.mouse.click(view.x + (box.x + box.width / 2) * scale, view.y + (box.y + box.height / 2) * scale);
+
+  await expect(page.getByText(/CAPTCHA solved\. The application is carrying on\./)).toBeVisible({ timeout: 30_000 });
+  await expect(panel).toHaveCount(0);
+  await expect.poll(async () => (await prisma.application.findUniqueOrThrow({ where: { id: app.id } })).status, { timeout: 60_000 }).toBe("SUBMITTED");
+  const events = await prisma.applicationEvent.findMany({ where: { applicationId: app.id }, select: { message: true } });
+  expect(events.some((e) => /completed on the CAPTCHA screen/.test(e.message))).toBe(true);
+});
