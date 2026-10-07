@@ -29,7 +29,7 @@ export const EDUCATION_LEVEL_LABELS: Record<EducationLevel, string> = {
 };
 
 /**
- * Everything AutoApply extracts from a job posting. Stored on Job.analysis.
+ * Everything Applyance extracts from a job posting. Stored on Job.analysis.
  * Fields are null when the posting doesn't say; nothing here is guessed about
  * the user, it only describes the job.
  */

@@ -1,11 +1,11 @@
-# AutoApply
+# Applyance
 
-AutoApply imports the jobs you've saved, scores them against your Master Profile, and fills out ATS applications for you. A person stays in the loop for CAPTCHAs, MFA, and any question your profile can't answer.
+Applyance imports the jobs you've saved, scores them against your Master Profile, and fills out ATS applications for you. A person stays in the loop for CAPTCHAs, MFA, and any question your profile can't answer.
 
 ## Ground rules the code enforces
 
-- AutoApply never bypasses CAPTCHAs, MFA, logins or anti-bot protections. When automation hits one, the application moves to **Needs Attention** and waits for you.
-- Applications are filled only from facts in your Master Profile and Answer Library. A question with no stored answer is sent to you; AutoApply never makes up an answer. AI drafts are only suggestions you approve, and generated resumes and cover letters are checked against your profile.
+- Applyance never bypasses CAPTCHAs, MFA, logins or anti-bot protections. When automation hits one, the application moves to **Needs Attention** and waits for you.
+- Applications are filled only from facts in your Master Profile and Answer Library. A question with no stored answer is sent to you; Applyance never makes up an answer. AI drafts are only suggestions you approve, and generated resumes and cover letters are checked against your profile.
 - Applications are submitted automatically only in `AUTO` mode, with auto-submit turned on in Rules, and only when every safety check passes. Otherwise they stop for your review.
 - Automation is never run against real employers by default.
 
@@ -62,7 +62,7 @@ Other entry points: `pnpm dev:api` (port 4000) and `pnpm dev:worker` (the browse
 
 Jobs come in four ways, all from the Jobs page:
 
-- **LinkedIn saved jobs.** On LinkedIn, Settings & Privacy → Data privacy → Get a copy of your data, with Jobs selected. Upload the archive (or the `Saved Jobs.csv` inside it). AutoApply never signs in to LinkedIn or reads its pages, so LinkedIn jobs arrive as title, company and link; paste the description on the job page to score them.
+- **LinkedIn saved jobs.** On LinkedIn, Settings & Privacy → Data privacy → Get a copy of your data, with Jobs selected. Upload the archive (or the `Saved Jobs.csv` inside it). Applyance never signs in to LinkedIn or reads its pages, so LinkedIn jobs arrive as title, company and link; paste the description on the job page to score them.
 - **Pasted URLs.** Greenhouse, Lever, Ashby, SmartRecruiters and Workday links, and careers pages that publish schema.org `JobPosting` data, are filled in from the public posting. Fetches are SSRF-guarded (public addresses only, checked at connect time, size and time limits).
 - **Add job** for a single posting, with an optional Fetch details.
 - **Search job boards** finds open jobs by keyword on the companies' boards you list (Greenhouse, Lever and Ashby links such as `boards.greenhouse.io/acme`, `jobs.lever.co/acme` or `jobs.ashbyhq.com/acme`, up to 25 per search). It reads the public job board APIs those platforms publish for anyone; none of them offers a cross-company search, so you choose the companies. Keywords match job titles (optionally descriptions too), `"quotes"` match a phrase, and `-word` skips postings that mention it anywhere. You pick which results to add. The last search is remembered.
@@ -88,8 +88,8 @@ Every new job is analyzed (seniority, location and arrangement, pay, required an
 
 Choose **Apply** on the Jobs page (the arrow next to it picks Manual, Review or Auto mode for that batch; otherwise your default mode from Rules is used), or **Apply to all qualified**. Applications are queued, and the worker (`pnpm dev:worker`) picks them up.
 
-- **Manual** fills the form and stops. You submit it yourself and mark it submitted (with a visible browser, AutoApply notices the submission).
-- **Review** fills the form and stops for you to approve. **Approve & submit** in Needs Attention lets AutoApply submit it.
+- **Manual** fills the form and stops. You submit it yourself and mark it submitted (with a visible browser, Applyance notices the submission).
+- **Review** fills the form and stops for you to approve. **Approve & submit** in Needs Attention lets Applyance submit it.
 - **Auto** submits only when every check passes: auto-submit is on in Rules, the site is supported, every required field was mapped confidently, every answer is allowed to be sent without review, nothing contradicts your profile, and there's no CAPTCHA. Otherwise it stops for review and says why.
 
 The worker stops before leaving any page that has a question it isn't sure about, so nothing you haven't approved is sent. Approved answers are reused when the application resumes, and **Remember this answer** saves them to your Answer Library. CAPTCHAs, MFA and sign-ins always go to Needs Attention. With `WORKER_HEADLESS=false` the worker opens a real browser window and keeps the page open, so you can finish the check there and it carries on by itself. Otherwise the [browser extension](#browser-extension) opens the application in your own browser with your answers filled in.

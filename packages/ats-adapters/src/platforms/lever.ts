@@ -5,7 +5,7 @@ import { FormAdapter } from "../form/form-adapter";
  * Lever postings (jobs.lever.co). The job page links to `/apply`; the form
  * asks for a single full name, labels questions with `.application-label`
  * and a ✱ for required, and parses an uploaded resume into the name, email
- * and company fields, which AutoApply then restores from the Master Profile.
+ * and company fields, which Applyance then restores from the Master Profile.
  */
 export class LeverAdapter extends FormAdapter {
   constructor() {

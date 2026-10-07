@@ -339,7 +339,7 @@ export async function markStillWaiting(applicationId: string, userId: string, wo
   if (count) await prisma.applicationEvent.create({ data: { applicationId, userId, type: "HUMAN_INPUT_REQUIRED", level: "WARNING", message: detail.slice(0, 2000) } });
 }
 
-/** The person clicked Submit in the browser window AutoApply left open (Manual mode). */
+/** The person clicked Submit in the browser window Applyance left open (Manual mode). */
 export async function recordSubmittedInBrowser(applicationId: string, attemptId: string, userId: string, workerId: string, confirmation: string | null) {
   const now = new Date();
   const { count } = await prisma.application.updateMany({

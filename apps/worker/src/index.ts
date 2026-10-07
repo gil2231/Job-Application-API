@@ -23,7 +23,7 @@ import { Scheduler } from "./scheduler";
 import { SiteHealth } from "./site-health";
 
 /**
- * AutoApply browser worker: claims queued applications, fills them with
+ * Applyance browser worker: claims queued applications, fills them with
  * Playwright through the adapter registry, and pauses for a person whenever a
  * CAPTCHA, sign-in or uncertain answer comes up. It also sends the email
  * alerts (see notifier.ts).

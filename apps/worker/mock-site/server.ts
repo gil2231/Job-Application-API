@@ -8,7 +8,7 @@ import { ATS_ENTRY_POINTS, handleAtsRequest, type AtsSession } from "./ats";
  * a real employer. Each page imitates a pattern real application forms use:
  * plain forms, multi-step flows, dropdowns, checkbox groups, uploads,
  * conditional questions, server-side validation, a CAPTCHA, a sign-in wall
- * and questions AutoApply can't know the answer to.
+ * and questions Applyance can't know the answer to.
  *
  * Run it on its own with `pnpm --filter @autoapply/worker mock-site`.
  */
@@ -273,9 +273,9 @@ const MULTI_STEPS: Array<{ title: string; fields: FieldDef[] }> = [
 export interface MockSite {
   url: string;
   submissions: MockSubmission[];
-  /** Buttons AutoApply must never press (apply with LinkedIn, Workday autofill) that were pressed anyway. */
+  /** Buttons Applyance must never press (apply with LinkedIn, Workday autofill) that were pressed anyway. */
   forbidden: string[];
-  /** Simulate a person completing the CAPTCHA in the browser AutoApply opened. */
+  /** Simulate a person completing the CAPTCHA in the browser Applyance opened. */
   solveCaptchas(): void;
   /** Simulate a person signing in within that browser. */
   grantSignIns(): void;
