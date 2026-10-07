@@ -6,6 +6,7 @@ import { resetDatabase, makeUser } from "../../../packages/database/test/helpers
 import { BrowserPool } from "../src/browser";
 import { loadConfig, type WorkerConfig } from "../src/config";
 import { ApplicationEngine, type RunResult } from "../src/engine";
+import type { SiteHealth } from "../src/site-health";
 
 export { resetDatabase, makeUser };
 
@@ -22,12 +23,12 @@ export class VisibleBrowserPool extends BrowserPool {
   }
 }
 
-export function makeEngine(options: { config?: WorkerConfig; browsers?: BrowserPool; workerId?: string } = {}) {
+export function makeEngine(options: { config?: WorkerConfig; browsers?: BrowserPool; workerId?: string; siteHealth?: SiteHealth } = {}) {
   const config = options.config ?? testConfig();
   const browsers = options.browsers ?? new BrowserPool({ ...config, headless: true });
   const registry = createDefaultRegistry();
   const workerId = options.workerId ?? "test-worker";
-  const engine = new ApplicationEngine({ config, browsers, registry, storage: getStorage(), redis: null, workerId });
+  const engine = new ApplicationEngine({ config, browsers, registry, storage: getStorage(), redis: null, workerId, siteHealth: options.siteHealth });
   return { engine, browsers, config, workerId };
 }
 

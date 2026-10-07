@@ -26,7 +26,7 @@ export async function GET() {
   const session = await getSession();
   if (!session) return Response.json({ error: "Unauthorized" }, { status: 401 });
   const userId = session.user.id;
-  const limit = rateLimit(`export:${userId}`, LIMITS.dataExport.limit, LIMITS.dataExport.windowMs);
+  const limit = await rateLimit(`export:${userId}`, LIMITS.dataExport.limit, LIMITS.dataExport.windowMs);
   if (!limit.allowed) return Response.json({ error: "Too many exports. Try again later." }, { status: 429, headers: { "Retry-After": String(limit.retryAfterSeconds) } });
 
   const [data, files] = await Promise.all([exportUserData(userId), listExportFiles(userId)]);

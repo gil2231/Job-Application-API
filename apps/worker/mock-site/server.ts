@@ -279,6 +279,8 @@ export interface MockSite {
   solveCaptchas(): void;
   /** Simulate a person signing in within that browser. */
   grantSignIns(): void;
+  /** Make the next `times` requests for a page answer with an error status (an outage, a rate limit, a closed posting). */
+  failNext(path: string, status: number, times?: number, retryAfterSeconds?: number): void;
   reset(): void;
   close(): Promise<void>;
 }
@@ -289,6 +291,7 @@ export async function startMockSite(port = 0, host = "127.0.0.1"): Promise<MockS
   const forbidden: string[] = [];
   let captchaSolvedGlobally = false;
   let signInGranted = false;
+  const failures = new Map<string, { status: number; remaining: number; retryAfter?: number }>();
 
   const sessionFor = (req: IncomingMessage, res: ServerResponse): Session => {
     const cookie = /mock_session=([a-f0-9]+)/.exec(req.headers.cookie ?? "")?.[1];
@@ -358,8 +361,20 @@ export async function startMockSite(port = 0, host = "127.0.0.1"): Promise<MockS
       const path = url.pathname.replace(/\/+$/, "") || "/";
       const session = sessionFor(req, res);
 
+      const failure = failures.get(path);
+      if (failure && failure.remaining > 0) {
+        failure.remaining--;
+        if (failure.retryAfter) res.setHeader("Retry-After", String(failure.retryAfter));
+        return send(res, failure.status, page(`Error ${failure.status}`, `<h1>Something went wrong (${failure.status})</h1>`));
+      }
+
       // Test controls.
       if (path === "/__submissions") return send(res, 200, JSON.stringify(submissions), "application/json");
+      if (path === "/__fail") {
+        const target = url.searchParams.get("path") ?? "/";
+        failures.set(target, { status: Number(url.searchParams.get("status") ?? 503), remaining: Number(url.searchParams.get("times") ?? 1), retryAfter: Number(url.searchParams.get("retryAfter")) || undefined });
+        return send(res, 200, JSON.stringify({ ok: true }), "application/json");
+      }
       if (path === "/__captcha/solve") {
         captchaSolvedGlobally = true;
         return send(res, 200, "ok", "text/plain");
@@ -499,7 +514,11 @@ export async function startMockSite(port = 0, host = "127.0.0.1"): Promise<MockS
     grantSignIns: () => {
       signInGranted = true;
     },
+    failNext: (path, status, times = 1, retryAfterSeconds) => {
+      failures.set(path, { status, remaining: times, retryAfter: retryAfterSeconds });
+    },
     reset: () => {
+      failures.clear();
       submissions.length = 0;
       forbidden.length = 0;
       sessions.clear();

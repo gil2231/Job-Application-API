@@ -99,6 +99,10 @@ enum FailureType {
   UNKNOWN_FIELD
   SITE_CHANGED
   UNKNOWN_ERROR
+  RATE_LIMITED
+  SITE_UNAVAILABLE
+  BROWSER_CRASHED
+  POSTING_CLOSED
 }
 
 enum AttentionReason {
@@ -959,17 +963,19 @@ model InterviewRound {
 
 /// One run of the worker against an application. Retries create new attempts.
 model ApplicationAttempt {
-  id               String        @id @default(cuid())
+  id               String           @id @default(cuid())
   applicationId    String
   attemptNumber    Int
-  status           AttemptStatus @default(RUNNING)
+  status           AttemptStatus    @default(RUNNING)
   workerId         String?
   browserSessionId String?
   failureType      FailureType?
   errorMessage     String?
+  /// Why the attempt stopped for a person (set when status is PAUSED), for automation health.
+  attentionReason  AttentionReason?
   /// [{ key, caption, takenAt }] storage keys of screenshots taken during the attempt.
   screenshots      Json?
-  startedAt        DateTime      @default(now())
+  startedAt        DateTime         @default(now())
   endedAt          DateTime?
 
   application    Application     @relation(fields: [applicationId], references: [id], onDelete: Cascade)
@@ -977,6 +983,7 @@ model ApplicationAttempt {
 
   @@unique([applicationId, attemptNumber])
   @@index([applicationId, startedAt])
+  @@index([endedAt])
 }
 
 /// Saved browser state for a site so a user who completed MFA once is not asked again.

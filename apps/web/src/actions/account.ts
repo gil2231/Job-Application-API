@@ -40,7 +40,7 @@ export async function confirmTwoFactorSetupAction(_prev: ActionResult<{ recovery
   return authedAction(async (user) => {
     const parsed = twoFactorCodeSchema.safeParse(formToObject(formData));
     if (!parsed.success) return validationFailed(parsed.error);
-    const limit = rateLimit(`2fa:${user.id}`, LIMITS.twoFactor.limit, LIMITS.twoFactor.windowMs);
+    const limit = await rateLimit(`2fa:${user.id}`, LIMITS.twoFactor.limit, LIMITS.twoFactor.windowMs);
     if (!limit.allowed) return { ok: false, message: `Too many codes tried. Try again in ${Math.ceil(limit.retryAfterSeconds / 60)} minutes.` };
     const recoveryCodes = await confirmTwoFactorSetup(user.id, parsed.data.code);
     if (!recoveryCodes) return { ok: false, errors: { code: "That code didn't work" }, message: "That code didn't work. Make sure your phone's time is set automatically, then try the newest code." };
@@ -57,7 +57,7 @@ export async function disableTwoFactorAction(_prev: ActionResult, formData: Form
     const password = String(formData.get("password") ?? "");
     const code = String(formData.get("code") ?? "").trim();
     if (!password || !code) return { ok: false, message: "Enter your password and a code from your app or a recovery code." };
-    const limit = rateLimit(`2fa:${user.id}`, LIMITS.twoFactor.limit, LIMITS.twoFactor.windowMs);
+    const limit = await rateLimit(`2fa:${user.id}`, LIMITS.twoFactor.limit, LIMITS.twoFactor.windowMs);
     if (!limit.allowed) return { ok: false, message: `Too many codes tried. Try again in ${Math.ceil(limit.retryAfterSeconds / 60)} minutes.` };
     if (!(await disableTwoFactor(user.id, password, code))) return { ok: false, message: "The password or code is incorrect." };
     await audit(user.id, "account.two_factor_disabled", { context: await getRequestContext() });
@@ -69,7 +69,7 @@ export async function regenerateRecoveryCodesAction(_prev: ActionResult<{ recove
   return authedAction(async (user) => {
     const parsed = twoFactorCodeSchema.safeParse(formToObject(formData));
     if (!parsed.success) return validationFailed(parsed.error);
-    const limit = rateLimit(`2fa:${user.id}`, LIMITS.twoFactor.limit, LIMITS.twoFactor.windowMs);
+    const limit = await rateLimit(`2fa:${user.id}`, LIMITS.twoFactor.limit, LIMITS.twoFactor.windowMs);
     if (!limit.allowed) return { ok: false, message: `Too many codes tried. Try again in ${Math.ceil(limit.retryAfterSeconds / 60)} minutes.` };
     const recoveryCodes = await regenerateRecoveryCodes(user.id, parsed.data.code);
     if (!recoveryCodes) return { ok: false, errors: { code: "That code didn't work" }, message: "That code didn't work." };
@@ -94,7 +94,7 @@ export async function deleteAccountAction(_prev: ActionResult, formData: FormDat
   return authedAction(async (user) => {
     const parsed = deleteAccountSchema.safeParse(formToObject(formData));
     if (!parsed.success) return validationFailed(parsed.error);
-    const limit = rateLimit(`delete-account:${user.id}`, LIMITS.twoFactor.limit, LIMITS.twoFactor.windowMs);
+    const limit = await rateLimit(`delete-account:${user.id}`, LIMITS.twoFactor.limit, LIMITS.twoFactor.windowMs);
     if (!limit.allowed) return { ok: false, message: `Too many attempts. Try again in ${Math.ceil(limit.retryAfterSeconds / 60)} minutes.` };
     if (!(await checkPassword(user.id, parsed.data.password))) return { ok: false, errors: { password: "Incorrect password" }, message: "Incorrect password." };
     if ((await getTwoFactorStatus(user.id)).enabled) {

@@ -1,6 +1,8 @@
 import { Queue, type ConnectionOptions } from "bullmq";
 import Redis, { type RedisOptions } from "ioredis";
-import { CONTROL_CHANNEL, QUEUE_NAMES, type ControlMessage } from "@autoapply/shared";
+import { CONTROL_CHANNEL, QUEUE_NAMES, type ControlMessage, createLogger } from "@autoapply/shared";
+
+const log = createLogger("queue");
 
 /**
  * The BullMQ side of the application queue.
@@ -78,7 +80,7 @@ export async function enqueueApplications(items: EnqueueItem[]): Promise<boolean
     await withTimeout(addApplicationJobs(p.queue, items), 3000);
     return true;
   } catch (error) {
-    console.warn("[queue] enqueue failed; the worker scheduler will pick these up", error instanceof Error ? error.message : error);
+    log.warn("Enqueue failed; the worker scheduler will pick these up", { error, count: items.length });
     return false;
   }
 }
@@ -91,7 +93,7 @@ export async function publishControl(message: ControlMessage): Promise<boolean> 
     await withTimeout(p.redis.publish(CONTROL_CHANNEL, JSON.stringify(message)), 3000);
     return true;
   } catch (error) {
-    console.warn("[queue] control message failed", error instanceof Error ? error.message : error);
+    log.warn("Control message failed", { error, type: message.type });
     return false;
   }
 }

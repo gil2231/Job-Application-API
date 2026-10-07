@@ -1,6 +1,7 @@
 import type { Prisma } from "@prisma/client";
 import {
   ATTENTION_APPLICATION_STATUSES,
+  HIDDEN_ANSWER_CATEGORIES,
   type ApplicationFilters,
   type ApplicationStatus,
   type AutomationMode,
@@ -179,7 +180,7 @@ export async function getApplicationDetail(userId: string, id: string) {
   const sensitive = new Set(
     (
       await prisma.applicationAnswer.findMany({
-        where: { userId, isSensitive: true, id: { in: app.questions.map((q) => q.answer?.libraryAnswerId).filter((x): x is string => !!x) } },
+        where: { userId, category: { in: [...HIDDEN_ANSWER_CATEGORIES] }, id: { in: app.questions.map((q) => q.answer?.libraryAnswerId).filter((x): x is string => !!x) } },
         select: { id: true },
       })
     ).map((a) => a.id),
@@ -212,7 +213,7 @@ export async function listAttentionItems(userId: string) {
       job: { select: { id: true, title: true, company: true, url: true, applicationUrl: true } },
       questions: {
         orderBy: [{ pageIndex: "asc" }, { createdAt: "asc" }],
-        include: { answer: { include: { libraryAnswer: { select: { isSensitive: true } } } } },
+        include: { answer: { include: { libraryAnswer: { select: { category: true } } } } },
       },
       attempts: { orderBy: { attemptNumber: "desc" }, take: 1, select: { screenshots: true } },
     },
@@ -227,7 +228,7 @@ export async function listAttentionItems(userId: string) {
             source: answer.source,
             confidence: answer.confidence,
             approvedByUser: answer.approvedByUser,
-            sensitive: answer.libraryAnswer?.isSensitive ?? false,
+            sensitive: !!answer.libraryAnswer && HIDDEN_ANSWER_CATEGORIES.includes(answer.libraryAnswer.category),
             value: decryptString(answer.value),
           }
         : null,
@@ -272,9 +273,10 @@ async function resumeIfResolved(tx: Prisma.TransactionClient, userId: string, ap
 }
 
 /** Approve a suggested answer, optionally after editing it. */
-export async function approveQuestionAnswer(userId: string, questionId: string, editedValue?: string) {
+export async function approveQuestionAnswer(userId: string, questionId: string, editedValue?: string, options: { sensitive?: boolean } = {}) {
   const question = await loadOwnedQuestion(userId, questionId);
-  const sensitive = question.answer?.libraryAnswer?.isSensitive ?? false;
+  // Sensitive if it came from a sensitive saved answer, or the caller recognized a sensitive question (pay, authorization…).
+  const sensitive = (question.answer?.libraryAnswer?.isSensitive ?? false) || options.sensitive === true;
   const raw = editedValue ?? (question.answer ? decryptString(question.answer.value) : undefined);
   if (raw == null || raw.trim() === "") throw new ConflictError("Enter an answer before approving");
   const value = sensitive ? encryptString(raw) : raw;

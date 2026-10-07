@@ -28,3 +28,5 @@ export * from "./repositories/extension";
 export * from "./repositories/notifications";
 export * from "./repositories/support";
 export * from "./repositories/admin";
+export * from "./repositories/health";
+export * from "./repositories/retention";

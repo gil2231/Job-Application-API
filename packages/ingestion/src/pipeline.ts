@@ -26,11 +26,14 @@ import {
   type JobAnalysis,
   type MatchWeights,
   type WorkArrangement,
+  createLogger,
 } from "@autoapply/shared";
 import { mapConcurrent } from "./sources/url-list";
 import type { ImportIssue, JobSourceAdapter, RawJob, SourceContext } from "./types";
 import { MAX_IMPORT_JOBS } from "./types";
 import { fetchPosting } from "./postings";
+
+const log = createLogger("ingestion");
 
 // ── Preparing raw jobs ──────────────────────────────────────────────────────
 
@@ -311,7 +314,7 @@ export async function analyzeJobs(userId: string, options: { jobIds?: string[]; 
       else summary.needsDetails++;
     } catch (error) {
       summary.failed++;
-      console.error("[ingestion] analysis failed", { jobId: job.id, error });
+      log.error("Job analysis failed", { jobId: job.id, error });
       // Leave the job retryable rather than stuck in ANALYZING.
       await saveJobResults(userId, job.id, null, {
         matchScore: null,

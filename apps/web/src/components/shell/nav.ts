@@ -1,4 +1,5 @@
 import {
+  Activity,
   AlertCircle,
   BellRing,
   BookOpenText,
@@ -36,6 +37,7 @@ export const NAV_ITEMS: NavItem[] = [
   { href: "/job-alerts", label: "Job alerts", icon: BellRing },
   { href: "/applications", label: "Applications", icon: Send },
   { href: "/needs-attention", label: "Needs Attention", shortLabel: "Needs you", icon: AlertCircle, badgeKey: "attention" },
+  { href: "/automation", label: "Automation health", shortLabel: "Health", icon: Activity },
   { href: "/profile", label: "Master Profile", icon: UserRound },
   { href: "/documents", label: "Documents", icon: FileText },
   { href: "/answers", label: "Answer Library", icon: BookOpenText },

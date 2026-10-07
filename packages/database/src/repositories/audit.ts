@@ -1,5 +1,8 @@
 import type { Prisma } from "@prisma/client";
 import { prisma } from "../client";
+import { createLogger } from "@autoapply/shared";
+
+const log = createLogger("audit");
 
 export interface AuditContext {
   ipAddress?: string | null;
@@ -28,7 +31,7 @@ export async function audit(
       },
     });
   } catch (error) {
-    console.error("[audit] failed to write audit log", action, error);
+    log.error("Failed to write an audit log entry", { action, error });
   }
 }
 

@@ -9,9 +9,11 @@ import {
   decideRetry,
   decideSubmission,
   displayLabel,
+  failureForHttpStatus,
   FieldResolver,
   findContradictions,
   isPlaceholderOption,
+  retryAfterOf,
   toProfileFacts,
   type FieldMapping,
   type FieldKind,
@@ -44,10 +46,11 @@ import {
   type QuestionRecord,
 } from "@autoapply/database";
 import type { StorageDriver } from "@autoapply/documents";
-import { APPLICATION_EVENT_TYPES, enumLabel, type ApplicationEventType, type AttentionReason, type EventLevel, type Platform } from "@autoapply/shared";
+import { APPLICATION_EVENT_TYPES, enumLabel, FAILURE_INFO, type ApplicationEventType, type AttentionReason, type EventLevel, type Platform } from "@autoapply/shared";
 import type { BrowserPool } from "./browser";
 import type { WorkerConfig } from "./config";
 import { ProgressReporter } from "./progress";
+import { SiteHealth } from "./site-health";
 import { checkSite } from "./site-policy";
 
 export interface EngineDeps {
@@ -57,6 +60,8 @@ export interface EngineDeps {
   storage: StorageDriver;
   redis: Redis | null;
   workerId: string;
+  /** Per-site circuit breaker; built from `redis` when not given. */
+  siteHealth?: SiteHealth;
 }
 
 export interface RunInput {
@@ -163,7 +168,11 @@ function toRecord(m: FieldMapping): QuestionRecord {
  * submit if permitted → record the result.
  */
 export class ApplicationEngine {
-  constructor(private readonly deps: EngineDeps) {}
+  private readonly deps: EngineDeps & { siteHealth: SiteHealth };
+
+  constructor(deps: EngineDeps) {
+    this.deps = { ...deps, siteHealth: deps.siteHealth ?? new SiteHealth(deps.redis) };
+  }
 
   async run(input: RunInput): Promise<RunResult> {
     const data = await loadProcessingContext(input.applicationId);
@@ -184,7 +193,7 @@ class AttemptRun {
   private aiFailureLogged = false;
 
   constructor(
-    private readonly deps: EngineDeps,
+    private readonly deps: EngineDeps & { siteHealth: SiteHealth },
     private readonly input: RunInput,
     private readonly data: ProcessingContext,
   ) {
@@ -241,7 +250,11 @@ class AttemptRun {
       await this.log("BROWSER_LAUNCHED", saved ? `Browser launched with your saved session for ${this.domain}` : "Browser launched");
       await this.progress.done("browser", "Browser launched");
 
-      await this.page.goto(url, { waitUntil: "domcontentloaded" });
+      const response = await this.page.goto(url, { waitUntil: "domcontentloaded" });
+      // An outage, a rate limit or a closed posting: don't try to fill an error page.
+      const blocked = response ? failureForHttpStatus(response.status(), response.headers()["retry-after"]) : null;
+      if (blocked) throw blocked;
+      await deps.siteHealth.recordSuccess(this.domain);
       const landed = await checkSite(this.page.url(), deps.config);
       if (!landed.allowed) return this.attention("WAITING_FOR_USER", "UNSUPPORTED_SITE", `The link redirected to ${new URL(this.page.url()).hostname}. ${landed.reason}`);
 
@@ -543,10 +556,17 @@ class AttemptRun {
     const failure = classifyFailure(error);
     const message = error instanceof Error ? error.message.split("\n")[0]!.slice(0, 500) : String(error);
     await this.screenshot("Error").catch(() => undefined);
-    const decision = decideRetry(failure, this.input.attemptNumber);
-    if (decision.action === "retry") return this.finish({ kind: "retry", failure, message: `${enumLabel(failure)}: ${message}`, delayMs: decision.delayMs });
+    const label = FAILURE_INFO[failure].label;
+    // A site that keeps failing is held off for every application, not just this one.
+    const cooldown = this.domain ? await this.deps.siteHealth.recordFailure(this.domain, failure, retryAfterOf(error)) : null;
+    if (cooldown) await this.log("NOTE", `Holding off ${cooldown.host} for a while: ${cooldown.reason}. Other applications to it wait too.`, { level: "WARNING" }).catch(() => undefined);
+    const decision = decideRetry(failure, this.input.attemptNumber, { retryAfterMs: retryAfterOf(error) });
+    if (decision.action === "retry") {
+      const delayMs = Math.max(decision.delayMs, cooldown ? Date.parse(cooldown.until) - Date.now() : 0);
+      return this.finish({ kind: "retry", failure, message: `${label}: ${message}`, delayMs });
+    }
     if (decision.action === "needs_attention") {
-      const detail = decision.reason === "REPEATED_FAILURE" ? `This application failed ${this.input.attemptNumber} times (${enumLabel(failure)}: ${message}). Check it, then press Try again or skip it.` : `${enumLabel(failure)}: ${message}`;
+      const detail = decision.reason === "REPEATED_FAILURE" ? `This application failed ${this.input.attemptNumber} times (${label}: ${message}). Check it, then press Try again or skip it.` : `${label}: ${message}`;
       return this.attention(WAITING_REASONS.has(decision.reason) ? "WAITING_FOR_USER" : "REVIEW_REQUIRED", decision.reason, detail);
     }
     return this.finish({ kind: "failed", failure, message });

@@ -35,8 +35,8 @@ export async function signInAction(_prev: ActionResult, formData: FormData): Pro
   if (!parsed.success) return validationFailed(parsed.error);
   const ctx = await getRequestContext();
 
-  const byIp = rateLimit(`signin:ip:${ctx.ipAddress}`, LIMITS.signIn.limit, LIMITS.signIn.windowMs);
-  const byEmail = rateLimit(`signin:email:${parsed.data.email}`, LIMITS.signIn.limit, LIMITS.signIn.windowMs);
+  const byIp = await rateLimit(`signin:ip:${ctx.ipAddress}`, LIMITS.signIn.limit, LIMITS.signIn.windowMs);
+  const byEmail = await rateLimit(`signin:email:${parsed.data.email}`, LIMITS.signIn.limit, LIMITS.signIn.windowMs);
   if (!byIp.allowed || !byEmail.allowed) {
     return { ok: false, message: `Too many sign-in attempts. Try again in ${Math.ceil(Math.max(byIp.retryAfterSeconds, byEmail.retryAfterSeconds) / 60)} minutes.` };
   }
@@ -67,7 +67,7 @@ export async function verifyTwoFactorSignInAction(_prev: ActionResult, formData:
   const parsed = twoFactorCodeSchema.safeParse(formToObject(formData));
   if (!parsed.success) return validationFailed(parsed.error);
   const ctx = await getRequestContext();
-  const limit = rateLimit(`2fa:${pending.userId}`, LIMITS.twoFactor.limit, LIMITS.twoFactor.windowMs);
+  const limit = await rateLimit(`2fa:${pending.userId}`, LIMITS.twoFactor.limit, LIMITS.twoFactor.windowMs);
   if (!limit.allowed) return { ok: false, message: `Too many codes tried. Try again in ${Math.ceil(limit.retryAfterSeconds / 60)} minutes.` };
 
   const check = await verifySecondFactor(pending.userId, parsed.data.code);
@@ -100,7 +100,7 @@ export async function signUpAction(_prev: ActionResult, formData: FormData): Pro
   const parsed = signUpSchema.safeParse(formToObject(formData));
   if (!parsed.success) return validationFailed(parsed.error);
   const ctx = await getRequestContext();
-  const limit = rateLimit(`signup:ip:${ctx.ipAddress}`, LIMITS.signUp.limit, LIMITS.signUp.windowMs);
+  const limit = await rateLimit(`signup:ip:${ctx.ipAddress}`, LIMITS.signUp.limit, LIMITS.signUp.windowMs);
   if (!limit.allowed) return { ok: false, message: "Too many accounts created from this network. Try again later." };
 
   try {
@@ -118,7 +118,7 @@ export async function signUpAction(_prev: ActionResult, formData: FormData): Pro
 export async function resendVerificationAction(): Promise<ActionResult> {
   return authedAction(async (user) => {
     if ((await getAccountFlags(user.id)).emailVerified) return { ok: true, message: "Your email is already confirmed" };
-    const limit = rateLimit(`verify-email:${user.id}`, LIMITS.emailSend.limit, LIMITS.emailSend.windowMs);
+    const limit = await rateLimit(`verify-email:${user.id}`, LIMITS.emailSend.limit, LIMITS.emailSend.windowMs);
     if (!limit.allowed) return { ok: false, message: `You've asked for several emails. Try again in ${Math.ceil(limit.retryAfterSeconds / 60)} minutes.` };
     await sendVerificationEmail(user);
     return { ok: true, message: `Sent a new link to ${user.email}` };
@@ -140,8 +140,8 @@ export async function forgotPasswordAction(_prev: ActionResult, formData: FormDa
   const parsed = forgotPasswordSchema.safeParse(formToObject(formData));
   if (!parsed.success) return validationFailed(parsed.error);
   const ctx = await getRequestContext();
-  const byIp = rateLimit(`forgot:ip:${ctx.ipAddress}`, LIMITS.emailSend.limit * 2, LIMITS.emailSend.windowMs);
-  const byEmail = rateLimit(`forgot:email:${parsed.data.email}`, LIMITS.emailSend.limit, LIMITS.emailSend.windowMs);
+  const byIp = await rateLimit(`forgot:ip:${ctx.ipAddress}`, LIMITS.emailSend.limit * 2, LIMITS.emailSend.windowMs);
+  const byEmail = await rateLimit(`forgot:email:${parsed.data.email}`, LIMITS.emailSend.limit, LIMITS.emailSend.windowMs);
   // The reply is the same whether or not the account exists, so this can't be used to find accounts.
   if (!byIp.allowed || !byEmail.allowed) return { ok: true, message: FORGOT_SENT };
 

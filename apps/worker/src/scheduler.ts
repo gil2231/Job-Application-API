@@ -1,6 +1,9 @@
 import type { Queue } from "bullmq";
 import { findDispatchableApplications, prisma, recoverExpiredLeases, settlePauseAfterCurrent } from "@autoapply/database";
 import { addApplicationJobs, type ApplicationJobData } from "@autoapply/queue";
+import { createLogger } from "@autoapply/shared";
+
+const log = createLogger("scheduler");
 
 /**
  * Keeps BullMQ in step with Postgres: every few seconds (and whenever the web
@@ -40,7 +43,7 @@ export class Scheduler {
         try {
           await this.tick();
         } catch (error) {
-          console.error("[scheduler] tick failed", error);
+          log.error("Scheduler sweep failed", { error });
         }
       } while (this.again);
     })().finally(() => {
