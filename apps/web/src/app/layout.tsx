@@ -1,6 +1,5 @@
-import type { Metadata } from "next";
-import { headers } from "next/headers";
 import type { Metadata, Viewport } from "next";
+import { headers } from "next/headers";
 import { GeistSans } from "geist/font/sans";
 import { GeistMono } from "geist/font/mono";
 import { Providers } from "@/components/providers";

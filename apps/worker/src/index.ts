@@ -13,15 +13,13 @@ import { BrowserPool } from "./browser";
 import { loadConfig } from "./config";
 import { ABORT_REASONS, ApplicationEngine } from "./engine";
 import { startHeartbeat } from "./heartbeat";
+import { MailSyncLoop } from "./mail-sync";
 import { startMaintenance } from "./maintenance";
+import { Notifier } from "./notifier";
 import { createProcessor, type ActiveRun } from "./processor";
+import { startRetention } from "./retention";
 import { Scheduler } from "./scheduler";
 import { SiteHealth } from "./site-health";
-import { Notifier } from "./notifier";
-import { startMaintenance } from "./maintenance";
-import { createProcessor, type ActiveRun } from "./processor";
-import { Scheduler } from "./scheduler";
-import { MailSyncLoop } from "./mail-sync";
 
 /**
  * AutoApply browser worker: claims queued applications, fills them with
@@ -35,7 +33,6 @@ if (existsSync(rootEnv)) process.loadEnvFile(rootEnv);
 initErrorReporting("worker");
 installProcessHandlers();
 
-const config = loadConfig();
 const workerId = `${hostname()}:${process.pid}`;
 const log = createLogger("worker", { workerId });
 const environment = checkEnvironment(process.env, "worker");
@@ -67,14 +64,15 @@ const worker = new Worker<ApplicationJobData>(QUEUE_NAMES.applications, createPr
   // Our own lease handles crashed workers; BullMQ's stalled check is a second net.
   lockDuration: 60_000,
 });
-worker.on("failed", (job, error) => log.error("Queue job errored", { applicationId: job?.id, error }));
-worker.on("error", (error) => log.error("Queue connection error", { error }));
 // Applications that fail on an employer's site are recorded on the application; this is the processor itself crashing.
 worker.on("failed", (job, error) => {
-  console.error(`[worker] job ${job?.id} errored`, error);
+  log.error("Queue job errored", { applicationId: job?.data.applicationId, error });
   captureException(error, { tags: { queue: QUEUE_NAMES.applications }, extra: { applicationId: job?.data.applicationId }, userId: job?.data.userId });
 });
-worker.on("error", (error) => captureException(error, { tags: { queue: QUEUE_NAMES.applications, kind: "worker-error" } }));
+worker.on("error", (error) => {
+  log.error("Queue connection error", { error });
+  captureException(error, { tags: { queue: QUEUE_NAMES.applications, kind: "worker-error" } });
+});
 
 await subscriber.subscribe(CONTROL_CHANNEL);
 subscriber.on("message", (_channel, raw) => {
@@ -89,24 +87,20 @@ subscriber.on("message", (_channel, raw) => {
 
 const heartbeat = startHeartbeat(publisher, { adapters: () => registry.list().map((a) => a.platform), activeJobs: () => active.size, interactive: () => browsers.interactive });
 scheduler.start();
-const maintenance = startMaintenance(getStorage());
+mailSync.start();
+notifier?.start();
+if (notifier && !emailSender.configured) log.warn("Email alerts are recorded but not sent: no email provider is set up (EMAIL_PROVIDER)");
+const retention = startRetention(getStorage());
+const maintenance = await startMaintenance(config.redisUrl).catch((error: unknown) => {
+  log.error("Could not start backups", { error });
+  captureException(error, { tags: { component: "maintenance" } });
+  return null;
+});
 log.info("Worker running", {
   concurrency: config.concurrency,
   browser: config.headless ? "headless" : "visible",
   sites: config.allowAllHosts ? "all public sites" : config.allowedHosts,
 });
-mailSync.start();
-notifier?.start();
-if (notifier && !emailSender.configured) console.warn("[worker] email alerts are recorded but not sent: no email provider is set up (EMAIL_PROVIDER)");
-const maintenance = await startMaintenance(config.redisUrl).catch((error: unknown) => {
-  console.error("[worker] could not start backups", error);
-  captureException(error, { tags: { component: "maintenance" } });
-  return null;
-});
-console.warn(
-  `[worker] ${workerId} running: concurrency ${config.concurrency}, ${config.headless ? "headless" : "visible"} browser, ` +
-    (config.allowAllHosts ? "all public sites allowed" : `sites limited to ${config.allowedHosts.join(", ")}`),
-);
 
 let shuttingDown = false;
 async function shutdown(signal: string) {
@@ -114,7 +108,7 @@ async function shutdown(signal: string) {
   shuttingDown = true;
   log.info("Shutting down; returning running applications to the queue", { signal, running: active.size });
   scheduler.stop();
-  maintenance.stop();
+  retention.stop();
   await mailSync.stop().catch(() => undefined);
   await notifier?.stop().catch(() => undefined);
   for (const run of active.values()) run.controller.abort(ABORT_REASONS.shutdown);

@@ -159,6 +159,7 @@ Adding an ATS is one class that describes the site (its buttons, where questions
 | `PLAYWRIGHT_CHROMIUM_EXECUTABLE` | | Chromium to launch, if not Playwright's own |
 
 The worker also runs an hourly retention sweep: expired sign-in sessions are deleted, saved site sessions past expiry lose their cookies, and attempt screenshots older than each person's **Keep screenshots** setting are deleted.
+
 ## Browser extension
 
 The Applyance extension (`apps/extension`) works in Chrome, Edge, Brave and other Chromium browsers.
@@ -251,19 +252,16 @@ pnpm test:e2e    # Playwright browser tests against the dev server, then with th
 
 - Passwords are hashed with argon2id. Accounts lock for 15 minutes after 5 failed sign-ins.
 - Sessions live in the database, which stores only a SHA-256 hash of each token. The cookie is httpOnly, SameSite=Lax, and `__Host-` prefixed in production.
+- The browser extension connects with a one-time code that lasts 10 minutes and gets its own token (only its SHA-256 hash is stored). That token opens only the extension's routes, and changing your password disconnects it.
 - Sensitive answers (salary expectations, work authorization, sponsorship, military status and voluntary self-identification), the values filled from them on applications, and browser session state are encrypted with AES-256-GCM. Answers saved before a category became sensitive are encrypted by the worker when it starts. Sensitive answers never go into AI prompts or similar-answer suggestions, and self-identification answers are also hidden in review summaries.
 - Every mutation is checked for authorization, validated with zod, rate-limited, and written to the audit log (Settings → Security log).
 - Uploads are checked against their file signature (magic bytes) and capped at 10 MB.
+- Email and calendar access uses OAuth with PKCE and a state cookie bound to the signed-in user; access and refresh tokens are encrypted with AES-256-GCM, and only job emails' sender, subject and preview are stored.
 - Every page carries a Content Security Policy: scripts run only with a per-request nonce, and framing, plugins and off-site form posts are blocked.
 - Rate limits are shared through Redis, so they hold across several web servers (each server falls back to its own memory if Redis is down). Client IPs come from `X-Forwarded-For`, counting `TRUSTED_PROXY_HOPS` (default 1) proxies from the right, so a forged header can't dodge them; set it to `0` when nothing sits in front of the app.
 - In production the web app and worker refuse to start with an unsafe configuration (no or malformed `DATA_ENCRYPTION_KEY`, `APP_URL` without https, incomplete S3 settings, a worker without Redis) and warn about anything unusual.
 - Logs are structured (one JSON line per entry in production, or with `LOG_FORMAT=json`; `LOG_LEVEL` sets the minimum level). Fields that look like secrets or answers are redacted and email addresses are masked.
 - `GET /api/health` reports the database, Redis and worker for load balancers and uptime checks; it returns 503 only when the database is down.
-- The browser extension connects with a one-time code that lasts 10 minutes and gets its own token (only its SHA-256 hash is stored). That token opens only the extension's routes, and changing your password disconnects it.
-- Sensitive answers (demographics, sponsorship) and browser session state are encrypted with AES-256-GCM.
-- Every mutation is checked for authorization, validated with zod, rate-limited, and written to the audit log (Settings → Security log).
-- Uploads are checked against their file signature (magic bytes) and capped at 10 MB.
-- Email and calendar access uses OAuth with PKCE and a state cookie bound to the signed-in user; access and refresh tokens are encrypted with AES-256-GCM, and only job emails' sender, subject and preview are stored.
 
 ## Monitoring and backups
 

@@ -2,9 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { contentSecurityPolicy, createNonce } from "./lib/csp";
 import { SESSION_COOKIE, sessionCookieOptions } from "./lib/session-cookie";
 
-const PUBLIC_PATHS = ["/sign-in", "/sign-up", "/api/health", "/unsubscribe", "/api/unsubscribe"];
-const PUBLIC_PATHS = ["/sign-in", "/sign-up", "/api/health", "/terms", "/privacy", "/help"];
-const PUBLIC_PATHS = ["/sign-in", "/sign-up", "/api/health", "/api/client-errors"];
+const PUBLIC_PATHS = ["/sign-in", "/sign-up", "/api/health", "/api/client-errors", "/unsubscribe", "/api/unsubscribe", "/terms", "/privacy", "/help"];
 
 /**
  * Optimistic routing only: sends visitors without a session cookie to sign-in.

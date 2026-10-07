@@ -19,7 +19,7 @@ export async function sendSupportRequestAction(_prev: ActionResult, formData: Fo
   if (formData.get("website")) return { ok: true, message: "Thanks. We got your message." };
 
   const key = session ? `support:${session.user.id}` : `support:ip:${context.ipAddress}`;
-  const limit = rateLimit(key, LIMITS.support.limit, LIMITS.support.windowMs);
+  const limit = await rateLimit(key, LIMITS.support.limit, LIMITS.support.windowMs);
   if (!limit.allowed) return { ok: false, message: `You've sent a lot of reports. Try again in ${Math.ceil(limit.retryAfterSeconds / 60)} min.` };
 
   const input = formToObject(formData);

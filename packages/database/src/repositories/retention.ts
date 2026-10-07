@@ -2,7 +2,7 @@ import { Prisma } from "@prisma/client";
 import { prisma } from "../client";
 
 /**
- * Data retention, run by the worker's maintenance sweep: expired sign-in
+ * Data retention, run by the worker's retention sweep: expired sign-in
  * sessions are deleted, saved site sessions past their expiry lose their
  * cookies, and attempt screenshots older than each person's "Keep screenshots"
  * setting are removed (they can show personal details on application forms).

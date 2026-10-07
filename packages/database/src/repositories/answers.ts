@@ -127,7 +127,7 @@ export async function rememberAnswer(userId: string, input: { questionKey: strin
  * list grows (pay, work authorization and sponsorship joined it in Phase 6):
  * saved answers in those categories are encrypted and flagged, and so are the
  * values already filled from them on applications. Encryption needs the app's
- * key, so this runs from the worker (at start-up and in its maintenance sweep)
+ * key, so this runs from the worker (at start-up and in its retention sweep)
  * rather than as a SQL migration. Idempotent and safe to run concurrently.
  */
 export async function encryptSensitiveAnswers(batch = 200): Promise<{ answers: number; filled: number }> {
