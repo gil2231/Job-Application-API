@@ -307,7 +307,7 @@ function WaitingPanel({ item, canOpen }: { item: Waiting; canOpen: boolean }) {
           <p className="truncate text-sm font-medium text-white">{item.company}</p>
           <p className="text-muted-foreground truncate text-xs">{item.title}</p>
         </div>
-        <span className="text-muted-foreground text-xs">{formatRelative(item.updatedAt)}</span>
+        <span className="text-muted-foreground text-xs" suppressHydrationWarning>{formatRelative(item.updatedAt)}</span>
       </CardHeader>
       <CardContent className="grid gap-3 px-4">
         <div className="bg-muted/50 text-muted-foreground grid aspect-[1280/900] place-items-center rounded-md border border-dashed p-6 text-center text-sm">
