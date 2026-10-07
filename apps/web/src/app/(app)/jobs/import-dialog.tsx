@@ -102,7 +102,7 @@ function FileImportForm({ onDone }: { onDone: () => void }) {
           <li>When LinkedIn emails you, download the archive and upload it here (or the Saved Jobs.csv inside it).</li>
         </ol>
         <p className="text-muted-foreground">
-          AutoApply never signs in to LinkedIn or reads its pages. Any spreadsheet with a job URL column also works; title, company, location and description columns are
+          Applyance never signs in to LinkedIn or reads its pages. Any spreadsheet with a job URL column also works; title, company, location and description columns are
           picked up when present.
         </p>
       </div>

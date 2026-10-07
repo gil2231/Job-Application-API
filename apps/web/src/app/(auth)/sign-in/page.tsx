@@ -13,7 +13,7 @@ export default async function SignInPage({ searchParams }: { searchParams: Promi
   return (
     <>
       <h1 className="text-2xl font-semibold tracking-tight">Welcome back</h1>
-      <p className="text-muted-foreground mt-1 text-sm">Sign in to your AutoApply workspace.</p>
+      <p className="text-muted-foreground mt-1 text-sm">Sign in to your Applyance workspace.</p>
       <SignInForm next={next} />
       <p className="text-muted-foreground mt-6 text-sm">
         New here?{" "}

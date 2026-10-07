@@ -258,7 +258,7 @@ export async function lookupPostingAction(url: string): Promise<ActionResult<Pos
   return authedAction<PostingDetails>(async (user) => {
     if (typeof url !== "string" || !parseHttpUrl(url) || url.length > 2048) return { ok: false, message: "Enter a full URL starting with https://" };
     if (extractLinkedInJobId(url) || /linkedin\.com/i.test(new URL(url).hostname)) {
-      return { ok: false, message: "AutoApply doesn't read LinkedIn pages. Copy the title, company and description from the posting instead." };
+      return { ok: false, message: "Applyance doesn't read LinkedIn pages. Copy the title, company and description from the posting instead." };
     }
     const limit = rateLimit(`lookup:${user.id}`, LIMITS.postingLookup.limit, LIMITS.postingLookup.windowMs);
     if (!limit.allowed) return { ok: false, message: "Too many lookups. Fill in the details by hand or try again later." };

@@ -59,7 +59,7 @@ export default async function SettingsPage() {
       <Card>
         <CardHeader>
           <CardTitle className="text-sm">Automation preferences</CardTitle>
-          <CardDescription>Thresholds below which AutoApply stops and asks you.</CardDescription>
+          <CardDescription>Thresholds below which Applyance stops and asks you.</CardDescription>
         </CardHeader>
         <CardContent>
           <PreferencesForm settings={settings} />

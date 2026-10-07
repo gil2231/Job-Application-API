@@ -96,6 +96,8 @@ The worker stops before leaving any page that has a question it isn't sure about
 
 The dashboard shows each running application's steps live (server-sent events), and Pause, Resume, Pause after current and Stop now take effect immediately. Daily and concurrency limits from Rules are enforced when the worker claims an application. Postgres holds the state; a crashed worker's applications return to the queue when its lease runs out.
 
+**Tasks** (`/tasks`) is the run control panel: every application is a task in one list (running, waiting on you, in line in claim order, and the last day's submitted and failed), with live steps and an activity log. The big Start button un-pauses the queue; when nothing is queued it first adds every qualified job in the user's default mode (Review unless auto-submit is on). Pause, Pause after current and Stop now are the same queue commands as the dashboard. Nothing about safety changes: CAPTCHAs, sign-ins and unsure answers still stop in Needs Attention.
+
 By default the worker only opens `localhost` and `127.0.0.1`. To run against real employer sites, set `AUTOMATION_ALLOW_ALL_HOSTS=true` (private and internal addresses stay blocked). LinkedIn Easy Apply is never automated.
 
 ### AI

@@ -2,6 +2,7 @@ import Link from "next/link";
 import { getSession } from "@/lib/auth";
 import { COMPANY } from "@/config/company";
 import { CompanyValue, LegalLinks } from "@/components/legal/legal";
+import { Logo } from "@/components/brand/logo";
 import { Button } from "@/components/ui/button";
 
 /** Pages anyone can read, signed in or not: the legal documents and the help center. */
@@ -9,11 +10,10 @@ export default async function PublicLayout({ children }: { children: React.React
   const session = await getSession();
   return (
     <div className="flex min-h-screen flex-col">
-      <header className="bg-background/80 sticky top-0 z-40 border-b backdrop-blur">
+      <header className="dark bg-sidebar text-sidebar-foreground border-sidebar-border sticky top-0 z-40 border-b">
         <div className="mx-auto flex h-14 w-full max-w-5xl items-center gap-3 px-4 sm:px-6">
-          <Link href="/" className="flex items-center gap-2">
-            <div className="bg-primary text-primary-foreground grid size-7 place-items-center rounded-md text-xs font-bold">A</div>
-            <span className="font-semibold tracking-tight">{COMPANY.productName}</span>
+          <Link href="/" className="flex items-center gap-2" aria-label={`${COMPANY.productName} home`}>
+            <Logo />
           </Link>
           <nav className="ml-auto flex items-center gap-1">
             <Button asChild variant="ghost" size="sm">

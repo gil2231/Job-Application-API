@@ -5,10 +5,10 @@ import { Providers } from "@/components/providers";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: { default: "AutoApply", template: "%s · AutoApply" },
+  title: { default: "Applyance", template: "%s · Applyance" },
   description: "Job application automation with a human in the loop.",
   applicationName: "Applyance",
-  appleWebApp: { capable: true, title: "Applyance", statusBarStyle: "default" },
+  appleWebApp: { capable: true, title: "Applyance", statusBarStyle: "black" },
   formatDetection: { telephone: false },
 };
 
@@ -17,10 +17,8 @@ export const viewport: Viewport = {
   initialScale: 1,
   // Lets the layout reach under the phone's rounded corners and home bar; the shell pads for them.
   viewportFit: "cover",
-  themeColor: [
-    { media: "(prefers-color-scheme: light)", color: "#fcfcfc" },
-    { media: "(prefers-color-scheme: dark)", color: "#0f0f12" },
-  ],
+  // Matches the steel navy header in both themes.
+  themeColor: "#0f1623",
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

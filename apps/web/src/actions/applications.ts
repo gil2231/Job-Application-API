@@ -103,7 +103,7 @@ export async function recheckQuestionAction(questionId: string): Promise<ActionR
     await audit(user.id, "attention.question_rechecked", { entityType: "ApplicationQuestion", entityId: qid });
     await notifyWorker(user.id);
     refresh();
-    return { ok: true, message: "AutoApply will check it again" };
+    return { ok: true, message: "Applyance will check it again" };
   });
 }
 
@@ -119,7 +119,7 @@ export async function completeHumanStepAction(applicationId: string): Promise<Ac
   });
 }
 
-/** Review mode's final step: let AutoApply submit the filled application. */
+/** Review mode's final step: let Applyance submit the filled application. */
 export async function approveSubmissionAction(applicationId: string): Promise<ActionResult> {
   return authedAction(async (user) => {
     const appId = one(applicationId);
@@ -128,7 +128,7 @@ export async function approveSubmissionAction(applicationId: string): Promise<Ac
     await audit(user.id, "application.submission_approved", { entityType: "Application", entityId: appId });
     await notifyWorker(user.id);
     refresh(appId);
-    return { ok: true, message: "Approved. AutoApply will submit it next." };
+    return { ok: true, message: "Approved. Applyance will submit it next." };
   });
 }
 
@@ -149,6 +149,6 @@ export async function revokeBrowserSessionAction(id: string): Promise<ActionResu
     if (!sessionId || !(await revokeBrowserSession(user.id, sessionId))) return { ok: false, message: "Session not found" };
     await audit(user.id, "browser_session.revoked", { entityType: "BrowserSession", entityId: sessionId });
     revalidatePath("/settings");
-    return { ok: true, message: "Saved session removed. AutoApply will ask you to sign in again on that site." };
+    return { ok: true, message: "Saved session removed. Applyance will ask you to sign in again on that site." };
   });
 }

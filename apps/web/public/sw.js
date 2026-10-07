@@ -1,7 +1,7 @@
 // Applyance service worker. It keeps only the offline page and icons: every
 // app page holds private data, so pages always come from the network and are
 // never cached. When the network is down, navigations show the offline page.
-const CACHE = "applyance-offline-v1";
+const CACHE = "applyance-offline-v2";
 const OFFLINE_URL = "/offline.html";
 const PRECACHE = [OFFLINE_URL, "/icons/icon-192.png"];
 

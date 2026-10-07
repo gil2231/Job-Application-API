@@ -13,6 +13,7 @@ import {
   SlidersHorizontal,
   Sparkles,
   UserRound,
+  Zap,
   type LucideIcon,
 } from "lucide-react";
 
@@ -22,13 +23,14 @@ export interface NavItem {
   /** Label in the phone tab bar, where space is tight. */
   shortLabel?: string;
   icon: LucideIcon;
-  badgeKey?: "attention";
+  badgeKey?: "attention" | "running";
   /** Only shown to admins (the pages themselves also check). */
   adminOnly?: boolean;
 }
 
 export const NAV_ITEMS: NavItem[] = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
+  { href: "/tasks", label: "Tasks", icon: Zap, badgeKey: "running" },
   { href: "/flightpath", label: "Flightpath", icon: PlaneTakeoff },
   { href: "/recommended", label: "Recommended", icon: Sparkles },
   { href: "/jobs", label: "Jobs", icon: Briefcase },
@@ -45,4 +47,4 @@ export const NAV_ITEMS: NavItem[] = [
 ];
 
 /** The pages in the phone tab bar; everything else is under More. */
-export const MOBILE_TABS = ["/dashboard", "/needs-attention", "/flightpath", "/jobs"];
+export const MOBILE_TABS = ["/dashboard", "/tasks", "/needs-attention", "/flightpath", "/jobs"];
