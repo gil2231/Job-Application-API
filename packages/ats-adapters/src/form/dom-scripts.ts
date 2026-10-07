@@ -141,15 +141,7 @@ const withOptions = (body: string, options: ScanOptions) => String.raw`(() => {
   ${body}
 })()`;
 
-/**
- * Returns every visible, enabled form field on the page as plain data. Radio
- * buttons and same-name checkboxes are grouped into one field with options.
- * Custom dropdowns (comboboxes and listbox buttons) and button groups are
- * reported as dropdowns and radios with a `widget` saying how to operate them.
- */
-export function scanFieldsScript(options: ScanOptions = {}): string {
-  return withOptions(
-    String.raw`
+const SCAN_FIELDS_BODY = String.raw`
   let root = document;
   for (const sel of OPTIONS.roots || []) { const r = deepAll(document, sel)[0]; if (r) { root = r; break; } }
   const out = [];
@@ -248,14 +240,20 @@ export function scanFieldsScript(options: ScanOptions = {}): string {
       multiple: g.type === "checkbox",
     });
   }
-  return out;`,
-    options,
-  );
+  return out;`;
+
+/**
+ * Returns every visible, enabled form field on the page as plain data. Radio
+ * buttons and same-name checkboxes are grouped into one field with options.
+ * Custom dropdowns (comboboxes and listbox buttons) and button groups are
+ * reported as dropdowns and radios with a `widget` saying how to operate them.
+ */
+export function scanFieldsScript(options: ScanOptions = {}): string {
+  return withOptions(SCAN_FIELDS_BODY, options);
 }
 
 /** Visible security checks (CAPTCHA widgets, sign-in and verification-code forms). Read-only. */
-export const SECURITY_SCRIPT = withOptions(
-  String.raw`
+const SECURITY_BODY = String.raw`
   const captchaSelectors = [".g-recaptcha", ".h-captcha", ".cf-turnstile", "[data-sitekey]", "#captcha", "[data-captcha]", ".captcha", "#px-captcha", ".arkose"];
   const frames = deepAll(document, "iframe").filter((f) => visible(f) && /recaptcha|hcaptcha|challenges\.cloudflare|turnstile|arkoselabs|funcaptcha|captcha/i.test(f.src || f.title || ""));
   const widgets = captchaSelectors.flatMap((s) => deepAll(document, s)).filter(visible);
@@ -270,9 +268,8 @@ export const SECURITY_SCRIPT = withOptions(
     mfa: otp.length > 0 || (otpText && deepAll(document, "input:not([type=hidden])").length <= 4 && !password.length),
     login: password.length > 0,
     signInText,
-  };`,
-  {},
-);
+  };`;
+export const SECURITY_SCRIPT = withOptions(SECURITY_BODY, {});
 
 /** The page's visible, enabled navigation buttons (not dropdowns or answer buttons), with the attributes used to classify them. */
 export function buttonsScript(options: ScanOptions = {}): string {
@@ -335,15 +332,13 @@ export const NATIVE_VALIDITY_SCRIPT = withOptions(
 );
 
 /** Signs the application went through: confirmation wording and a reference number if shown. */
-export const CONFIRMATION_SCRIPT = withOptions(
-  String.raw`
+const CONFIRMATION_BODY = String.raw`
   const text = (document.body ? deepText(document.body) : "").replace(/\s+/g, " ").slice(0, 20000);
   const confirmed = /thank you for (applying|your application|your interest)|thanks for applying|application (has been |was )?(successfully )?(submitted|received)|we('ve| have) received your application|your application is complete|successfully (submitted|applied)/i.test(text);
   const m = text.match(/(confirmation|reference|application|submission) (number|no\.?|id|#|code)\s*(?:is\s*)?[:#]?\s*([A-Z0-9][A-Z0-9-]{3,})/i);
   // A reference always has a digit; this keeps words like "pending" out.
-  return { confirmed, confirmation: m && /\d/.test(m[3]) ? m[3] : null, url: location.href };`,
-  {},
-);
+  return { confirmed, confirmation: m && /\d/.test(m[3]) ? m[3] : null, url: location.href };`;
+export const CONFIRMATION_SCRIPT = withOptions(CONFIRMATION_BODY, {});
 
 /** Text of the options a custom dropdown is currently showing (after it was opened). */
 export const OPEN_OPTIONS_SCRIPT = withOptions(
@@ -351,3 +346,14 @@ export const OPEN_OPTIONS_SCRIPT = withOptions(
   return deepAll(document, '[role="option"]').filter(visible).map((o) => clean(o.textContent)).filter(Boolean);`,
   {},
 );
+
+/**
+ * The field scan, security check and confirmation check as functions of their
+ * scan options, for the browser extension. The extension can't run code it
+ * downloads, so its page-scripts.js is generated from this at build time and
+ * the worker and the extension read pages the same way.
+ */
+export function pageScriptsSource(): string {
+  const fn = (body: string) => `(OPTIONS) => {\n  OPTIONS = OPTIONS || {};\n${HELPERS}\n${body}\n}`;
+  return `{\nscanFields: ${fn(SCAN_FIELDS_BODY)},\nsecurity: ${fn(SECURITY_BODY)},\nconfirmation: ${fn(CONFIRMATION_BODY)},\n}`;
+}
