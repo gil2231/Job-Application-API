@@ -170,7 +170,7 @@ export const HELP_ARTICLES: HelpArticle[] = [
     blocks: [
       { p: `${P} stops and asks you whenever a person is needed. Paused applications appear in Needs Attention, with a count in the sidebar.` },
       { list: [
-        "CAPTCHA or security check: open the application, complete it yourself, then choose I've completed it.",
+        "CAPTCHA: open Solve CAPTCHAs in the menu. Each paused application shows its real page live there; solve the check in that window and the application carries on by itself. You can also open the application, complete it yourself, then choose I've completed it.",
         "Sign-in or two-factor code: open the site and sign in. Your sign-in is remembered for that site, so you won't be asked every time.",
         "Question it isn't sure about: check or edit the suggested answer, and tick Remember this answer to reuse it.",
         "Final review: look over the filled application and choose Approve & submit.",

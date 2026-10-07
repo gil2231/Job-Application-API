@@ -8,6 +8,7 @@ export * from "./analysis";
 export * from "./skills";
 export * from "./schemas";
 export * from "./queue";
+export * from "./live-solve";
 export * from "./keywords";
 export * from "./documents";
 export * from "./tracker";

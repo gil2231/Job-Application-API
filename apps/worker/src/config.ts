@@ -7,6 +7,10 @@ export interface WorkerConfig {
   headless: boolean;
   /** With a visible browser, how long to keep a page open waiting for the person before releasing it. */
   interactiveWaitMs: number;
+  /** Stream pages paused on a CAPTCHA to the app's CAPTCHA screen so the person can solve them there. */
+  liveSolve: boolean;
+  /** How long a live CAPTCHA window stays open before the application goes back to waiting in Needs Attention. */
+  liveSolveWaitMs: number;
   leaseMs: number;
   schedulerIntervalMs: number;
   /** Hosts automation may open. Real employer sites are off unless allowAllHosts is set. */
@@ -33,6 +37,8 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): WorkerConfig {
     concurrency: int(env.WORKER_CONCURRENCY, 2, 1),
     headless: bool(env.WORKER_HEADLESS, true),
     interactiveWaitMs: int(env.WORKER_INTERACTIVE_WAIT_MS, 15 * 60_000, 1000),
+    liveSolve: bool(env.WORKER_LIVE_SOLVE, true),
+    liveSolveWaitMs: int(env.WORKER_LIVE_SOLVE_WAIT_MS, 10 * 60_000, 1000),
     leaseMs: int(env.WORKER_LEASE_MS, 90_000, 5000),
     schedulerIntervalMs: int(env.WORKER_SCHEDULER_INTERVAL_MS, 5000, 500),
     allowedHosts: (env.AUTOMATION_ALLOWED_HOSTS ?? "localhost,127.0.0.1")

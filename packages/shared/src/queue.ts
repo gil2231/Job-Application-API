@@ -16,6 +16,8 @@ export interface WorkerHeartbeat {
   activeJobs: number;
   /** Whether the worker's browser is visible, so a person can finish CAPTCHAs and sign-ins in it. */
   interactive?: boolean;
+  /** Whether paused CAPTCHAs are streamed to the app's CAPTCHA screen. */
+  liveSolve?: boolean;
 }
 
 /** Pub/sub channel the web app uses to reach running workers (stop, wake). */
