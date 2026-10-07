@@ -3,6 +3,8 @@ import { resolve } from "node:path";
 import { expect, test, type Page } from "@playwright/test";
 import { createAnswer, createDocument, getUserSettings, prisma, updatePersonal, updateProfessional } from "@autoapply/database";
 import { buildStorageKey, getStorage, sha256Hex } from "@autoapply/documents";
+import { SITE_COOLDOWN_KEY } from "@autoapply/shared";
+import Redis from "ioredis";
 import { signUp } from "./helpers";
 
 /**
@@ -37,6 +39,12 @@ test.describe.configure({ mode: "serial" });
 
 test.beforeAll(async () => {
   test.setTimeout(120_000);
+  // Start from a healthy mock site: no cooldown or queued work left by an earlier, interrupted run.
+  const redis = new Redis(process.env.REDIS_URL ?? "redis://localhost:6379");
+  const stale = await redis.keys("autoapply:site-failures:127.0.0.1:*");
+  await redis.del(SITE_COOLDOWN_KEY, ...stale);
+  redis.disconnect();
+  await prisma.application.updateMany({ where: { status: "QUEUED", job: { url: { startsWith: MOCK } } }, data: { status: "SKIPPED" } });
   await start(["run", "mock-site"], /Mock application pages/, { MOCK_SITE_PORT: String(MOCK_PORT) });
   await start(["run", "start"], /\[worker\] .* running/, { WORKER_HEADLESS: "true", WORKER_SCHEDULER_INTERVAL_MS: "1000", AUTOMATION_ALLOWED_HOSTS: "127.0.0.1", AUTOMATION_ALLOW_ALL_HOSTS: "false" });
 });
@@ -197,4 +205,40 @@ test("Workday: the platform is detected, the sign-in goes to the user, and the a
 
   await page.goto(`/applications/${app.id}`);
   await expect(page.getByText(/Workday detected/).first()).toBeVisible();
+});
+
+test("A site outage is retried with backoff, shown on Automation health, and can be retried now", async ({ page }) => {
+  test.setTimeout(120_000);
+  const { email } = await signUp(page);
+  const user = await seedApplicant(email, "AUTO");
+  await fetch(`${MOCK}/__fail?path=/simple&status=503&times=1`);
+  await addMockJob(page, "/simple", "Mock Outage BDR");
+  await page.getByRole("checkbox", { name: "Select all" }).check();
+  await page.getByRole("button", { name: "Apply", exact: true }).click();
+  await expect(page.getByText(/Queued 1 application in auto mode/)).toBeVisible();
+
+  const app = await prisma.application.findFirstOrThrow({ where: { userId: user.id } });
+  await expect.poll(async () => (await prisma.application.findUniqueOrThrow({ where: { id: app.id } })).failureType, { timeout: 60_000 }).toBe("SITE_UNAVAILABLE");
+  const backedOff = await prisma.application.findUniqueOrThrow({ where: { id: app.id } });
+  expect(backedOff.status).toBe("QUEUED");
+  expect(backedOff.nextAttemptAt!.getTime()).toBeGreaterThan(Date.now() + 60_000);
+
+  await page.goto("/automation");
+  await expect(page.getByRole("heading", { name: "Automation health" })).toBeVisible();
+  await expect(page.getByTestId("automation-status").getByText("Online")).toBeVisible();
+  const scheduled = page.getByTestId("scheduled-retries");
+  await expect(scheduled.getByText("Mock Outage BDR · Example Corp")).toBeVisible();
+  await expect(scheduled.getByText(/Site down · attempt 1 · next try in/)).toBeVisible();
+  await expect(page.getByTestId("recent-failures").getByText("Site down", { exact: true })).toBeVisible();
+  await expect(page.getByTestId("failure-classes").getByText("Retried", { exact: true })).toBeVisible();
+
+  await scheduled.getByRole("button", { name: "Retry now" }).click();
+  await expect(page.getByText("Retrying now")).toBeVisible();
+  await expect.poll(async () => (await prisma.application.findUniqueOrThrow({ where: { id: app.id } })).status, { timeout: 60_000 }).toBe("SUBMITTED");
+
+  await page.reload();
+  const kpis = page.getByTestId("health-kpis");
+  await expect(kpis.getByText("1 of 2 runs submitted or ready for your review")).toBeVisible();
+  await expect(kpis.getByText("1 of 1 failed applications recovered on a later try")).toBeVisible();
+  await expect(page.getByText("Nothing is waiting to retry.")).toBeVisible();
 });

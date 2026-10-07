@@ -96,12 +96,17 @@ const QUESTION_PATTERNS: Array<[RegExp, string]> = [
   [/\bgender\b|\bsex\b/, "demographic_gender"],
   [/\brace\b|ethnicity|hispanic|latino/, "demographic_race"],
   [/veteran/, "demographic_veteran"],
+  [/\b(active|current(ly)?|serv(e|ed|ing)|member of|in) (the )?(us |u s )?(military|armed forces|national guard|reserves?)\b|\bactive duty\b|\bactive-duty\b|\bmilitary (service|status|member|experience)\b/, "military_status"],
   [/disabilit/, "demographic_disability"],
 ];
 
 export function matchStandardQuestion(label: string): string | null {
   const text = normalizeLabel(label);
-  for (const [pattern, key] of QUESTION_PATTERNS) if (pattern.test(text)) return key;
+  for (const [pattern, key] of QUESTION_PATTERNS) {
+    // A question about a spouse's or family member's service isn't about the applicant.
+    if (key === "military_status" && /spouse|partner|dependent|family|parent|child/.test(text)) continue;
+    if (pattern.test(text)) return key;
+  }
   return null;
 }
 

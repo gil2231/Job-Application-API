@@ -6,6 +6,7 @@ const RESUME_PDF = resolve(import.meta.dirname, "fixtures/resume.pdf");
 
 test("imports a resume into the Master Profile after review", async ({ page }) => {
   await signUp(page, "Jane Doe");
+  await page.goto("/profile");
   await page.getByRole("link", { name: "Import from resume" }).click();
   await expect(page).toHaveURL(/\/profile\/import$/);
 

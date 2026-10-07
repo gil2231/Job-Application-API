@@ -1,9 +1,11 @@
 import "server-only";
 import { ConflictError, NotFoundError } from "@autoapply/database";
-import { fieldErrors } from "@autoapply/shared";
+import { fieldErrors, createLogger } from "@autoapply/shared";
 import type { z } from "zod";
 import { requireUser } from "./auth";
 import { LIMITS, rateLimit } from "./rate-limit";
+
+const log = createLogger("action");
 
 export interface ActionResult<T = undefined> {
   ok: boolean;
@@ -39,7 +41,7 @@ export async function authedAction<T>(
   fn: (user: Awaited<ReturnType<typeof requireUser>>) => Promise<ActionResult<T>>,
 ): Promise<ActionResult<T>> {
   const user = await requireUser();
-  const limit = rateLimit(`mutation:${user.id}`, LIMITS.mutation.limit, LIMITS.mutation.windowMs);
+  const limit = await rateLimit(`mutation:${user.id}`, LIMITS.mutation.limit, LIMITS.mutation.windowMs);
   if (!limit.allowed) return { ok: false, message: `Too many requests. Try again in ${limit.retryAfterSeconds}s.` };
   try {
     return await fn(user);
@@ -47,7 +49,7 @@ export async function authedAction<T>(
     if (error instanceof NotFoundError || error instanceof ConflictError) return { ok: false, message: error.message };
     // Let Next.js redirects and notFound() propagate.
     if (error && typeof error === "object" && "digest" in error) throw error;
-    console.error("[action] unexpected error", error);
+    log.error("Unexpected error in a server action", { error });
     return { ok: false, message: "Something went wrong. Please try again." };
   }
 }

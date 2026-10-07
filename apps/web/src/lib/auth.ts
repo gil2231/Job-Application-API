@@ -29,7 +29,9 @@ export async function endSession() {
   const store = await cookies();
   const token = store.get(SESSION_COOKIE)?.value;
   if (token) await revokeSessionToken(token);
-  store.delete(SESSION_COOKIE);
+  // A plain delete omits Secure, and browsers ignore that for a __Host- cookie
+  // in production; expire it with the same attributes it was set with.
+  store.set(SESSION_COOKIE, "", { ...sessionCookieOptions, maxAge: 0 });
 }
 
 /**

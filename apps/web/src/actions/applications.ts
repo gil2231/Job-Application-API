@@ -12,11 +12,13 @@ import {
   recheckQuestion,
   rememberApprovedAnswer,
   retryApplications,
+  retryScheduledNow,
   revokeBrowserSession,
   skipApplication,
   skipQuestion,
 } from "@autoapply/database";
 import { matchStandardQuestion } from "@autoapply/automation";
+import { SENSITIVE_ANSWER_CATEGORIES, STANDARD_QUESTIONS } from "@autoapply/shared";
 import { authedAction, parseIds, type ActionResult } from "@/lib/action";
 import { notifyWorker } from "@/lib/worker-queue";
 
@@ -26,6 +28,7 @@ function refresh(applicationId?: string) {
   revalidatePath("/needs-attention");
   revalidatePath("/jobs");
   revalidatePath("/dashboard");
+  revalidatePath("/automation");
   if (applicationId) revalidatePath(`/applications/${applicationId}`);
 }
 
@@ -38,6 +41,19 @@ export async function retryApplicationsAction(ids: string[]): Promise<ActionResu
     if (result.retried) await notifyWorker(user.id);
     refresh();
     return result.retried ? { ok: true, message: `Requeued ${result.retried} application${result.retried === 1 ? "" : "s"}` } : { ok: false, message: "Only failed applications can be retried." };
+  });
+}
+
+/** Skip the backoff wait on applications scheduled to retry later. */
+export async function retryScheduledNowAction(ids: string[]): Promise<ActionResult> {
+  return authedAction(async (user) => {
+    const count = await retryScheduledNow(user.id, parseIds(ids));
+    if (!count) return { ok: false, message: "Nothing is waiting to retry." };
+    await audit(user.id, "application.retry_now", { metadata: { ids, count } });
+    await notifyWorker(user.id);
+    refresh();
+    revalidatePath("/automation");
+    return { ok: true, message: count === 1 ? "Retrying now" : `Retrying ${count} applications now` };
   });
 }
 
@@ -69,11 +85,13 @@ export async function approveAnswerAction(questionId: string, editedValue?: stri
     const qid = one(questionId);
     if (!qid) return { ok: false, message: "Invalid id" };
     if (editedValue != null && (typeof editedValue !== "string" || editedValue.length > 10_000)) return { ok: false, message: "Answer is too long" };
-    await approveQuestionAnswer(user.id, qid, editedValue);
+    const question = await prisma.applicationQuestion.findFirst({ where: { id: qid, application: { userId: user.id } }, select: { label: true, normalizedKey: true } });
+    const standardKey = question ? matchStandardQuestion(question.label) : null;
+    const standard = STANDARD_QUESTIONS.find((q) => q.key === standardKey);
+    await approveQuestionAnswer(user.id, qid, editedValue, { sensitive: !!standard && SENSITIVE_ANSWER_CATEGORIES.includes(standard.category) });
     await audit(user.id, editedValue != null ? "attention.answer_edited" : "attention.answer_approved", { entityType: "ApplicationQuestion", entityId: qid });
     if (remember === true) {
-      const question = await prisma.applicationQuestion.findFirst({ where: { id: qid, application: { userId: user.id } }, select: { label: true, normalizedKey: true } });
-      if (question && (await rememberApprovedAnswer(user.id, qid, matchStandardQuestion(question.label) ?? question.normalizedKey))) {
+      if (question && (await rememberApprovedAnswer(user.id, qid, standardKey ?? question.normalizedKey))) {
         await audit(user.id, "answer.remembered", { entityType: "ApplicationQuestion", entityId: qid });
       }
     }

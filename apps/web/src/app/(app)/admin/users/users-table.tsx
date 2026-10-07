@@ -68,7 +68,7 @@ export function UsersTable({ data }: { data: Data }) {
                         <span className="text-muted-foreground block truncate text-xs">{u.email}</span>
                       </Link>
                     </TableCell>
-                    <TableCell className="text-muted-foreground text-[13px]">—</TableCell>
+                    <TableCell className="text-[13px]">{u.plan}</TableCell>
                     <TableCell className="text-[13px]">{formatDate(u.createdAt)}</TableCell>
                     <TableCell className="text-[13px]">{u.lastActiveAt ? <TimeAgo value={u.lastActiveAt} /> : <span className="text-muted-foreground">Never</span>}</TableCell>
                     <TableCell className="text-right tabular-nums">{u.jobs}</TableCell>

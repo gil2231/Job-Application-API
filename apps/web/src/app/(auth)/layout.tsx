@@ -1,4 +1,5 @@
 import Image from "next/image";
+import Link from "next/link";
 import { Logo } from "@/components/brand/logo";
 import { LegalLinks } from "@/components/legal/legal";
 
@@ -7,7 +8,9 @@ export default function AuthLayout({ children }: { children: React.ReactNode }) 
     <div className="grid min-h-screen lg:grid-cols-2">
       <div className="flex flex-col justify-center px-6 py-12 sm:px-12">
         <div className="mx-auto w-full max-w-sm">
-          <Logo className="mb-10" markClassName="h-8 drop-shadow-[0_1px_1px_rgb(0_0_0/0.35)]" textClassName="text-xl" />
+          <Link href="/" className="mb-10 flex w-fit" aria-label="Applyance home">
+            <Logo markClassName="h-8 drop-shadow-[0_1px_1px_rgb(0_0_0/0.35)]" textClassName="text-xl" />
+          </Link>
           {children}
           <LegalLinks className="mt-10 justify-center" />
         </div>

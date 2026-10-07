@@ -17,7 +17,7 @@ const ID = /^[a-z0-9]{20,40}$/i;
  */
 export async function readResumeAction(formData: FormData): Promise<ActionResult<ResumeReading & { fileName: string }>> {
   return authedAction(async (user) => {
-    const limit = rateLimit(`resume-import:${user.id}`, LIMITS.generate.limit, LIMITS.generate.windowMs);
+    const limit = await rateLimit(`resume-import:${user.id}`, LIMITS.generate.limit, LIMITS.generate.windowMs);
     if (!limit.allowed) return { ok: false, message: `Import limit reached. Try again in ${Math.ceil(limit.retryAfterSeconds / 60)} min.` };
 
     const file = formData.get("file");
@@ -61,7 +61,7 @@ export async function confirmResumeImportAction(formData: FormData): Promise<Act
     const file = formData.get("file");
     let upload: { body: Buffer; name: string; extension: string; mimeType: string } | null = null;
     if (input.saveResume && file instanceof File && file.size > 0) {
-      const limit = rateLimit(`upload:${user.id}`, LIMITS.upload.limit, LIMITS.upload.windowMs);
+      const limit = await rateLimit(`upload:${user.id}`, LIMITS.upload.limit, LIMITS.upload.windowMs);
       if (!limit.allowed) return { ok: false, message: "Upload limit reached. Uncheck “Save this file” or try again later." };
       const body = Buffer.from(await file.arrayBuffer());
       const check = validateUpload(file.name, body);

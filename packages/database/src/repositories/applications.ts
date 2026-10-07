@@ -1,6 +1,7 @@
 import type { Prisma } from "@prisma/client";
 import {
   ATTENTION_APPLICATION_STATUSES,
+  HIDDEN_ANSWER_CATEGORIES,
   type ApplicationFilters,
   type ApplicationStatus,
   type AutomationMode,
@@ -9,6 +10,7 @@ import { prisma } from "../client";
 import { decryptString, encryptString } from "../crypto";
 import { ConflictError, NotFoundError } from "./errors";
 import { resolveCoverLetterForJob, resolveResumeForJob } from "./documents";
+import { consumeUsage, getEffectivePlan, refundUsage } from "./billing";
 
 /**
  * Queue applications for jobs. The unique constraint on Application.jobId means
@@ -29,12 +31,12 @@ export async function queueApplications(userId: string, jobIds: string[], option
   if (mode === "AUTO" && !rule?.autoSubmitEnabled) mode = "REVIEW";
 
   const queued: string[] = [];
-  const duplicates: string[] = [];
-  for (const job of jobs) {
-    if (job.application) {
-      duplicates.push(job.id);
-      continue;
-    }
+  const duplicates: string[] = jobs.filter((j) => j.application).map((j) => j.id);
+  const candidates = jobs.filter((j) => !j.application);
+  // Each new application counts against the plan's monthly allowance; jobs past it aren't queued.
+  const granted = await consumeUsage(userId, "applications", candidates.length);
+  const overLimit = candidates.length - granted;
+  for (const job of candidates.slice(0, granted)) {
     const [resume, coverLetter] = await Promise.all([resolveResumeForJob(userId, job.id), resolveCoverLetterForJob(userId, job.id)]);
     try {
       await prisma.$transaction(async (tx) => {
@@ -56,11 +58,17 @@ export async function queueApplications(userId: string, jobIds: string[], option
       });
       queued.push(job.id);
     } catch (error) {
-      if (typeof error === "object" && error && "code" in error && error.code === "P2002") duplicates.push(job.id);
-      else throw error;
+      if (typeof error === "object" && error && "code" in error && error.code === "P2002") {
+        duplicates.push(job.id);
+        await refundUsage(userId, "applications", 1);
+      } else {
+        await refundUsage(userId, "applications", granted - queued.length);
+        throw error;
+      }
     }
   }
-  return { queued: queued.length, duplicates: duplicates.length, notFound: jobIds.length - jobs.length, mode };
+  const monthlyLimit = overLimit > 0 ? (await getEffectivePlan(userId)).limits.applications : null;
+  return { queued: queued.length, duplicates: duplicates.length, notFound: jobIds.length - jobs.length, overLimit, monthlyLimit, mode };
 }
 
 /** Queue every qualified job that has no application yet. */
@@ -172,7 +180,7 @@ export async function getApplicationDetail(userId: string, id: string) {
   const sensitive = new Set(
     (
       await prisma.applicationAnswer.findMany({
-        where: { userId, isSensitive: true, id: { in: app.questions.map((q) => q.answer?.libraryAnswerId).filter((x): x is string => !!x) } },
+        where: { userId, category: { in: [...HIDDEN_ANSWER_CATEGORIES] }, id: { in: app.questions.map((q) => q.answer?.libraryAnswerId).filter((x): x is string => !!x) } },
         select: { id: true },
       })
     ).map((a) => a.id),
@@ -205,7 +213,7 @@ export async function listAttentionItems(userId: string) {
       job: { select: { id: true, title: true, company: true, url: true, applicationUrl: true } },
       questions: {
         orderBy: [{ pageIndex: "asc" }, { createdAt: "asc" }],
-        include: { answer: { include: { libraryAnswer: { select: { isSensitive: true } } } } },
+        include: { answer: { include: { libraryAnswer: { select: { category: true } } } } },
       },
       attempts: { orderBy: { attemptNumber: "desc" }, take: 1, select: { screenshots: true } },
     },
@@ -220,7 +228,7 @@ export async function listAttentionItems(userId: string) {
             source: answer.source,
             confidence: answer.confidence,
             approvedByUser: answer.approvedByUser,
-            sensitive: answer.libraryAnswer?.isSensitive ?? false,
+            sensitive: !!answer.libraryAnswer && HIDDEN_ANSWER_CATEGORIES.includes(answer.libraryAnswer.category),
             value: decryptString(answer.value),
           }
         : null,
@@ -265,9 +273,10 @@ async function resumeIfResolved(tx: Prisma.TransactionClient, userId: string, ap
 }
 
 /** Approve a suggested answer, optionally after editing it. */
-export async function approveQuestionAnswer(userId: string, questionId: string, editedValue?: string) {
+export async function approveQuestionAnswer(userId: string, questionId: string, editedValue?: string, options: { sensitive?: boolean } = {}) {
   const question = await loadOwnedQuestion(userId, questionId);
-  const sensitive = question.answer?.libraryAnswer?.isSensitive ?? false;
+  // Sensitive if it came from a sensitive saved answer, or the caller recognized a sensitive question (pay, authorization…).
+  const sensitive = (question.answer?.libraryAnswer?.isSensitive ?? false) || options.sensitive === true;
   const raw = editedValue ?? (question.answer ? decryptString(question.answer.value) : undefined);
   if (raw == null || raw.trim() === "") throw new ConflictError("Enter an answer before approving");
   const value = sensitive ? encryptString(raw) : raw;

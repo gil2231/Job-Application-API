@@ -1,4 +1,9 @@
 import "server-only";
+import { createHash } from "node:crypto";
+import { createLogger } from "@autoapply/shared";
+import { getRedis } from "./redis";
+
+const log = createLogger("rate-limit");
 
 interface Window {
   count: number;
@@ -14,12 +19,8 @@ export interface RateLimitResult {
   retryAfterSeconds: number;
 }
 
-/**
- * Fixed-window rate limiter kept in process memory. This is enough for a
- * single web instance; the hardening phase swaps it for a Redis-backed one
- * behind the same function signature.
- */
-export function rateLimit(key: string, limit: number, windowMs: number): RateLimitResult {
+/** Fixed-window limiter in process memory: the fallback when Redis is unavailable. */
+export function rateLimitInMemory(key: string, limit: number, windowMs: number): RateLimitResult {
   const now = Date.now();
   if (now - lastSweep > 60_000) {
     for (const [k, w] of buckets) if (w.resetAt <= now) buckets.delete(k);
@@ -38,6 +39,32 @@ export function rateLimit(key: string, limit: number, windowMs: number): RateLim
   };
 }
 
+/** Keys can hold an email address; Redis only ever sees a hash of them. */
+const redisKey = (key: string) => `autoapply:ratelimit:${createHash("sha256").update(key).digest("hex").slice(0, 32)}`;
+
+/**
+ * Fixed-window rate limiter shared by every web instance through Redis, so
+ * limits hold behind a load balancer and across restarts. Falls back to the
+ * in-memory limiter if Redis isn't configured or doesn't answer.
+ */
+export async function rateLimit(key: string, limit: number, windowMs: number): Promise<RateLimitResult> {
+  const redis = await getRedis();
+  if (redis) {
+    try {
+      const k = redisKey(key);
+      const result = await redis.multi().set(k, 0, "PX", windowMs, "NX").incr(k).pttl(k).exec();
+      const count = Number(result?.[1]?.[1]);
+      const ttl = Number(result?.[2]?.[1]);
+      if (Number.isFinite(count)) {
+        return { allowed: count <= limit, remaining: Math.max(0, limit - count), retryAfterSeconds: Math.max(1, Math.ceil((ttl > 0 ? ttl : windowMs) / 1000)) };
+      }
+    } catch (error) {
+      log.warn("Redis rate limit failed; using this instance's memory", { error });
+    }
+  }
+  return rateLimitInMemory(key, limit, windowMs);
+}
+
 // Local development and end-to-end runs create many accounts from one IP.
 const relaxed = process.env.NODE_ENV !== "production";
 
@@ -53,6 +80,12 @@ export const LIMITS = {
   /** Tailored resumes and cover letters may call the AI provider. */
   generate: { limit: relaxed ? 500 : 40, windowMs: 60 * 60_000 },
   mutation: { limit: 120, windowMs: 60_000 },
+  /** Two-factor codes per account; with 3 valid codes at a time, guessing stays hopeless. */
+  twoFactor: { limit: 10, windowMs: 15 * 60_000 },
+  /** Verification and password reset emails per address. */
+  emailSend: { limit: relaxed ? 100 : 5, windowMs: 60 * 60_000 },
+  /** Data exports are heavy; a few an hour is plenty. */
+  dataExport: { limit: relaxed ? 100 : 5, windowMs: 60 * 60_000 },
   /** "Report a problem" messages, per account or, when signed out, per IP. */
   support: { limit: relaxed ? 500 : 10, windowMs: 60 * 60_000 },
 } as const;

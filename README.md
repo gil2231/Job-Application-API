@@ -100,6 +100,25 @@ The dashboard shows each running application's steps live (server-sent events), 
 
 By default the worker only opens `localhost` and `127.0.0.1`. To run against real employer sites, set `AUTOMATION_ALLOW_ALL_HOSTS=true` (private and internal addresses stay blocked). LinkedIn Easy Apply is never automated.
 
+### Failures, retries and automation health
+
+Every failed run is classified, and the class decides what happens next:
+
+| Class | What happens |
+| --- | --- |
+| Connection problem, timed out | Retried up to 4 attempts, waiting 30s, 1m, 2m… (with jitter) |
+| Field not found | Retried up to 3 attempts, from 1m |
+| Browser crashed | Retried on a fresh browser, up to 3 attempts, from 15s |
+| Site down (HTTP 5xx) | Retried up to 5 attempts, from 2m, up to an hour apart |
+| Rate limited (HTTP 429) | Retried up to 4 attempts, from 10m, never sooner than the site's `Retry-After` |
+| Unexpected error | Retried once, then sent to you |
+| Posting closed (HTTP 404/410) | Fails at once; nothing to retry |
+| CAPTCHA, sign-in, rejected answer, unclear question, unsupported form | Sent to you in Needs Attention; never retried |
+
+An application that runs out of attempts goes to Needs Attention with the last error. A site that keeps failing (two outages, three timeouts or connection errors within 10 minutes, or any rate limit) is put on hold for every application: they wait until it recovers without using up their attempts, and the first normal page load clears the hold. Holds are shared through Redis, so every worker respects them.
+
+**Automation health** (in the sidebar) shows, for the last 7, 30 or 90 days: the success rate (runs that submitted or filled everything for your review), how often runs needed you, the failure rate, retries and how many failed applications a later try recovered, typical time to submit, runs per day, failures by class with what you can do about each, results per site type, applications waiting to retry (with **Retry now**), sites on hold, and recent failures. It updates live. Hiring outcomes are on Flightpath.
+
 ### AI
 
 AI is optional. Two providers are built in: Claude (`AI_PROVIDER=anthropic` with `ANTHROPIC_API_KEY`) and OpenAI (`AI_PROVIDER=openai` with `OPENAI_API_KEY`). Set the provider and its key in `.env`, or set the key and choose the provider in **Settings → AI**; `AI_MODEL` (or the Model box in Settings) overrides the default model. Without a provider, the built-in tools do everything below except write new text. The same checks apply whichever provider writes the text.
@@ -140,6 +159,8 @@ Adding an ATS is one class that describes the site (its buttons, where questions
 | `AUTOMATION_ALLOWED_HOSTS` | `localhost,127.0.0.1` | Hosts the worker may open |
 | `AUTOMATION_ALLOW_ALL_HOSTS` | `false` | Allow public employer sites |
 | `PLAYWRIGHT_CHROMIUM_EXECUTABLE` | | Chromium to launch, if not Playwright's own |
+
+The worker also runs an hourly retention sweep: expired sign-in sessions are deleted, saved site sessions past expiry lose their cookies, and attempt screenshots older than each person's **Keep screenshots** setting are deleted.
 
 ## Browser extension
 
@@ -220,6 +241,28 @@ pnpm admin:revoke you@example.com    # take it away
 
 Reload the app and **Admin** appears at the bottom of the sidebar. Each time an admin opens a user's page, it's written to the audit log.
 
+## Plans and billing
+
+Applyance has a **Free** plan (25 applications and 10 tailored resumes or cover letters a month) and a **Pro** plan ($29 a month or $290 a year; 500 applications and 200 tailored documents). Names, prices, limits and feature lists live in one file, `packages/shared/src/plans.ts`, which the pricing page, the Billing page and the limit checks all read.
+
+- Payments go through Stripe Checkout, and **Plan & billing → Manage billing** opens Stripe's customer portal (card, invoices, cancel). Applyance never sees card numbers.
+- A Stripe webhook (`/api/stripe/webhook`, signature-checked, each event applied once) keeps the plan in step. Cancelling keeps Pro until the end of the paid period; a failed payment keeps Pro while Stripe retries.
+- Usage is counted per calendar month (UTC). Queueing more jobs than the plan has left queues as many as fit and says how many were left out; retries don't count again.
+- Without `STRIPE_SECRET_KEY` billing is off and every account gets Pro's limits, which suits local development and a private install.
+
+## Account security and data
+
+- **Two-factor sign-in** (Settings): any authenticator app (TOTP). The secret is encrypted, each code works once, and ten single-use recovery codes (stored as hashes) cover a lost phone. Turning it on signs out other sessions; turning it off needs the password and a code.
+- **Email:** new accounts get a confirmation link, and **Forgot password?** sends a reset link that works once, for an hour, and signs out every session. With `EMAIL_PROVIDER=resend` they're sent through Resend; in development they're printed and saved under `.storage/outbox`.
+- **Download my data** (Settings → Data & privacy) gives a ZIP with everything in the account as JSON (sensitive answers decrypted) plus the stored documents. Passwords, two-factor secrets, tokens and saved site cookies are left out.
+- **Delete account** needs the password, a two-factor code if it's on, and typing DELETE. It cancels any Stripe subscription first, then deletes every row and stored file (documents and screenshots).
+
+New accounts start on **Getting started** (`/welcome`): import a resume, check the profile, set rules, add jobs, turn on two-factor and, with billing on, pick a plan. Progress is worked out from the account, and the dashboard shows it until it's done or hidden.
+
+## Deploying
+
+`docs/deployment.md` walks through putting Applyance live on Render with `render.yaml` (web app, API, worker, Postgres, Redis), Cloudflare R2 for files, Resend for email and Stripe for payments. The Dockerfiles in `docker/` run on any container host.
+
 ## Checks
 
 ```bash
@@ -231,13 +274,18 @@ pnpm test:e2e    # Playwright browser tests against the dev server, then with th
 
 ## Security
 
-- Passwords are hashed with argon2id. Accounts lock for 15 minutes after 5 failed sign-ins.
+- Passwords are hashed with argon2id. Accounts lock for 15 minutes after 5 failed sign-ins. Optional two-factor sign-in (TOTP) with recovery codes.
 - Sessions live in the database, which stores only a SHA-256 hash of each token. The cookie is httpOnly, SameSite=Lax, and `__Host-` prefixed in production.
 - The browser extension connects with a one-time code that lasts 10 minutes and gets its own token (only its SHA-256 hash is stored). That token opens only the extension's routes, and changing your password disconnects it.
-- Sensitive answers (demographics, sponsorship) and browser session state are encrypted with AES-256-GCM.
+- Sensitive answers (salary expectations, work authorization, sponsorship, military status and voluntary self-identification), the values filled from them on applications, and browser session state are encrypted with AES-256-GCM. Answers saved before a category became sensitive are encrypted by the worker when it starts. Sensitive answers never go into AI prompts or similar-answer suggestions, and self-identification answers are also hidden in review summaries.
 - Every mutation is checked for authorization, validated with zod, rate-limited, and written to the audit log (Settings → Security log).
 - Uploads are checked against their file signature (magic bytes) and capped at 10 MB.
 - Email and calendar access uses OAuth with PKCE and a state cookie bound to the signed-in user; access and refresh tokens are encrypted with AES-256-GCM, and only job emails' sender, subject and preview are stored.
+- Every page carries a Content Security Policy: scripts run only with a per-request nonce, and framing, plugins and off-site form posts are blocked.
+- Rate limits are shared through Redis, so they hold across several web servers (each server falls back to its own memory if Redis is down). Client IPs come from `X-Forwarded-For`, counting `TRUSTED_PROXY_HOPS` (default 1) proxies from the right, so a forged header can't dodge them; set it to `0` when nothing sits in front of the app.
+- In production the web app and worker refuse to start with an unsafe configuration (no or malformed `DATA_ENCRYPTION_KEY`, `APP_URL` without https, incomplete S3 settings, a worker without Redis) and warn about anything unusual.
+- Logs are structured (one JSON line per entry in production, or with `LOG_FORMAT=json`; `LOG_LEVEL` sets the minimum level). Fields that look like secrets or answers are redacted and email addresses are masked.
+- `GET /api/health` reports the database, Redis and worker for load balancers and uptime checks; it returns 503 only when the database is down.
 
 ## Monitoring and backups
 
@@ -252,6 +300,6 @@ Crashes in the web app, API, worker and browser are reported to Sentry (or Glitc
 | 3 | Queue and controls, Playwright worker, generic form automation, human intervention flow, live progress | Done |
 | 4 | ATS adapters (Workday, Greenhouse, Lever, Ashby, SmartRecruiters) and platform detection | Done |
 | 5 | AI field mapping, answer drafting, resume/cover-letter generation | Done |
-| 6 | Analytics, retries, real-time hardening | Next |
+| 6 | Automation health analytics, failure classes and backoff, site holds, structured logging, security and production hardening | Done |
 | — | Flightpath application tracker: stages after submission, interview rounds, board and table, dashboard metrics | Done |
 | — | Browser extension: save jobs from any site, finish CAPTCHAs and sign-ins in your own browser | Done |

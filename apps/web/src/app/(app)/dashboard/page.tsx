@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { ArrowRight, CalendarClock, CheckCircle2, Circle, Inbox } from "lucide-react";
 import { BOARD_STAGES, enumLabel, isPostSubmitStage, STAGE_META, stageOf } from "@autoapply/shared";
-import { countResumes, getDailyUsage, getDashboardStats, getFullProfile, profileCompleteness } from "@autoapply/database";
+import { countResumes, getDailyUsage, getDashboardStats, getFullProfile, getOnboardingStatus, profileCompleteness } from "@autoapply/database";
 import { requireUser } from "@/lib/auth";
 import { formatRelative } from "@/lib/format";
 import { getWorkerStatus } from "@/lib/worker-status";
@@ -17,6 +17,8 @@ import { Button } from "@/components/ui/button";
 import { Card, CardAction, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { cn } from "@/lib/utils";
+import { GettingStartedList } from "@/components/getting-started";
+import { DismissOnboardingButton } from "./dismiss-onboarding";
 import { QueueControls } from "./queue-controls";
 import { WeeklyChart } from "./weekly-chart";
 
@@ -32,13 +34,15 @@ const CARDS = [
 
 export default async function DashboardPage() {
   const user = await requireUser();
-  const [stats, profile, resumes, worker, usage] = await Promise.all([
+  const [stats, profile, resumes, worker, usage, onboarding] = await Promise.all([
     getDashboardStats(user.id),
     getFullProfile(user.id),
     countResumes(user.id),
     getWorkerStatus(),
     getDailyUsage(user.id),
+    getOnboardingStatus(user.id),
   ]);
+  const showOnboarding = !onboarding.dismissed && onboarding.done < onboarding.total;
   const completeness = profileCompleteness(profile, { resumes });
   const funnelMax = Math.max(1, ...stats.funnel.map((f) => f.count));
   const firstName = user.name.split(" ")[0];
@@ -48,7 +52,27 @@ export default async function DashboardPage() {
       <PageHeader title={`Welcome back, ${firstName}`} description="Your application pipeline at a glance. Updates live as work progresses." />
       <InstallBanner />
 
-      {completeness.percent < 100 && (
+      {showOnboarding && (
+        <Card className="border-primary/25">
+          <CardHeader>
+            <CardTitle className="text-sm">
+              Getting started ({onboarding.done} of {onboarding.total})
+            </CardTitle>
+            <CardDescription>Finish these and Applyance is ready to apply for you.</CardDescription>
+            <CardAction className="flex gap-1">
+              <Button asChild size="sm" variant="ghost">
+                <Link href="/welcome">Open</Link>
+              </Button>
+              <DismissOnboardingButton />
+            </CardAction>
+          </CardHeader>
+          <CardContent>
+            <GettingStartedList status={onboarding} compact />
+          </CardContent>
+        </Card>
+      )}
+
+      {!showOnboarding && completeness.percent < 100 && (
         <Card className="border-primary/25 bg-primary/[0.03]">
           <CardHeader>
             <CardTitle className="text-sm">Finish your Master Profile ({completeness.percent}%)</CardTitle>

@@ -6,6 +6,9 @@ import { writeCoverLetterForJob, writeResumeForJob } from "@autoapply/ai";
 import {
   approveGenerated,
   audit,
+  consumeUsage,
+  getEffectivePlan,
+  refundUsage,
   deleteGenerated,
   getFullProfile,
   getGenerated,
@@ -17,9 +20,11 @@ import {
   type GeneratedKind,
 } from "@autoapply/database";
 import { buildStorageKey, EXPORT_MIME, generatedFileName, getStorage, renderCoverLetter, renderResume, sha256Hex } from "@autoapply/documents";
-import { MAX_COVER_LETTER_CHARS, MAX_SUMMARY_CHARS, toParagraphs, type CoverLetterContent, type ResumeContent } from "@autoapply/shared";
+import { MAX_COVER_LETTER_CHARS, MAX_SUMMARY_CHARS, toParagraphs, type CoverLetterContent, type ResumeContent, createLogger } from "@autoapply/shared";
 import { authedAction, type ActionResult } from "@/lib/action";
 import { LIMITS, rateLimit } from "@/lib/rate-limit";
+
+const log = createLogger("generated");
 
 const ID = /^[a-z0-9]{20,40}$/i;
 const KINDS: readonly GeneratedKind[] = ["resume", "coverLetter"];
@@ -31,14 +36,14 @@ function refresh(jobId: string | null) {
 }
 
 async function removeStored(key: string | null) {
-  if (key) await getStorage().delete(key).catch((error) => console.error("[generated] failed to delete stored file", error));
+  if (key) await getStorage().delete(key).catch((error) => log.error("Failed to delete a stored file", { error }));
 }
 
 /** Write (or rewrite) the tailored resume or cover letter for a job from the Master Profile. */
 export async function generateDocumentAction(jobId: string, kind: GeneratedKind): Promise<ActionResult> {
   return authedAction(async (user) => {
     if (!ID.test(jobId) || !KINDS.includes(kind)) return { ok: false, message: "Invalid request" };
-    const limit = rateLimit(`generate:${user.id}`, LIMITS.generate.limit, LIMITS.generate.windowMs);
+    const limit = await rateLimit(`generate:${user.id}`, LIMITS.generate.limit, LIMITS.generate.windowMs);
     if (!limit.allowed) return { ok: false, message: `Generation limit reached. Try again in ${Math.ceil(limit.retryAfterSeconds / 60)} min.` };
 
     const [job, profile, settings] = await Promise.all([getJob(user.id, jobId), getFullProfile(user.id), getUserSettings(user.id)]);
@@ -47,8 +52,19 @@ export async function generateDocumentAction(jobId: string, kind: GeneratedKind)
     const writingJob = { id: job.id, title: job.title, company: job.company, description: job.description, skills: Array.isArray(skills) ? skills.filter((s): s is string => typeof s === "string") : undefined };
     const ai = { provider: settings.aiProvider, model: settings.aiModel };
 
-    const { content } = kind === "resume" ? await writeResumeForJob(profile, writingJob, ai) : await writeCoverLetterForJob(profile, writingJob, ai);
-    const saved = kind === "resume" ? await saveGeneratedResume(user.id, job.id, content as ResumeContent) : await saveGeneratedCoverLetter(user.id, job.id, content as CoverLetterContent);
+    if ((await consumeUsage(user.id, "tailoredDocuments")) === 0) {
+      const plan = await getEffectivePlan(user.id);
+      return { ok: false, message: `You've used all ${plan.limits.tailoredDocuments} tailored resumes and cover letters on your plan this month. Upgrade on the Billing page, or more open up next month.` };
+    }
+    let saved: Awaited<ReturnType<typeof saveGeneratedResume>>;
+    let content: ResumeContent | CoverLetterContent;
+    try {
+      content = (kind === "resume" ? await writeResumeForJob(profile, writingJob, ai) : await writeCoverLetterForJob(profile, writingJob, ai)).content;
+      saved = kind === "resume" ? await saveGeneratedResume(user.id, job.id, content as ResumeContent) : await saveGeneratedCoverLetter(user.id, job.id, content as CoverLetterContent);
+    } catch (error) {
+      await refundUsage(user.id, "tailoredDocuments", 1);
+      throw error;
+    }
     await removeStored(saved.removedKey);
     await audit(user.id, `generated.${kind}_created`, { entityType: kind === "resume" ? "Resume" : "CoverLetter", entityId: saved.id, metadata: { jobId: job.id, method: content.generation.method, model: content.generation.model } });
     refresh(job.id);

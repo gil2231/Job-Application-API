@@ -67,7 +67,7 @@ export async function createSavedSearchAction(input: SavedSearchFormInput): Prom
     }
     await audit(user.id, "job_alerts.search_saved", { entityType: "SavedSearch", entityId: saved.id });
     let message = `Saved "${saved.name}".`;
-    const limit = rateLimit(`board-search:${user.id}`, LIMITS.boardSearch.limit, LIMITS.boardSearch.windowMs);
+    const limit = await rateLimit(`board-search:${user.id}`, LIMITS.boardSearch.limit, LIMITS.boardSearch.windowMs);
     if (limit.allowed) {
       const run = await runSavedSearch(saved);
       message += run.error && run.totalMatches === 0 ? " The boards couldn't be read just now; they'll be tried again tomorrow morning." : ` ${plural(run.totalMatches, "job")} match today.`;
@@ -94,7 +94,7 @@ export async function updateSavedSearchAction(id: string, input: SavedSearchForm
     }
     if (!updated) return { ok: false, message: "Saved search not found" };
     // A changed search starts over: record today's matches as its new baseline.
-    if (!updated.lastRunAt && rateLimit(`board-search:${user.id}`, LIMITS.boardSearch.limit, LIMITS.boardSearch.windowMs).allowed) await runSavedSearch(updated);
+    if (!updated.lastRunAt && (await rateLimit(`board-search:${user.id}`, LIMITS.boardSearch.limit, LIMITS.boardSearch.windowMs)).allowed) await runSavedSearch(updated);
     await audit(user.id, "job_alerts.search_updated", { entityType: "SavedSearch", entityId: searchId });
     refresh();
     return { ok: true, message: "Saved search updated" };
@@ -127,7 +127,7 @@ export async function checkSavedSearchNowAction(id: string): Promise<ActionResul
     const [searchId] = parseIds([id]);
     const search = searchId ? await getSavedSearch(user.id, searchId) : null;
     if (!search) return { ok: false, message: "Saved search not found" };
-    const limit = rateLimit(`board-search:${user.id}`, LIMITS.boardSearch.limit, LIMITS.boardSearch.windowMs);
+    const limit = await rateLimit(`board-search:${user.id}`, LIMITS.boardSearch.limit, LIMITS.boardSearch.windowMs);
     if (!limit.allowed) return { ok: false, message: `Search limit reached. Try again in ${Math.ceil(limit.retryAfterSeconds / 60)} minutes.` };
     const run = await runSavedSearch(search);
     refresh();
@@ -145,7 +145,7 @@ export async function addAlertMatchesAction(id: string, urls: string[]): Promise
     if (!search) return { ok: false, message: "Saved search not found" };
     const picked = Array.isArray(urls) ? urls.filter((u): u is string => typeof u === "string" && u.length <= 2048).slice(0, 200) : [];
     if (!picked.length) return { ok: false, message: "Choose at least one job to add" };
-    const limit = rateLimit(`import:${user.id}`, LIMITS.jobImport.limit, LIMITS.jobImport.windowMs);
+    const limit = await rateLimit(`import:${user.id}`, LIMITS.jobImport.limit, LIMITS.jobImport.windowMs);
     if (!limit.allowed) return { ok: false, message: `Import limit reached. Try again in ${Math.ceil(limit.retryAfterSeconds / 60)} minutes.` };
     const pickedBoards = new Set(picked.map((u) => parseBoardRef(u)).filter((b) => b !== null).map(boardKey));
     const boards = parseBoardList(search.boards.join("\n")).boards.filter((b) => pickedBoards.has(boardKey(b)));
@@ -192,7 +192,7 @@ export async function saveNotificationSettingsAction(_prev: ActionResult, formDa
 
 export async function sendTestEmailAction(): Promise<ActionResult> {
   return authedAction(async (user) => {
-    const limit = rateLimit(`test-email:${user.id}`, 5, 60 * 60_000);
+    const limit = await rateLimit(`test-email:${user.id}`, 5, 60 * 60_000);
     if (!limit.allowed) return { ok: false, message: "You've sent several test emails. Try again later." };
     const result = await sendTestEmail(user.id, createEmailSender());
     refresh();

@@ -8,7 +8,7 @@ export interface StandardQuestion {
   requiresHumanReview: boolean;
   /** Whether a stored answer may be submitted without a human looking at it. */
   autoSubmitAllowed: boolean;
-  /** Stored encrypted and never shown in logs. */
+  /** Stored encrypted and never shown in logs (see SENSITIVE_ANSWER_CATEGORIES). */
   sensitive: boolean;
 }
 
@@ -17,9 +17,9 @@ export const STANDARD_QUESTIONS: StandardQuestion[] = [
   { key: "why_company", question: "Why do you want to work here?", category: "MOTIVATION", requiresHumanReview: true, autoSubmitAllowed: false, sensitive: false },
   { key: "why_role", question: "Why are you interested in this role?", category: "MOTIVATION", requiresHumanReview: true, autoSubmitAllowed: false, sensitive: false },
   { key: "why_fit", question: "Why are you a good fit for this position?", category: "FIT", requiresHumanReview: true, autoSubmitAllowed: false, sensitive: false },
-  { key: "salary_expectations", question: "What are your salary expectations?", category: "COMPENSATION", requiresHumanReview: true, autoSubmitAllowed: false, sensitive: false },
-  { key: "work_authorization", question: "Are you legally authorized to work in this country?", category: "WORK_AUTHORIZATION", requiresHumanReview: false, autoSubmitAllowed: true, sensitive: false },
-  { key: "sponsorship", question: "Will you now or in the future require visa sponsorship?", category: "SPONSORSHIP", requiresHumanReview: false, autoSubmitAllowed: true, sensitive: false },
+  { key: "salary_expectations", question: "What are your salary expectations?", category: "COMPENSATION", requiresHumanReview: true, autoSubmitAllowed: false, sensitive: true },
+  { key: "work_authorization", question: "Are you legally authorized to work in this country?", category: "WORK_AUTHORIZATION", requiresHumanReview: false, autoSubmitAllowed: true, sensitive: true },
+  { key: "sponsorship", question: "Will you now or in the future require visa sponsorship?", category: "SPONSORSHIP", requiresHumanReview: false, autoSubmitAllowed: true, sensitive: true },
   { key: "relocation", question: "Are you willing to relocate?", category: "RELOCATION", requiresHumanReview: false, autoSubmitAllowed: true, sensitive: false },
   { key: "travel", question: "Are you willing to travel? If so, what percentage?", category: "TRAVEL", requiresHumanReview: false, autoSubmitAllowed: true, sensitive: false },
   { key: "years_experience", question: "How many years of professional experience do you have?", category: "EXPERIENCE", requiresHumanReview: false, autoSubmitAllowed: true, sensitive: false },
@@ -30,11 +30,20 @@ export const STANDARD_QUESTIONS: StandardQuestion[] = [
   { key: "start_date", question: "When can you start?", category: "AVAILABILITY", requiresHumanReview: false, autoSubmitAllowed: true, sensitive: false },
   { key: "demographic_gender", question: "Gender (voluntary self-identification)", category: "DEMOGRAPHIC", requiresHumanReview: false, autoSubmitAllowed: true, sensitive: true },
   { key: "demographic_race", question: "Race / ethnicity (voluntary self-identification)", category: "DEMOGRAPHIC", requiresHumanReview: false, autoSubmitAllowed: true, sensitive: true },
+  { key: "military_status", question: "Are you currently serving, or have you served, in the military?", category: "DEMOGRAPHIC", requiresHumanReview: false, autoSubmitAllowed: true, sensitive: true },
   { key: "demographic_veteran", question: "Veteran status (voluntary self-identification)", category: "DEMOGRAPHIC", requiresHumanReview: false, autoSubmitAllowed: true, sensitive: true },
   { key: "demographic_disability", question: "Disability status (voluntary self-identification)", category: "DEMOGRAPHIC", requiresHumanReview: false, autoSubmitAllowed: true, sensitive: true },
 ];
 
-export const SENSITIVE_ANSWER_CATEGORIES: readonly AnswerCategory[] = ["DEMOGRAPHIC"];
+/** Answers in these categories are encrypted at rest, kept out of AI prompts and similar-answer suggestions, and never logged. */
+export const SENSITIVE_ANSWER_CATEGORIES: readonly AnswerCategory[] = ["DEMOGRAPHIC", "COMPENSATION", "WORK_AUTHORIZATION", "SPONSORSHIP"];
+
+/**
+ * Answers whose values are also hidden in review summaries (voluntary
+ * self-identification). Pay and authorization answers stay visible there so
+ * the person can check what will be sent.
+ */
+export const HIDDEN_ANSWER_CATEGORIES: readonly AnswerCategory[] = ["DEMOGRAPHIC"];
 
 /** Stable key for matching a free-text question to a stored answer. */
 export function normalizeQuestionKey(question: string): string {

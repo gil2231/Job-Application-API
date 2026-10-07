@@ -81,7 +81,7 @@ function summarize(summary: ImportSummary): ActionResult<ImportResultData> {
 
 export async function importFileAction(_prev: ActionResult<ImportResultData>, formData: FormData): Promise<ActionResult<ImportResultData>> {
   return authedAction<ImportResultData>(async (user) => {
-    const limit = rateLimit(`import:${user.id}`, LIMITS.jobImport.limit, LIMITS.jobImport.windowMs);
+    const limit = await rateLimit(`import:${user.id}`, LIMITS.jobImport.limit, LIMITS.jobImport.windowMs);
     if (!limit.allowed) return { ok: false, message: `Import limit reached. Try again in ${Math.ceil(limit.retryAfterSeconds / 60)} minutes.` };
     const file = formData.get("file");
     if (!(file instanceof File) || file.size === 0) return { ok: false, message: "Choose a file to import", errors: { file: "Choose a file to import" } };
@@ -102,7 +102,7 @@ export async function importFileAction(_prev: ActionResult<ImportResultData>, fo
 
 export async function importUrlsAction(_prev: ActionResult<ImportResultData>, formData: FormData): Promise<ActionResult<ImportResultData>> {
   return authedAction<ImportResultData>(async (user) => {
-    const limit = rateLimit(`import:${user.id}`, LIMITS.jobImport.limit, LIMITS.jobImport.windowMs);
+    const limit = await rateLimit(`import:${user.id}`, LIMITS.jobImport.limit, LIMITS.jobImport.windowMs);
     if (!limit.allowed) return { ok: false, message: `Import limit reached. Try again in ${Math.ceil(limit.retryAfterSeconds / 60)} minutes.` };
     const parsed = importUrlsSchema.safeParse(formToObject(formData));
     if (!parsed.success) return validationFailed(parsed.error);
@@ -164,7 +164,7 @@ export async function searchJobBoardsAction(input: BoardSearchFormInput): Promis
     const read = readBoards(parsed.data);
     if (read.error) return read.error;
     if (!parsed.data.query && !parsed.data.location) return { ok: false, message: "Enter keywords to search for", errors: { query: "Enter keywords to search for" } };
-    const limit = rateLimit(`board-search:${user.id}`, LIMITS.boardSearch.limit, LIMITS.boardSearch.windowMs);
+    const limit = await rateLimit(`board-search:${user.id}`, LIMITS.boardSearch.limit, LIMITS.boardSearch.windowMs);
     if (!limit.allowed) return { ok: false, message: `Search limit reached. Try again in ${Math.ceil(limit.retryAfterSeconds / 60)} minutes.` };
 
     const search = { boards: read.boards, query: parsed.data.query, location: parsed.data.location ?? null, searchDescriptions: parsed.data.searchDescriptions, matchAny: parsed.data.matchAny };
@@ -216,7 +216,7 @@ export async function importBoardJobsAction(input: BoardSearchFormInput & { urls
     if (!parsed.success) return validationFailed(parsed.error);
     const read = readBoards(parsed.data);
     if (read.error) return read.error;
-    const limit = rateLimit(`import:${user.id}`, LIMITS.jobImport.limit, LIMITS.jobImport.windowMs);
+    const limit = await rateLimit(`import:${user.id}`, LIMITS.jobImport.limit, LIMITS.jobImport.windowMs);
     if (!limit.allowed) return { ok: false, message: `Import limit reached. Try again in ${Math.ceil(limit.retryAfterSeconds / 60)} minutes.` };
     // Only re-read the boards the picked jobs are on, so an unrelated board that's down doesn't show up as a failure.
     const picked = new Set(parsed.data.urls.map((u) => parseBoardRef(u)).filter((b) => b !== null).map(boardKey));
@@ -260,7 +260,7 @@ export async function lookupPostingAction(url: string): Promise<ActionResult<Pos
     if (extractLinkedInJobId(url) || /linkedin\.com/i.test(new URL(url).hostname)) {
       return { ok: false, message: "Applyance doesn't read LinkedIn pages. Copy the title, company and description from the posting instead." };
     }
-    const limit = rateLimit(`lookup:${user.id}`, LIMITS.postingLookup.limit, LIMITS.postingLookup.windowMs);
+    const limit = await rateLimit(`lookup:${user.id}`, LIMITS.postingLookup.limit, LIMITS.postingLookup.windowMs);
     if (!limit.allowed) return { ok: false, message: "Too many lookups. Fill in the details by hand or try again later." };
     try {
       const posting = await fetchPosting(url);
