@@ -1,23 +1,17 @@
 import Link from "next/link";
 import { getSession } from "@/lib/auth";
+import { Logo } from "@/components/brand/logo";
 import { Button } from "@/components/ui/button";
-
-function Logo() {
-  return (
-    <Link href="/" className="flex items-center gap-2">
-      <div className="bg-primary text-primary-foreground grid size-7 place-items-center rounded-lg text-sm font-bold">A</div>
-      <span className="font-semibold tracking-tight">Applyance</span>
-    </Link>
-  );
-}
 
 export default async function MarketingLayout({ children }: { children: React.ReactNode }) {
   const signedIn = !!(await getSession());
   return (
     <div className="flex min-h-screen flex-col">
-      <header className="bg-background/80 sticky top-0 z-30 border-b backdrop-blur">
+      <header className="dark bg-sidebar text-sidebar-foreground border-sidebar-border sticky top-0 z-30 border-b">
         <div className="mx-auto flex h-14 max-w-6xl items-center justify-between gap-4 px-4 sm:px-6">
-          <Logo />
+          <Link href="/" aria-label="Applyance home">
+            <Logo />
+          </Link>
           <nav className="text-muted-foreground hidden items-center gap-6 text-sm md:flex">
             <Link href="/#features" className="hover:text-foreground">
               Features
@@ -54,7 +48,9 @@ export default async function MarketingLayout({ children }: { children: React.Re
       <footer className="border-t">
         <div className="text-muted-foreground mx-auto flex max-w-6xl flex-col gap-4 px-4 py-8 text-sm sm:flex-row sm:items-center sm:justify-between sm:px-6">
           <div className="flex items-center gap-3">
-            <Logo />
+            <Link href="/" aria-label="Applyance home">
+              <Logo />
+            </Link>
             <span>© {new Date().getFullYear()} Applyance</span>
           </div>
           <nav className="flex flex-wrap gap-5">
