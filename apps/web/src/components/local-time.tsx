@@ -1,7 +1,7 @@
 "use client";
 
 import { useSyncExternalStore } from "react";
-import { format, formatDistanceToNowStrict } from "date-fns";
+import { format, formatDistanceToNowStrict, isPast } from "date-fns";
 
 const subscribe = () => () => {};
 
@@ -27,6 +27,17 @@ export function TimeAgo({ value, className }: { value: Date | string | null | un
   return (
     <time dateTime={date.toISOString()} className={className}>
       {hydrated ? `${formatDistanceToNowStrict(date)} ago` : ""}
+    </time>
+  );
+}
+
+/** "in 9 minutes" (or "now" once it's due), computed in the browser. */
+export function TimeUntil({ value, className }: { value: Date | string; className?: string }) {
+  const hydrated = useSyncExternalStore(subscribe, () => true, () => false);
+  const date = new Date(value);
+  return (
+    <time dateTime={date.toISOString()} className={className}>
+      {hydrated ? (isPast(date) ? "now" : `in ${formatDistanceToNowStrict(date)}`) : ""}
     </time>
   );
 }

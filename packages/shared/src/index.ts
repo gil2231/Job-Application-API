@@ -14,3 +14,6 @@ export * from "./tracker";
 export * from "./resume-import";
 export * from "./support";
 export * from "./admin";
+export * from "./automation-health";
+export * from "./logger";
+export * from "./environment";

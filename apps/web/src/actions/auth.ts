@@ -19,8 +19,8 @@ export async function signInAction(_prev: ActionResult, formData: FormData): Pro
   if (!parsed.success) return validationFailed(parsed.error);
   const ctx = await getRequestContext();
 
-  const byIp = rateLimit(`signin:ip:${ctx.ipAddress}`, LIMITS.signIn.limit, LIMITS.signIn.windowMs);
-  const byEmail = rateLimit(`signin:email:${parsed.data.email}`, LIMITS.signIn.limit, LIMITS.signIn.windowMs);
+  const byIp = await rateLimit(`signin:ip:${ctx.ipAddress}`, LIMITS.signIn.limit, LIMITS.signIn.windowMs);
+  const byEmail = await rateLimit(`signin:email:${parsed.data.email}`, LIMITS.signIn.limit, LIMITS.signIn.windowMs);
   if (!byIp.allowed || !byEmail.allowed) {
     return { ok: false, message: `Too many sign-in attempts. Try again in ${Math.ceil(Math.max(byIp.retryAfterSeconds, byEmail.retryAfterSeconds) / 60)} minutes.` };
   }
@@ -42,7 +42,7 @@ export async function signUpAction(_prev: ActionResult, formData: FormData): Pro
   const parsed = signUpSchema.safeParse(formToObject(formData));
   if (!parsed.success) return validationFailed(parsed.error);
   const ctx = await getRequestContext();
-  const limit = rateLimit(`signup:ip:${ctx.ipAddress}`, LIMITS.signUp.limit, LIMITS.signUp.windowMs);
+  const limit = await rateLimit(`signup:ip:${ctx.ipAddress}`, LIMITS.signUp.limit, LIMITS.signUp.windowMs);
   if (!limit.allowed) return { ok: false, message: "Too many accounts created from this network. Try again later." };
 
   try {

@@ -1,6 +1,9 @@
 import "server-only";
 import { after } from "next/server";
 import { analyzeJobs, rescoreJobs } from "@autoapply/ingestion";
+import { createLogger } from "@autoapply/shared";
+
+const log = createLogger("pipeline");
 
 /**
  * Analysis runs in the web process after the response is sent, one run per
@@ -24,7 +27,7 @@ export function analyzeInBackground(userId: string) {
     return;
   }
   const task = drain(userId)
-    .catch((error) => console.error("[pipeline] background analysis failed", error))
+    .catch((error) => log.error("Background analysis failed", { error }))
     .finally(() => running.delete(userId));
   running.set(userId, task);
   after(() => task);
@@ -32,5 +35,5 @@ export function analyzeInBackground(userId: string) {
 
 /** Re-score after profile or rules changes, without delaying the response. */
 export function rescoreInBackground(userId: string) {
-  after(() => rescoreJobs(userId).then(() => undefined).catch((error) => console.error("[pipeline] rescore failed", error)));
+  after(() => rescoreJobs(userId).then(() => undefined).catch((error) => log.error("Rescoring jobs failed", { error })));
 }

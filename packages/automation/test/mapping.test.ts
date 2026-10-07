@@ -48,6 +48,18 @@ describe("field classification", () => {
     expect(classify("What are your salary expectations?")).toMatchObject({ mappedField: "answer.library", questionKey: "salary_expectations" });
   });
 
+  it("recognizes military service questions, separately from veteran self-identification", () => {
+    expect(matchStandardQuestion("Are you an active military member?")).toBe("military_status");
+    expect(matchStandardQuestion("Are you currently serving in the U.S. Armed Forces?")).toBe("military_status");
+    expect(matchStandardQuestion("Have you served in the military?")).toBe("military_status");
+    expect(matchStandardQuestion("Are you on active duty or a member of the National Guard or Reserves?")).toBe("military_status");
+    expect(matchStandardQuestion("Military status")).toBe("military_status");
+    expect(matchStandardQuestion("Veteran status")).toBe("demographic_veteran");
+    expect(matchStandardQuestion("Are you a protected veteran or active duty military member?")).toBe("demographic_veteran");
+    expect(matchStandardQuestion("Is your spouse an active duty military member?")).toBeNull();
+    expect(classify("Are you an active military member?")).toMatchObject({ mappedField: "answer.library", questionKey: "military_status" });
+  });
+
   it("classifies uploads", () => {
     expect(classify("Resume/CV", { kind: "file" }).mappedField).toBe("documents.resume");
     expect(classify("Cover Letter", { kind: "file" }).mappedField).toBe("documents.coverLetter");

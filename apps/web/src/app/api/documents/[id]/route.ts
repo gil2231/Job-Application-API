@@ -1,6 +1,9 @@
 import { getDocument, NotFoundError } from "@autoapply/database";
 import { getStorage } from "@autoapply/documents";
 import { getSession } from "@/lib/auth";
+import { createLogger } from "@autoapply/shared";
+
+const log = createLogger("documents");
 
 export const dynamic = "force-dynamic";
 
@@ -24,7 +27,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
     });
   } catch (error) {
     if (error instanceof NotFoundError) return new Response("Not found", { status: 404 });
-    console.error("[documents] download failed", error);
+    log.error("Document download failed", { error });
     return new Response("Could not read the file", { status: 500 });
   }
 }

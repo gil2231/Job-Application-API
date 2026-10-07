@@ -8,16 +8,18 @@ import { getStorage } from "@autoapply/documents";
 import { createEmailSender } from "@autoapply/notifications";
 import { captureException, flushErrorReports, initErrorReporting, installProcessHandlers } from "@autoapply/ops";
 import { createApplicationQueue, createRedis, parseControlMessage, type ApplicationJobData } from "@autoapply/queue";
-import { CONTROL_CHANNEL, QUEUE_NAMES } from "@autoapply/shared";
+import { checkEnvironment, CONTROL_CHANNEL, createLogger, QUEUE_NAMES } from "@autoapply/shared";
 import { BrowserPool } from "./browser";
 import { loadConfig } from "./config";
 import { ABORT_REASONS, ApplicationEngine } from "./engine";
 import { startHeartbeat } from "./heartbeat";
-import { Notifier } from "./notifier";
-import { startMaintenance } from "./maintenance";
-import { createProcessor, type ActiveRun } from "./processor";
-import { Scheduler } from "./scheduler";
 import { MailSyncLoop } from "./mail-sync";
+import { startMaintenance } from "./maintenance";
+import { Notifier } from "./notifier";
+import { createProcessor, type ActiveRun } from "./processor";
+import { startRetention } from "./retention";
+import { Scheduler } from "./scheduler";
+import { SiteHealth } from "./site-health";
 
 /**
  * AutoApply browser worker: claims queued applications, fills them with
@@ -31,8 +33,16 @@ if (existsSync(rootEnv)) process.loadEnvFile(rootEnv);
 initErrorReporting("worker");
 installProcessHandlers();
 
-const config = loadConfig();
 const workerId = `${hostname()}:${process.pid}`;
+const log = createLogger("worker", { workerId });
+const environment = checkEnvironment(process.env, "worker");
+for (const warning of environment.warnings) log.warn(warning);
+if (environment.errors.length) {
+  for (const error of environment.errors) log.error(error);
+  log.error("Refusing to start until the configuration is fixed");
+  process.exit(1);
+}
+const config = loadConfig();
 
 const registry = createDefaultRegistry();
 const browsers = new BrowserPool(config);
@@ -41,13 +51,14 @@ const publisher = createRedis(config.redisUrl);
 const subscriber = createRedis(config.redisUrl);
 const queue = createApplicationQueue(connection);
 const active = new Map<string, ActiveRun>();
-const engine = new ApplicationEngine({ config, browsers, registry, storage: getStorage(), redis: publisher, workerId });
+const siteHealth = new SiteHealth(publisher);
+const engine = new ApplicationEngine({ config, browsers, registry, storage: getStorage(), redis: publisher, workerId, siteHealth });
 const scheduler = new Scheduler(queue, config.schedulerIntervalMs);
 const mailSync = new MailSyncLoop(config.mailSyncIntervalMs);
 const emailSender = createEmailSender();
 const notifier = config.notificationsEnabled ? new Notifier(emailSender, config.notifierIntervalMs) : null;
 
-const worker = new Worker<ApplicationJobData>(QUEUE_NAMES.applications, createProcessor({ engine, queue, config, workerId, active, onSettled: () => void scheduler.wake() }), {
+const worker = new Worker<ApplicationJobData>(QUEUE_NAMES.applications, createProcessor({ engine, queue, config, workerId, active, siteHealth, onSettled: () => void scheduler.wake() }), {
   connection: createRedis(config.redisUrl),
   concurrency: config.concurrency,
   // Our own lease handles crashed workers; BullMQ's stalled check is a second net.
@@ -55,10 +66,13 @@ const worker = new Worker<ApplicationJobData>(QUEUE_NAMES.applications, createPr
 });
 // Applications that fail on an employer's site are recorded on the application; this is the processor itself crashing.
 worker.on("failed", (job, error) => {
-  console.error(`[worker] job ${job?.id} errored`, error);
+  log.error("Queue job errored", { applicationId: job?.data.applicationId, error });
   captureException(error, { tags: { queue: QUEUE_NAMES.applications }, extra: { applicationId: job?.data.applicationId }, userId: job?.data.userId });
 });
-worker.on("error", (error) => captureException(error, { tags: { queue: QUEUE_NAMES.applications, kind: "worker-error" } }));
+worker.on("error", (error) => {
+  log.error("Queue connection error", { error });
+  captureException(error, { tags: { queue: QUEUE_NAMES.applications, kind: "worker-error" } });
+});
 
 await subscriber.subscribe(CONTROL_CHANNEL);
 subscriber.on("message", (_channel, raw) => {
@@ -75,23 +89,26 @@ const heartbeat = startHeartbeat(publisher, { adapters: () => registry.list().ma
 scheduler.start();
 mailSync.start();
 notifier?.start();
-if (notifier && !emailSender.configured) console.warn("[worker] email alerts are recorded but not sent: no email provider is set up (EMAIL_PROVIDER)");
+if (notifier && !emailSender.configured) log.warn("Email alerts are recorded but not sent: no email provider is set up (EMAIL_PROVIDER)");
+const retention = startRetention(getStorage());
 const maintenance = await startMaintenance(config.redisUrl).catch((error: unknown) => {
-  console.error("[worker] could not start backups", error);
+  log.error("Could not start backups", { error });
   captureException(error, { tags: { component: "maintenance" } });
   return null;
 });
-console.warn(
-  `[worker] ${workerId} running: concurrency ${config.concurrency}, ${config.headless ? "headless" : "visible"} browser, ` +
-    (config.allowAllHosts ? "all public sites allowed" : `sites limited to ${config.allowedHosts.join(", ")}`),
-);
+log.info("Worker running", {
+  concurrency: config.concurrency,
+  browser: config.headless ? "headless" : "visible",
+  sites: config.allowAllHosts ? "all public sites" : config.allowedHosts,
+});
 
 let shuttingDown = false;
 async function shutdown(signal: string) {
   if (shuttingDown) return;
   shuttingDown = true;
-  console.warn(`[worker] ${signal} received; returning running applications to the queue`);
+  log.info("Shutting down; returning running applications to the queue", { signal, running: active.size });
   scheduler.stop();
+  retention.stop();
   await mailSync.stop().catch(() => undefined);
   await notifier?.stop().catch(() => undefined);
   for (const run of active.values()) run.controller.abort(ABORT_REASONS.shutdown);

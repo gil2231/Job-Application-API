@@ -1,6 +1,9 @@
 import { getGenerated, NotFoundError, type GeneratedKind } from "@autoapply/database";
 import { EXPORT_FORMATS, EXPORT_MIME, generatedFileName, renderCoverLetter, renderResume, type ExportFormat } from "@autoapply/documents";
 import { getSession } from "@/lib/auth";
+import { createLogger } from "@autoapply/shared";
+
+const log = createLogger("generated");
 
 export const dynamic = "force-dynamic";
 
@@ -31,7 +34,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ kind
     });
   } catch (error) {
     if (error instanceof NotFoundError) return new Response("Not found", { status: 404 });
-    console.error("[generated] render failed", error);
+    log.error("Rendering a generated document failed", { error });
     return new Response("Could not render the document", { status: 500 });
   }
 }

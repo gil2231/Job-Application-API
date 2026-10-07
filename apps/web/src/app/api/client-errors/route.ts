@@ -17,7 +17,7 @@ const reportSchema = z.object({
 /** Receives crashes from the browser (the error pages) and forwards them, scrubbed, to error reporting. */
 export async function POST(request: Request) {
   const { ipAddress } = await getRequestContext();
-  if (!rateLimit(`client-errors:${ipAddress}`, 10, 60_000).allowed) return new Response(null, { status: 429 });
+  if (!(await rateLimit(`client-errors:${ipAddress}`, 10, 60_000)).allowed) return new Response(null, { status: 429 });
   const parsed = reportSchema.safeParse(await request.json().catch(() => null));
   if (!parsed.success) return new Response(null, { status: 400 });
   const { name, message, stack, digest, path } = parsed.data;
