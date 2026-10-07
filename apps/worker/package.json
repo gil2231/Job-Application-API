@@ -16,6 +16,7 @@
     "@autoapply/automation": "workspace:*",
     "@autoapply/database": "workspace:*",
     "@autoapply/documents": "workspace:*",
+    "@autoapply/inbox": "workspace:*",
     "@autoapply/ingestion": "workspace:*",
     "@autoapply/notifications": "workspace:*",
     "@autoapply/ops": "workspace:*",

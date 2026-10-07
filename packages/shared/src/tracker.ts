@@ -239,7 +239,14 @@ export interface StageSignal {
   evidence: string;
   /** Provider-specific id used to ignore the same signal twice (e.g. the email message id). */
   externalId: string;
-  interview?: { scheduledAt?: Date; kind?: InterviewKind; location?: string };
+  interview?: {
+    scheduledAt?: Date;
+    durationMinutes?: number;
+    kind?: InterviewKind;
+    location?: string;
+    /** The email carried a calendar invite, so the event is already on the user's calendar. */
+    fromInvite?: boolean;
+  };
 }
 
 export interface StageSignalProvider {

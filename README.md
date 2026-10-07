@@ -29,6 +29,8 @@ packages/
   matching/   Match score (0–100, weighted and explained) and the qualification rules engine
   ingestion/  Job sources (LinkedIn export, CSV, pasted URLs), public posting readers, dedup, analysis pipeline
   documents/  Local/S3 storage drivers, upload validation, PDF and Word rendering of generated documents
+  inbox/      Gmail and Outlook sign-in (OAuth + PKCE), reading job email into Flightpath, calendar sync,
+              plus a mock Google/Microsoft server for tests (`pnpm --filter @autoapply/inbox mock`)
   notifications/ Email sender (Resend, or console in development), email templates, Needs Attention alerts,
               saved searches and daily job alerts, signed unsubscribe links
   ops/        Error reporting, alerts, health checks, encrypted database backups and restore tests (`pnpm ops`)
@@ -165,7 +167,24 @@ Queued → Processing → Needs you / Failed → **Submitted** → Responded →
 
 Stages aren't stored separately: Flightpath derives them from the application's automation status and the outcome you set (`packages/shared/src/tracker.ts`), so the worker and the board always agree. Each application also keeps the first time it reached Responded, Interviewing and Offer, which is what the funnel and rates count.
 
-**Email and other integrations.** Replies can't be read yet, so post-submit stages are set by you. An integration plugs in by implementing `StageSignalProvider` (`packages/shared/src/tracker.ts`) and handing its signals to `recordStageSignal` (`packages/database`). That matches the signal to one sent application, applies it only when the provider is confident and the move is forward, ignores repeats, and otherwise leaves a note on the timeline for you to act on, so an integration never overwrites what you set.
+**Integrations.** Email sync (below) feeds Flightpath through `recordStageSignal` (`packages/database`). That matches the signal to one sent application, applies it only when the provider is confident and the move is forward, ignores repeats, and otherwise leaves a note on the timeline for you to act on, so an integration never overwrites what you set. Other integrations can plug in the same way by implementing `StageSignalProvider` (`packages/shared/src/tracker.ts`).
+
+## Email and calendar sync
+
+On **Integrations → Email and calendar**, connect Gmail (with Google Calendar) or Outlook (with Outlook Calendar). Then:
+
+- **Replies update Flightpath.** Every 10 minutes (and on **Sync now**) the worker reads new email. A rejection moves the card to Rejected, an interview invite or confirmation to Interviewing (with the round's time, length, kind and meeting link), an offer to Offer, and a reply asking for your availability or sending an assessment to Responded. Later rounds are added to an application that is already interviewing. Rules decide (`packages/inbox/src/classify.ts`); when a provider is set in Settings, AI reads the emails the rules weren't sure about, but the AI alone can only suggest.
+- **Only clear updates move cards.** Anything less certain, any backward move, and a company named only in the body become a note on the application's timeline. Turn off **Move cards automatically** to make every update a note.
+- **Email activity** (`/integrations/email`) lists each job email read and what happened. Emails that couldn't be tied to one application can be matched to one, or dismissed.
+- **Interviews go on your calendar.** Each scheduled round becomes an event (with a link back to the application) on the calendar you pick, and the event follows edits, cancellations and deletions. Rounds that arrived as a calendar invite are already on your calendar and aren't added twice.
+- **Privacy.** Gmail is only searched for mail mentioning a company you applied to or sent by a hiring system (Greenhouse, Lever, Workday and others); job boards and newsletters are skipped. Of each job email Applyance keeps the sender, subject and a short preview, never the body. Tokens are encrypted. Disconnecting deletes the stored emails and revokes Google's access.
+
+**Setting it up (operator).** Each provider needs an app registration whose redirect URI is `${APP_URL}/api/integrations/google/callback` or `.../microsoft/callback`:
+
+- Google Cloud console: enable the Gmail API and Google Calendar API, configure the OAuth consent screen with the scopes `gmail.readonly` and `calendar.events`, create a Web application OAuth client, and set `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET`. Until the app is verified, only test users you add on the consent screen can connect (100 at most). `gmail.readonly` is a restricted scope: making it available to everyone needs Google's verification plus a yearly third-party security assessment (CASA).
+- Microsoft Entra admin center: register an app for "Accounts in any organizational directory and personal Microsoft accounts", add a Web redirect URI, create a client secret, add the delegated Graph permissions `Mail.Read`, `Calendars.ReadWrite`, `User.Read` and `offline_access`, and set `MICROSOFT_CLIENT_ID` and `MICROSOFT_CLIENT_SECRET` (`MICROSOFT_TENANT` defaults to `common`). Publisher verification is recommended so the consent screen shows your verified name; some work accounts need their admin to approve the app.
+
+Without these variables the Integrations page shows the providers as not set up. For local development and tests, `pnpm --filter @autoapply/inbox mock` serves a mock Google and Microsoft on port 4120; set `GOOGLE_ENDPOINT_BASE` and `MICROSOFT_ENDPOINT_BASE` to `http://127.0.0.1:4120` and any client ids and secrets. `pnpm test:e2e` does this itself.
 
 The REST API exposes the same operations: `GET /v1/tracker/board`, `GET /v1/tracker/applications`, `PATCH /v1/applications/:id/stage`, and interview rounds under `/v1/applications/:id/interviews` and `/v1/interviews/:id`.
 
@@ -216,6 +235,7 @@ pnpm test:e2e    # Playwright browser tests against the dev server, then with th
 - Sensitive answers (demographics, sponsorship) and browser session state are encrypted with AES-256-GCM.
 - Every mutation is checked for authorization, validated with zod, rate-limited, and written to the audit log (Settings → Security log).
 - Uploads are checked against their file signature (magic bytes) and capped at 10 MB.
+- Email and calendar access uses OAuth with PKCE and a state cookie bound to the signed-in user; access and refresh tokens are encrypted with AES-256-GCM, and only job emails' sender, subject and preview are stored.
 
 ## Monitoring and backups
 

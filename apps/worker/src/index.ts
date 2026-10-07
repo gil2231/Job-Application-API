@@ -17,6 +17,7 @@ import { Notifier } from "./notifier";
 import { startMaintenance } from "./maintenance";
 import { createProcessor, type ActiveRun } from "./processor";
 import { Scheduler } from "./scheduler";
+import { MailSyncLoop } from "./mail-sync";
 
 /**
  * AutoApply browser worker: claims queued applications, fills them with
@@ -42,6 +43,7 @@ const queue = createApplicationQueue(connection);
 const active = new Map<string, ActiveRun>();
 const engine = new ApplicationEngine({ config, browsers, registry, storage: getStorage(), redis: publisher, workerId });
 const scheduler = new Scheduler(queue, config.schedulerIntervalMs);
+const mailSync = new MailSyncLoop(config.mailSyncIntervalMs);
 const emailSender = createEmailSender();
 const notifier = config.notificationsEnabled ? new Notifier(emailSender, config.notifierIntervalMs) : null;
 
@@ -71,6 +73,7 @@ subscriber.on("message", (_channel, raw) => {
 
 const heartbeat = startHeartbeat(publisher, { adapters: () => registry.list().map((a) => a.platform), activeJobs: () => active.size, interactive: () => browsers.interactive });
 scheduler.start();
+mailSync.start();
 notifier?.start();
 if (notifier && !emailSender.configured) console.warn("[worker] email alerts are recorded but not sent: no email provider is set up (EMAIL_PROVIDER)");
 const maintenance = await startMaintenance(config.redisUrl).catch((error: unknown) => {
@@ -89,6 +92,7 @@ async function shutdown(signal: string) {
   shuttingDown = true;
   console.warn(`[worker] ${signal} received; returning running applications to the queue`);
   scheduler.stop();
+  await mailSync.stop().catch(() => undefined);
   await notifier?.stop().catch(() => undefined);
   for (const run of active.values()) run.controller.abort(ABORT_REASONS.shutdown);
   await worker.close().catch(() => undefined);
