@@ -28,6 +28,8 @@ packages/
   matching/   Match score (0–100, weighted and explained) and the qualification rules engine
   ingestion/  Job sources (LinkedIn export, CSV, pasted URLs), public posting readers, dedup, analysis pipeline
   documents/  Local/S3 storage drivers, upload validation, PDF and Word rendering of generated documents
+  notifications/ Email sender (Resend, or console in development), email templates, Needs Attention alerts,
+              saved searches and daily job alerts, signed unsubscribe links
   ops/        Error reporting, alerts, health checks, encrypted database backups and restore tests (`pnpm ops`)
 ```
 
@@ -142,6 +144,15 @@ Stages aren't stored separately: Flightpath derives them from the application's 
 **Email and other integrations.** Replies can't be read yet, so post-submit stages are set by you. An integration plugs in by implementing `StageSignalProvider` (`packages/shared/src/tracker.ts`) and handing its signals to `recordStageSignal` (`packages/database`). That matches the signal to one sent application, applies it only when the provider is confident and the move is forward, ignores repeats, and otherwise leaves a note on the timeline for you to act on, so an integration never overwrites what you set.
 
 The REST API exposes the same operations: `GET /v1/tracker/board`, `GET /v1/tracker/applications`, `PATCH /v1/applications/:id/stage`, and interview rounds under `/v1/applications/:id/interviews` and `/v1/interviews/:id`.
+
+## Alerts
+
+The worker sends two kinds of email. Both can be turned off in **Settings → Notifications**, and every email has a one-click unsubscribe link. Settings also lists recent alerts and whether each one was sent.
+
+- **Needs Attention emails.** When an application stops for the person (a CAPTCHA, a sign-in or code, questions to answer, form errors, or the final review), an email lists what's waiting, with a link to each application. The worker waits two minutes so several pauses in a row become one email, and sends at most one every 15 minutes; pauses that come in meanwhile go out together after that. Pauses the person already dealt with are dropped.
+- **Daily job alerts.** On **Job alerts** (or with **Email me new matches** after a job board search) you save up to 10 keyword searches over Greenhouse, Lever and Ashby boards. Every morning at the hour you pick (in your time zone) the worker runs them and emails the postings that weren't there the day before, in one email. The first run only records what's open, jobs already in your list are never reported, and nothing is sent when nothing is new. New matches stay on the Job alerts page for 14 days, where you can add them to your jobs.
+
+To send real email, create a [Resend](https://resend.com) account, verify your domain there, and set `EMAIL_PROVIDER=resend`, `RESEND_API_KEY` and `EMAIL_FROM` for the worker and the web app. Without them, development prints each email in the worker's console and production records alerts as "Not sent". Links in emails use `APP_URL`. Phone push notifications are planned once the installable app ships.
 
 ## Admin panel
 
