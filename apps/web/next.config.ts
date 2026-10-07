@@ -17,14 +17,18 @@ const securityHeaders = [
 ];
 
 const nextConfig: NextConfig = {
-  transpilePackages: ["@autoapply/shared", "@autoapply/database", "@autoapply/documents", "@autoapply/ats-adapters", "@autoapply/automation", "@autoapply/ai", "@autoapply/matching", "@autoapply/ingestion", "@autoapply/queue"],
+  transpilePackages: ["@autoapply/shared", "@autoapply/database", "@autoapply/documents", "@autoapply/ats-adapters", "@autoapply/automation", "@autoapply/ai", "@autoapply/matching", "@autoapply/ingestion", "@autoapply/queue", "@autoapply/inbox", "@autoapply/notifications", "@autoapply/ops"],
   serverExternalPackages: ["@prisma/client", "@node-rs/argon2", "ioredis", "bullmq", "undici"],
   poweredByHeader: false,
   experimental: {
     serverActions: { bodySizeLimit: "11mb" },
   },
   async headers() {
-    return [{ source: "/:path*", headers: securityHeaders }];
+    return [
+      { source: "/:path*", headers: securityHeaders },
+      // Browsers must always fetch the newest service worker so fixes reach installed apps.
+      { source: "/sw.js", headers: [{ key: "Cache-Control", value: "no-cache, no-store, must-revalidate" }] },
+    ];
   },
 };
 

@@ -4,7 +4,8 @@ import type { Platform } from "@autoapply/shared";
 import type { AdapterContext, AdapterStatus, ApplicationAdapter, DocumentsToUpload, HumanStep, PageAdvance, ValidationResult } from "../adapter";
 import { buttonsScript, CONFIRMATION_SCRIPT, NATIVE_VALIDITY_SCRIPT, OPEN_OPTIONS_SCRIPT, scanFieldsScript, SECURITY_SCRIPT, VALIDATION_SCRIPT, type ScanOptions } from "./dom-scripts";
 
-interface ScannedField {
+/** A field as the page scan reports it (see scanFieldsScript). */
+export interface ScannedField {
   kind: string;
   widget: NonNullable<FieldHints["widget"]>;
   label: string;
@@ -89,6 +90,36 @@ function kindOf(f: ScannedField): FieldKind {
   }
 }
 
+/** Candidate locators in the preferred order: label, name, stable id, ARIA, DOM path. Never coordinates. */
+function locatorsFor(f: ScannedField, stableIds?: RegExp): FieldLocator[] {
+  const out: FieldLocator[] = [];
+  const grouped = f.kind === "radio" || (f.kind === "checkbox" && f.multiple);
+  if (f.label && f.labelVia === "label" && !grouped) out.push({ strategy: "label", value: f.label });
+  if (f.name) out.push({ strategy: "name", value: f.name });
+  const stable = stableIds?.test(f.id) || !UNSTABLE_ID.test(f.id);
+  if (f.id && stable) out.push({ strategy: "id", value: f.id });
+  if (f.ariaLabel) out.push({ strategy: "aria", value: f.ariaLabel });
+  if (f.domPath) out.push({ strategy: "dom", value: f.domPath });
+  return orderLocators(out);
+}
+
+/** Scanned fields as DetectedFields with stable keys, the input to field resolution. */
+export function toDetectedFields(scanned: ScannedField[], pageIndex: number, stableIds?: RegExp): DetectedField[] {
+  return assignFieldKeys(
+    scanned.map((f) => ({
+      label: f.label || f.name || "Unlabeled field",
+      kind: kindOf(f),
+      required: f.required,
+      options: f.options,
+      optionValues: f.optionValues,
+      multiple: f.multiple,
+      pageIndex,
+      locators: locatorsFor(f, stableIds),
+      hints: { name: f.name || undefined, id: f.id || undefined, placeholder: f.placeholder || undefined, autocomplete: f.autocomplete || undefined, inputType: f.inputType, accept: f.accept || undefined, widget: f.widget },
+    })),
+  );
+}
+
 const tagFor = (field: DetectedField) => {
   if (field.hints?.widget === "listbox") return "button";
   return field.kind === "select" && field.hints?.widget !== "combobox" ? "select" : field.kind === "textarea" ? "textarea" : "input";
@@ -115,6 +146,11 @@ export class FormAdapter implements ApplicationAdapter<Page> {
     this.navScript = buttonsScript(options.scan);
   }
 
+  /** How this platform's fields are scanned (also used by the browser extension). */
+  get scanOptions(): ScanOptions {
+    return this.options.scan ?? {};
+  }
+
   detect(_url: string, _html?: string): number | Promise<number> {
     return 10;
   }
@@ -137,20 +173,7 @@ export class FormAdapter implements ApplicationAdapter<Page> {
   }
 
   async mapFields(ctx: AdapterContext<Page>): Promise<{ fields: DetectedField[]; mappings: FieldMapping[] }> {
-    const scanned = await this.scan(ctx.page);
-    const fields = assignFieldKeys(
-      scanned.map((f) => ({
-        label: f.label || f.name || "Unlabeled field",
-        kind: kindOf(f),
-        required: f.required,
-        options: f.options,
-        optionValues: f.optionValues,
-        multiple: f.multiple,
-        pageIndex: ctx.pageIndex,
-        locators: this.locatorsFor(f),
-        hints: { name: f.name || undefined, id: f.id || undefined, placeholder: f.placeholder || undefined, autocomplete: f.autocomplete || undefined, inputType: f.inputType, accept: f.accept || undefined, widget: f.widget },
-      })),
-    );
+    const fields = toDetectedFields(await this.scan(ctx.page), ctx.pageIndex, this.options.stableIds);
     // Custom dropdowns only render their choices when opened; read them so values can be matched.
     for (const field of fields) {
       const widget = field.hints?.widget;
@@ -269,19 +292,6 @@ export class FormAdapter implements ApplicationAdapter<Page> {
 
   private async security(page: Page) {
     return (await page.evaluate(SECURITY_SCRIPT)) as { captcha: boolean; mfa: boolean; login: boolean; signInText: boolean };
-  }
-
-  /** Candidate locators in the preferred order: label, name, stable id, ARIA, DOM path. Never coordinates. */
-  private locatorsFor(f: ScannedField): FieldLocator[] {
-    const out: FieldLocator[] = [];
-    const grouped = f.kind === "radio" || (f.kind === "checkbox" && f.multiple);
-    if (f.label && f.labelVia === "label" && !grouped) out.push({ strategy: "label", value: f.label });
-    if (f.name) out.push({ strategy: "name", value: f.name });
-    const stable = this.options.stableIds?.test(f.id) || !UNSTABLE_ID.test(f.id);
-    if (f.id && stable) out.push({ strategy: "id", value: f.id });
-    if (f.ariaLabel) out.push({ strategy: "aria", value: f.ariaLabel });
-    if (f.domPath) out.push({ strategy: "dom", value: f.domPath });
-    return orderLocators(out);
   }
 
   /** Resolve a field to exactly one element, trying locator strategies in priority order. */

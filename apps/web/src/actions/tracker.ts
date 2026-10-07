@@ -5,6 +5,7 @@ import { z } from "zod";
 import { audit, createInterviewRound, deleteInterviewRound, moveApplicationStage, setInterviewStatus, updateInterviewRound } from "@autoapply/database";
 import { INTERVIEW_STATUSES, interviewRoundSchema, STAGE_META, trackerStageSchema } from "@autoapply/shared";
 import { authedAction, formToObject, parseIds, validationFailed, type ActionResult } from "@/lib/action";
+import { syncCalendarSoon } from "@/lib/mail";
 import { notifyWorker } from "@/lib/worker-queue";
 
 function refresh(applicationId?: string) {
@@ -45,6 +46,7 @@ export async function addInterviewAction(applicationId: string, _prev: ActionRes
     const round = await createInterviewRound(user.id, id, parsed.data);
     await audit(user.id, "interview.created", { entityType: "InterviewRound", entityId: round.id, metadata: { applicationId: id } });
     refresh(id);
+    syncCalendarSoon(user.id);
     return { ok: true, message: "Interview added" };
   });
 }
@@ -58,6 +60,7 @@ export async function updateInterviewAction(roundId: string, _prev: ActionResult
     const round = await updateInterviewRound(user.id, id, parsed.data);
     await audit(user.id, "interview.updated", { entityType: "InterviewRound", entityId: id });
     refresh(round.applicationId);
+    syncCalendarSoon(user.id);
     return { ok: true, message: "Interview saved" };
   });
 }
@@ -71,6 +74,7 @@ export async function setInterviewStatusAction(roundId: string, status: string):
     const round = await setInterviewStatus(user.id, id, parsed.data);
     await audit(user.id, "interview.updated", { entityType: "InterviewRound", entityId: id, metadata: { status: parsed.data } });
     refresh(round.applicationId);
+    syncCalendarSoon(user.id);
     return { ok: true, message: parsed.data === "COMPLETED" ? "Marked completed" : parsed.data === "CANCELLED" ? "Marked cancelled" : "Marked scheduled" };
   });
 }
@@ -82,6 +86,7 @@ export async function deleteInterviewAction(roundId: string): Promise<ActionResu
     const round = await deleteInterviewRound(user.id, id);
     await audit(user.id, "interview.deleted", { entityType: "InterviewRound", entityId: id });
     refresh(round.applicationId);
+    syncCalendarSoon(user.id);
     return { ok: true, message: "Interview removed" };
   });
 }

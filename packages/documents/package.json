@@ -16,10 +16,11 @@
     "@autoapply/shared": "workspace:*",
     "@aws-sdk/client-s3": "^3.1146.0",
     "docx": "^9.8.1",
-    "pdf-lib": "^1.17.1"
+    "pdf-lib": "^1.17.1",
+    "unpdf": "^1.8.1",
+    "fflate": "^0.8.3"
   },
   "devDependencies": {
-    "fflate": "^0.8.3",
     "vitest": "^3.2.4"
   }
 }

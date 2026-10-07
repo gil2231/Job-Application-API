@@ -14,8 +14,9 @@ AutoApply imports the jobs you've saved, scores them against your Master Profile
 ```
 apps/
   web/        Next.js 16 dashboard (App Router, server actions, SSE live updates)
-  api/        Fastify REST API (/v1/me, /v1/dashboard, /v1/jobs, /v1/applications, /v1/tracker)
+  api/        Fastify REST API (/v1/me, /v1/dashboard, /v1/jobs, /v1/applications, /v1/tracker, /v1/extension)
   worker/     Playwright/BullMQ worker that fills applications, plus mock application pages for tests
+  extension/  Applyance browser extension for Chrome, Edge and Brave (Manifest V3): save jobs, finish applications yourself
 packages/
   database/   Prisma schema, migrations, repositories (all queries are scoped to the user)
   shared/     Enums, zod schemas, salary/URL parsing, standard questions, queue names
@@ -28,6 +29,11 @@ packages/
   matching/   Match score (0–100, weighted and explained) and the qualification rules engine
   ingestion/  Job sources (LinkedIn export, CSV, pasted URLs), public posting readers, dedup, analysis pipeline
   documents/  Local/S3 storage drivers, upload validation, PDF and Word rendering of generated documents
+  inbox/      Gmail and Outlook sign-in (OAuth + PKCE), reading job email into Flightpath, calendar sync,
+              plus a mock Google/Microsoft server for tests (`pnpm --filter @autoapply/inbox mock`)
+  notifications/ Email sender (Resend, or console in development), email templates, Needs Attention alerts,
+              saved searches and daily job alerts, signed unsubscribe links
+  ops/        Error reporting, alerts, health checks, encrypted database backups and restore tests (`pnpm ops`)
 ```
 
 ## Getting started
@@ -69,6 +75,15 @@ The search box on the Jobs page looks in titles, companies, locations and descri
 
 Every new job is analyzed (seniority, location and arrangement, pay, required and preferred qualifications, experience, education, skills, industry, sponsorship, travel, platform), scored against your Master Profile with the weights on the Rules page, and marked Qualified, Not Qualified or Needs Details. On the Rules page, **Include keywords** require a job to mention at least one of them and **Exclude keywords** skip any job that mentions one. Analysis uses the AI provider when `AI_PROVIDER` and its key are set, and the built-in deterministic analyzer otherwise, so it works without a key. Changing your profile or rules re-scores waiting jobs without re-analyzing them.
 
+## Importing your resume
+
+**Master Profile → Import from resume** (`/profile/import`) fills the profile from a resume: upload a PDF, Word (.docx) or text file, or pick a resume already in Documents. Nothing is saved until you confirm.
+
+- The file is read on the server (PDF text by position, so right-aligned dates stay on their line; Word paragraphs with list bullets). Scanned images and old .doc files are refused with a message.
+- With an AI provider set in Settings, the model copies fields out of the resume; otherwise the built-in reader finds the contact block, summary, work history, education and skills sections. If the model fails, the built-in reader is used.
+- Every value is checked against the resume text before you see it. Anything the AI suggested that isn't in the resume (an employer, a skill, a GPA, a country it inferred) is dropped and listed. A month the resume doesn't write is flagged for you to check.
+- On the review page you edit any field and tick what to keep. Personal fields replace the profile's value (a value that differs from your profile starts unticked), skills are added to your lists, and jobs and schools already in your profile start unticked. You can also save the file to Documents as a resume.
+
 ## Running applications
 
 Choose **Apply** on the Jobs page (the arrow next to it picks Manual, Review or Auto mode for that batch; otherwise your default mode from Rules is used), or **Apply to all qualified**. Applications are queued, and the worker (`pnpm dev:worker`) picks them up.
@@ -77,7 +92,7 @@ Choose **Apply** on the Jobs page (the arrow next to it picks Manual, Review or 
 - **Review** fills the form and stops for you to approve. **Approve & submit** in Needs Attention lets AutoApply submit it.
 - **Auto** submits only when every check passes: auto-submit is on in Rules, the site is supported, every required field was mapped confidently, every answer is allowed to be sent without review, nothing contradicts your profile, and there's no CAPTCHA. Otherwise it stops for review and says why.
 
-The worker stops before leaving any page that has a question it isn't sure about, so nothing you haven't approved is sent. Approved answers are reused when the application resumes, and **Remember this answer** saves them to your Answer Library. CAPTCHAs, MFA and sign-ins always go to Needs Attention. With `WORKER_HEADLESS=false` the worker opens a real browser window and keeps the page open, so you can finish the check there and it carries on by itself.
+The worker stops before leaving any page that has a question it isn't sure about, so nothing you haven't approved is sent. Approved answers are reused when the application resumes, and **Remember this answer** saves them to your Answer Library. CAPTCHAs, MFA and sign-ins always go to Needs Attention. With `WORKER_HEADLESS=false` the worker opens a real browser window and keeps the page open, so you can finish the check there and it carries on by itself. Otherwise the [browser extension](#browser-extension) opens the application in your own browser with your answers filled in.
 
 The dashboard shows each running application's steps live (server-sent events), and Pause, Resume, Pause after current and Stop now take effect immediately. Daily and concurrency limits from Rules are enforced when the worker claims an application. Postgres holds the state; a crashed worker's applications return to the queue when its lease runs out.
 
@@ -124,6 +139,20 @@ Adding an ATS is one class that describes the site (its buttons, where questions
 | `AUTOMATION_ALLOW_ALL_HOSTS` | `false` | Allow public employer sites |
 | `PLAYWRIGHT_CHROMIUM_EXECUTABLE` | | Chromium to launch, if not Playwright's own |
 
+## Browser extension
+
+The Applyance extension (`apps/extension`) works in Chrome, Edge, Brave and other Chromium browsers.
+
+- **Save job.** Click the toolbar icon (or press Alt+Shift+A) on a job's page and choose **Save job**, or right-click a page or a link and choose **Save this job to Applyance**. The job lands on the Jobs page and is scored like any other. On LinkedIn the extension saves only the link and never reads the page, exactly as if you had pasted it; paste the description in Applyance to score it. Elsewhere it uses the page's job posting data, then the public posting a pasted link would get, then the page's heading and text (select the description first to save just that).
+- **Finish in my browser.** The popup lists the applications that need you, with the count on the toolbar icon. **Finish in my browser** opens one in a new tab of your own browser and fills in the answers Applyance has, worked out exactly as the worker would (Master Profile, Answer Library, answers you approved), including your resume. Questions it has no answer for are outlined on the page and listed in a small panel. You solve any CAPTCHA and press the site's Submit button yourself; when the site shows its confirmation, Applyance records the application as submitted (or press **I submitted it**).
+- **Sign-ins.** For an application stopped at a sign-in or verification code, sign in on the page yourself and press **Continue in Applyance**. The extension sends that site's cookies to Applyance, which saves them encrypted (they appear under Settings, Saved application sign-ins) and puts the application back in the queue, so the worker carries on signed in.
+
+The extension never solves a CAPTCHA, never reads or types a password, never presses Submit, and never opens or fills LinkedIn pages. It asks Chrome for access to each application's site when you choose **Finish in my browser**, and reads a page for **Save job** only when you click it.
+
+**Install (development).** In Chrome open `chrome://extensions`, turn on **Developer mode**, choose **Load unpacked** and pick the `apps/extension` folder. Then in Applyance open **Settings, Browser extension**, choose **Create code**, and type the code into the extension's popup. The code works once, for 10 minutes; the extension gets its own key, which only opens the extension's routes (`/v1/extension/*`) and can be disconnected from Settings. The server address defaults to `http://localhost:4000` (`pnpm dev:api`); set `API_PUBLIC_URL` to show a different one in Settings.
+
+`content/page-scripts.js` is generated from the worker's own page scans (`packages/ats-adapters/src/form/dom-scripts.ts`) so both read forms the same way: run `pnpm --filter @autoapply/extension build` after changing them (a test fails until you do). The extension's tests load it into Chromium against the real API.
+
 ## Flightpath: tracking every application
 
 **Flightpath** (in the sidebar) follows each application from the queue to the final answer, as a board or a table:
@@ -138,9 +167,43 @@ Queued → Processing → Needs you / Failed → **Submitted** → Responded →
 
 Stages aren't stored separately: Flightpath derives them from the application's automation status and the outcome you set (`packages/shared/src/tracker.ts`), so the worker and the board always agree. Each application also keeps the first time it reached Responded, Interviewing and Offer, which is what the funnel and rates count.
 
-**Email and other integrations.** Replies can't be read yet, so post-submit stages are set by you. An integration plugs in by implementing `StageSignalProvider` (`packages/shared/src/tracker.ts`) and handing its signals to `recordStageSignal` (`packages/database`). That matches the signal to one sent application, applies it only when the provider is confident and the move is forward, ignores repeats, and otherwise leaves a note on the timeline for you to act on, so an integration never overwrites what you set.
+**Integrations.** Email sync (below) feeds Flightpath through `recordStageSignal` (`packages/database`). That matches the signal to one sent application, applies it only when the provider is confident and the move is forward, ignores repeats, and otherwise leaves a note on the timeline for you to act on, so an integration never overwrites what you set. Other integrations can plug in the same way by implementing `StageSignalProvider` (`packages/shared/src/tracker.ts`).
+
+## Email and calendar sync
+
+On **Integrations → Email and calendar**, connect Gmail (with Google Calendar) or Outlook (with Outlook Calendar). Then:
+
+- **Replies update Flightpath.** Every 10 minutes (and on **Sync now**) the worker reads new email. A rejection moves the card to Rejected, an interview invite or confirmation to Interviewing (with the round's time, length, kind and meeting link), an offer to Offer, and a reply asking for your availability or sending an assessment to Responded. Later rounds are added to an application that is already interviewing. Rules decide (`packages/inbox/src/classify.ts`); when a provider is set in Settings, AI reads the emails the rules weren't sure about, but the AI alone can only suggest.
+- **Only clear updates move cards.** Anything less certain, any backward move, and a company named only in the body become a note on the application's timeline. Turn off **Move cards automatically** to make every update a note.
+- **Email activity** (`/integrations/email`) lists each job email read and what happened. Emails that couldn't be tied to one application can be matched to one, or dismissed.
+- **Interviews go on your calendar.** Each scheduled round becomes an event (with a link back to the application) on the calendar you pick, and the event follows edits, cancellations and deletions. Rounds that arrived as a calendar invite are already on your calendar and aren't added twice.
+- **Privacy.** Gmail is only searched for mail mentioning a company you applied to or sent by a hiring system (Greenhouse, Lever, Workday and others); job boards and newsletters are skipped. Of each job email Applyance keeps the sender, subject and a short preview, never the body. Tokens are encrypted. Disconnecting deletes the stored emails and revokes Google's access.
+
+**Setting it up (operator).** Each provider needs an app registration whose redirect URI is `${APP_URL}/api/integrations/google/callback` or `.../microsoft/callback`:
+
+- Google Cloud console: enable the Gmail API and Google Calendar API, configure the OAuth consent screen with the scopes `gmail.readonly` and `calendar.events`, create a Web application OAuth client, and set `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET`. Until the app is verified, only test users you add on the consent screen can connect (100 at most). `gmail.readonly` is a restricted scope: making it available to everyone needs Google's verification plus a yearly third-party security assessment (CASA).
+- Microsoft Entra admin center: register an app for "Accounts in any organizational directory and personal Microsoft accounts", add a Web redirect URI, create a client secret, add the delegated Graph permissions `Mail.Read`, `Calendars.ReadWrite`, `User.Read` and `offline_access`, and set `MICROSOFT_CLIENT_ID` and `MICROSOFT_CLIENT_SECRET` (`MICROSOFT_TENANT` defaults to `common`). Publisher verification is recommended so the consent screen shows your verified name; some work accounts need their admin to approve the app.
+
+Without these variables the Integrations page shows the providers as not set up. For local development and tests, `pnpm --filter @autoapply/inbox mock` serves a mock Google and Microsoft on port 4120; set `GOOGLE_ENDPOINT_BASE` and `MICROSOFT_ENDPOINT_BASE` to `http://127.0.0.1:4120` and any client ids and secrets. `pnpm test:e2e` does this itself.
 
 The REST API exposes the same operations: `GET /v1/tracker/board`, `GET /v1/tracker/applications`, `PATCH /v1/applications/:id/stage`, and interview rounds under `/v1/applications/:id/interviews` and `/v1/interviews/:id`.
+
+## Installing the app and using it on a phone
+
+Applyance is a web app that can also be installed, so it gets its own icon on the desktop or home screen and opens in its own window. Choose **Install Applyance** in the account menu (or on the dashboard card): Chrome and Edge open their install dialog, and Safari on iPhone, iPad and Mac shows the steps (Share, then Add to Home Screen; or File, then Add to Dock).
+
+- `apps/web/src/app/manifest.ts` describes the installed app (name, icons, start page, shortcuts to Needs Attention, Flightpath and Jobs). Icons live in `apps/web/public/icons` and `apps/web/src/app/apple-icon.png`.
+- `apps/web/public/sw.js` is a small service worker. It caches only the offline page and an icon: app pages hold private data, so they always come from the network, and when it's unreachable you see `offline.html` instead of a browser error.
+- On phones a tab bar along the bottom holds Dashboard, Needs you (with its count), Flightpath, Jobs and More. Job, application and Flightpath lists become stacked cards, other tables scroll inside their card, buttons grow to finger size on touch screens, and inputs use 16px text so iPhones don't zoom in on them.
+- Installing needs HTTPS in production (localhost works for development).
+## Alerts
+
+The worker sends two kinds of email. Both can be turned off in **Settings → Notifications**, and every email has a one-click unsubscribe link. Settings also lists recent alerts and whether each one was sent.
+
+- **Needs Attention emails.** When an application stops for the person (a CAPTCHA, a sign-in or code, questions to answer, form errors, or the final review), an email lists what's waiting, with a link to each application. The worker waits two minutes so several pauses in a row become one email, and sends at most one every 15 minutes; pauses that come in meanwhile go out together after that. Pauses the person already dealt with are dropped.
+- **Daily job alerts.** On **Job alerts** (or with **Email me new matches** after a job board search) you save up to 10 keyword searches over Greenhouse, Lever and Ashby boards. Every morning at the hour you pick (in your time zone) the worker runs them and emails the postings that weren't there the day before, in one email. The first run only records what's open, jobs already in your list are never reported, and nothing is sent when nothing is new. New matches stay on the Job alerts page for 14 days, where you can add them to your jobs.
+
+To send real email, create a [Resend](https://resend.com) account, verify your domain there, and set `EMAIL_PROVIDER=resend`, `RESEND_API_KEY` and `EMAIL_FROM` for the worker and the web app. Without them, development prints each email in the worker's console and production records alerts as "Not sent". Links in emails use `APP_URL`. Phone push notifications are planned once the installable app ships.
 
 ## Admin panel
 
@@ -190,9 +253,15 @@ pnpm test:e2e    # Playwright browser tests against the dev server, then with th
 
 - Passwords are hashed with argon2id. Accounts lock for 15 minutes after 5 failed sign-ins. Optional two-factor sign-in (TOTP) with recovery codes.
 - Sessions live in the database, which stores only a SHA-256 hash of each token. The cookie is httpOnly, SameSite=Lax, and `__Host-` prefixed in production.
+- The browser extension connects with a one-time code that lasts 10 minutes and gets its own token (only its SHA-256 hash is stored). That token opens only the extension's routes, and changing your password disconnects it.
 - Sensitive answers (demographics, sponsorship) and browser session state are encrypted with AES-256-GCM.
 - Every mutation is checked for authorization, validated with zod, rate-limited, and written to the audit log (Settings → Security log).
 - Uploads are checked against their file signature (magic bytes) and capped at 10 MB.
+- Email and calendar access uses OAuth with PKCE and a state cookie bound to the signed-in user; access and refresh tokens are encrypted with AES-256-GCM, and only job emails' sender, subject and preview are stored.
+
+## Monitoring and backups
+
+Crashes in the web app, API, worker and browser are reported to Sentry (or GlitchTip) with personal data removed, `/api/health/ready` gives uptime monitors one URL that fails when the database, Redis, the worker, the nightly backup or the restore test does, and the worker takes an encrypted (AES-256-GCM) database backup every night and restores it into a scratch database every week to prove it works. All of it is off until configured; [docs/operations/monitoring-and-backups.md](docs/operations/monitoring-and-backups.md) has the sign-up steps, settings, and how to restore. Commands run through `pnpm ops` (`backup`, `list`, `test-restore`, `restore`, `status`, `test-alert`, `generate-key`).
 
 ## Roadmap
 
@@ -205,3 +274,4 @@ pnpm test:e2e    # Playwright browser tests against the dev server, then with th
 | 5 | AI field mapping, answer drafting, resume/cover-letter generation | Done |
 | 6 | Analytics, retries, real-time hardening | Next |
 | — | Flightpath application tracker: stages after submission, interview rounds, board and table, dashboard metrics | Done |
+| — | Browser extension: save jobs from any site, finish CAPTCHAs and sign-ins in your own browser | Done |

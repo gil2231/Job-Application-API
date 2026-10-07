@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import {
   audit,
   changePassword,
+  revokeAllExtensionConnections,
   revokeOtherSessions,
   revokeSession,
   saveAutomationRule,
@@ -69,6 +70,7 @@ export async function changePasswordAction(_prev: ActionResult, formData: FormDa
     if (!ok) return { ok: false, errors: { currentPassword: "Current password is incorrect" }, message: "Current password is incorrect" };
     // A password change signs out every other device.
     await revokeOtherSessions(user.id, user.sessionId);
+    await revokeAllExtensionConnections(user.id);
     await audit(user.id, "account.password_changed");
     revalidatePath("/settings");
     return { ok: true, message: "Password changed. Other sessions were signed out." };

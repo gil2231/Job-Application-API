@@ -59,4 +59,6 @@ export const LIMITS = {
   emailSend: { limit: relaxed ? 100 : 5, windowMs: 60 * 60_000 },
   /** Data exports are heavy; a few an hour is plenty. */
   dataExport: { limit: relaxed ? 100 : 5, windowMs: 60 * 60_000 },
+  /** "Report a problem" messages, per account or, when signed out, per IP. */
+  support: { limit: relaxed ? 500 : 10, windowMs: 60 * 60_000 },
 } as const;

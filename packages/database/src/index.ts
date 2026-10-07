@@ -23,4 +23,8 @@ export * from "./repositories/two-factor";
 export * from "./repositories/billing";
 export * from "./repositories/account";
 export * from "./totp";
+export * from "./repositories/mail";
+export * from "./repositories/extension";
+export * from "./repositories/notifications";
+export * from "./repositories/support";
 export * from "./repositories/admin";

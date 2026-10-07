@@ -1,7 +1,8 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { ArrowRight, CreditCard } from "lucide-react";
-import { getAdminOverview, getBillingSummary } from "@autoapply/database";
+import { countOpenSupportRequests, getAdminOverview, getBillingSummary } from "@autoapply/database";
+import { backupHealthChecks } from "@autoapply/ops";
 import { enumLabel } from "@autoapply/shared";
 import { requireAdmin } from "@/lib/auth";
 import { getWorkerStatus } from "@/lib/worker-status";
@@ -14,7 +15,13 @@ export const metadata: Metadata = { title: "Admin" };
 
 export default async function AdminOverviewPage() {
   await requireAdmin();
-  const [overview, worker, billing] = await Promise.all([getAdminOverview(), getWorkerStatus(), getBillingSummary()]);
+  const [overview, worker, openReports, backups, billing] = await Promise.all([
+    getAdminOverview(),
+    getWorkerStatus(),
+    countOpenSupportRequests(),
+    backupHealthChecks().catch(() => ({ backups: { state: "fail" as const, note: "can't reach the backup bucket" }, restoreTest: { state: "off" as const } })),
+    getBillingSummary(),
+  ]);
   const { users, applications } = overview;
 
   const cards = [
@@ -23,12 +30,13 @@ export default async function AdminOverviewPage() {
     { label: "Submitted this week", value: applications.submitted7d, detail: `${applications.total.toLocaleString()} applications in total`, href: null },
     { label: "Failed this week", value: applications.failed7d, detail: `${applications.failedTotal.toLocaleString()} failed in total`, href: "/admin/failures" },
     { label: "Stuck on users", value: applications.stuck, detail: "Waiting on the user for over 3 days", href: "/admin/failures?scope=stuck" },
+    { label: "Open reports", value: openReports, detail: "Problem reports waiting for a reply", href: "/admin/reports" },
   ];
   const maxType = Math.max(1, ...overview.failuresByType.map((f) => f.count));
 
   return (
     <div className="grid gap-5">
-      <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-5">
+      <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
         {cards.map((card) => {
           const body = (
             <Card className="hover:border-primary/40 h-full gap-1.5 py-4 transition-colors" data-testid={`admin-card-${card.label}`}>
@@ -114,6 +122,26 @@ export default async function AdminOverviewPage() {
               </CardDescription>
               <CardAction>
                 {worker.state === "online" ? <Badge variant="success">Online</Badge> : <Badge variant="destructive">{worker.state === "offline" ? "Offline" : "Unreachable"}</Badge>}
+              </CardAction>
+            </CardHeader>
+          </Card>
+
+          <Card className="gap-3" data-testid="admin-backups">
+            <CardHeader>
+              <CardTitle className="text-sm">Database backups</CardTitle>
+              <CardDescription>
+                {backups.backups.state === "off"
+                  ? "Not set up yet. See docs/operations/monitoring-and-backups.md"
+                  : [backups.backups.note, backups.restoreTest.state !== "off" ? `restore test ${backups.restoreTest.note}` : null].filter(Boolean).join(" · ")}
+              </CardDescription>
+              <CardAction>
+                {backups.backups.state === "off" ? (
+                  <Badge variant="outline">Off</Badge>
+                ) : backups.backups.state === "ok" && backups.restoreTest.state !== "fail" ? (
+                  <Badge variant="success">OK</Badge>
+                ) : (
+                  <Badge variant="destructive">Needs attention</Badge>
+                )}
               </CardAction>
             </CardHeader>
           </Card>

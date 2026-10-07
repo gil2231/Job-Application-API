@@ -18,7 +18,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
         <div className="flex min-w-0 flex-1 flex-col">
           <MobileNav user={user} attentionCount={attentionCount} />
           {!flags.emailVerified && <VerifyEmailBanner email={user.email} />}
-          <main className="mx-auto w-full max-w-[1400px] flex-1 px-4 py-6 sm:px-8 sm:py-8">{children}</main>
+          <main className="mx-auto w-full max-w-[1400px] flex-1 px-4 pt-6 pb-[calc(5.5rem+env(safe-area-inset-bottom))] sm:px-8 sm:pt-8 md:pb-8">{children}</main>
         </div>
       </div>
     </LiveUpdatesProvider>
