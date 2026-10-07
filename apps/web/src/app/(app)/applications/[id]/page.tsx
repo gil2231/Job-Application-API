@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { AlertTriangle, ArrowLeft, Check, Circle, ExternalLink, FileText } from "lucide-react";
+import { AlertTriangle, ArrowLeft, Check, Circle, ExternalLink, FileText, Flag } from "lucide-react";
 import { getApplicationDetail, NotFoundError } from "@autoapply/database";
 import { enumLabel, isPostSubmitStage, STAGE_META, stageOf, trackerStageSchema, type ApplicationEventType } from "@autoapply/shared";
 import { requireUser } from "@/lib/auth";
@@ -14,6 +14,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { cn } from "@/lib/utils";
 import { LiveProgressCard } from "@/components/live-progress";
 import { StageBadge } from "@/components/stage";
+import { ReportProblemDialog } from "@/components/support/report-problem-dialog";
 import { ApplicationActions, NoteForm } from "./application-actions";
 import { InterviewsCard } from "./interviews";
 
@@ -71,11 +72,18 @@ export default async function ApplicationPage({ params }: { params: Promise<{ id
 
   return (
     <div className="grid gap-6">
-      <Button asChild variant="ghost" size="sm" className="w-fit">
-        <Link href="/applications">
-          <ArrowLeft /> Applications
-        </Link>
-      </Button>
+      <div className="flex items-center justify-between gap-2">
+        <Button asChild variant="ghost" size="sm" className="w-fit">
+          <Link href="/applications">
+            <ArrowLeft /> Applications
+          </Link>
+        </Button>
+        <ReportProblemDialog defaultCategory="APPLICATION" applicationId={app.id}>
+          <Button variant="ghost" size="sm" className="text-muted-foreground">
+            <Flag /> Report a problem
+          </Button>
+        </ReportProblemDialog>
+      </div>
 
       <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
         <div>

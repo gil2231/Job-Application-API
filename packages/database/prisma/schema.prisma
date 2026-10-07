@@ -241,6 +241,21 @@ enum AttemptStatus {
   CANCELLED
 }
 
+enum SupportCategory {
+  BUG
+  APPLICATION
+  ACCOUNT
+  BILLING
+  PRIVACY
+  FEEDBACK
+  OTHER
+}
+
+enum SupportStatus {
+  OPEN
+  RESOLVED
+}
+
 enum BrowserSessionStatus {
   ACTIVE
   EXPIRED
@@ -286,6 +301,7 @@ model User {
   browserSessions BrowserSession[]
   automationRule  AutomationRule?
   settings        UserSetting?
+  supportRequests SupportRequest[]
 
   @@index([createdAt])
 }
@@ -901,4 +917,32 @@ model UserSetting {
   updatedAt                 DateTime @updatedAt
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+// ─── Support ────────────────────────────────────────────────────────────────
+
+/// A "Report a problem" or contact-support message. userId is null when it was
+/// sent by someone who isn't signed in (for example, locked out of an account).
+model SupportRequest {
+  id            String          @id @default(cuid())
+  userId        String?
+  /// Where to reply. The account email for signed-in users.
+  email         String
+  name          String?
+  category      SupportCategory
+  subject       String
+  message       String
+  /// Page the report was sent from, path only (no query string).
+  pagePath      String?
+  applicationId String?
+  userAgent     String?
+  status        SupportStatus   @default(OPEN)
+  resolvedAt    DateTime?
+  createdAt     DateTime        @default(now())
+  updatedAt     DateTime        @updatedAt
+
+  user User? @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([status, createdAt])
+  @@index([userId, createdAt])
 }

@@ -11,4 +11,5 @@ export * from "./queue";
 export * from "./keywords";
 export * from "./documents";
 export * from "./tracker";
+export * from "./support";
 export * from "./admin";
