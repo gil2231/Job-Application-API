@@ -62,8 +62,11 @@ test("new accounts land on getting started and confirm their email", async ({ pa
   await expect(page.getByRole("heading", { name: "Email confirmed" })).toBeVisible();
   await page.goto("/dashboard");
   await expect(page.getByText("Confirm your email with the link")).toHaveCount(0);
-  await page.getByRole("button", { name: "Hide getting started" }).click();
-  await expect(page.getByText(/Getting started \(/)).toHaveCount(0);
+  // The dashboard keeps a live connection open, so retry the click in case it lands before hydration.
+  await expect(async () => {
+    await page.getByRole("button", { name: "Hide getting started" }).click({ timeout: 2000 });
+    await expect(page.getByText(/Getting started \(/)).toHaveCount(0, { timeout: 3000 });
+  }).toPass({ timeout: 20_000 });
 });
 
 test("two-factor sign-in: set up, sign in with a code and a recovery code, turn off", async ({ page }) => {
