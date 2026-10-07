@@ -1090,6 +1090,8 @@ model CalendarEventRemoval {
   connection MailConnection @relation(fields: [connectionId], references: [id], onDelete: Cascade)
 
   @@index([connectionId])
+}
+
 // ─── Alerts and notifications ───────────────────────────────────────────────
 
 /// A job board keyword search the user saved. Daily job alerts run every
@@ -1179,6 +1181,8 @@ model Notification {
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId, kind, createdAt])
+}
+
 // ─── Support ────────────────────────────────────────────────────────────────
 
 /// A "Report a problem" or contact-support message. userId is null when it was
