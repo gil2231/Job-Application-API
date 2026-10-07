@@ -8,7 +8,8 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { DropdownMenuItem } from "@/components/ui/dropdown-menu";
 import { promptInstall, startPwa, useInstallState, type InstallPlatform } from "@/lib/pwa";
 
-const THEME_COLORS = { light: "#fcfcfc", dark: "#0f0f12" };
+// The phone header and installed window bar are steel navy in both themes, like the sidebar.
+const THEME_COLORS = { light: "#0f1623", dark: "#0f1623" };
 
 /** Registers the service worker and keeps the window's title bar colour in step with the app theme. */
 export function PwaSetup() {

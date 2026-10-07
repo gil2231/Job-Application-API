@@ -151,7 +151,7 @@ export function RulesForm({ rule }: { rule: AutomationRuleView }) {
       <Card>
         <CardHeader>
           <CardTitle className="text-sm">Automation</CardTitle>
-          <CardDescription>AutoApply never bypasses CAPTCHAs, MFA or other security checks. Those always come to you.</CardDescription>
+          <CardDescription>Applyance never bypasses CAPTCHAs, MFA or other security checks. Those always come to you.</CardDescription>
         </CardHeader>
         <CardContent className="grid gap-4 sm:grid-cols-2">
           <Field label="Default mode" htmlFor="defaultMode" hint={MODE_HELP[mode]}>

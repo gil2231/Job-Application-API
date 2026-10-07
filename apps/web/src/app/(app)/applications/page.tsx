@@ -14,7 +14,7 @@ export default async function ApplicationsPage({ searchParams }: { searchParams:
   const data = await listApplications(user.id, filters);
   return (
     <div className="grid gap-5">
-      <PageHeader title="Applications" description="Every application AutoApply has queued, is working on, or has finished." />
+      <PageHeader title="Applications" description="Every application Applyance has queued, is working on, or has finished." />
       <ApplicationsView data={data} />
     </div>
   );

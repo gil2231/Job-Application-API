@@ -63,7 +63,7 @@ export default async function IntegrationsPage() {
         <CardHeader>
           <CardTitle className="text-sm">Job sources</CardTitle>
           <CardDescription>
-            Import from the Jobs page. LinkedIn saved jobs come from the data export you download from LinkedIn; AutoApply never signs in to LinkedIn or reads its pages.
+            Import from the Jobs page. LinkedIn saved jobs come from the data export you download from LinkedIn; Applyance never signs in to LinkedIn or reads its pages.
           </CardDescription>
         </CardHeader>
         <CardContent>

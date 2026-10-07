@@ -4,63 +4,78 @@
 @custom-variant dark (&:is(.dark *));
 
 :root {
+  /* Applyance: brushed silver and steel with a blue accent, from the logo.
+     The sidebar and phone header use the dark palette (class="dark"). */
   --radius: 0.5rem;
-  --background: oklch(0.99 0 0);
-  --foreground: oklch(0.18 0.005 285);
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.18 0.005 285);
-  --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.18 0.005 285);
-  --primary: oklch(0.51 0.21 275);
-  --primary-foreground: oklch(0.985 0 0);
-  --secondary: oklch(0.967 0.003 265);
-  --secondary-foreground: oklch(0.21 0.006 285);
-  --muted: oklch(0.967 0.003 265);
-  --muted-foreground: oklch(0.52 0.015 285);
-  --accent: oklch(0.955 0.01 275);
-  --accent-foreground: oklch(0.25 0.05 275);
+  --background: oklch(0.965 0.005 255);
+  --foreground: oklch(0.21 0.02 262);
+  --card: oklch(0.995 0.002 255);
+  --card-foreground: oklch(0.21 0.02 262);
+  --popover: oklch(0.995 0.002 255);
+  --popover-foreground: oklch(0.21 0.02 262);
+  --primary: oklch(0.55 0.19 259);
+  --primary-foreground: oklch(0.985 0.003 255);
+  --secondary: oklch(0.93 0.008 255);
+  --secondary-foreground: oklch(0.24 0.02 262);
+  --muted: oklch(0.935 0.007 255);
+  --muted-foreground: oklch(0.5 0.02 260);
+  --accent: oklch(0.925 0.022 257);
+  --accent-foreground: oklch(0.3 0.08 259);
   --destructive: oklch(0.577 0.245 27.3);
-  --border: oklch(0.92 0.004 286);
-  --input: oklch(0.9 0.004 286);
-  --ring: oklch(0.51 0.21 275);
+  --border: oklch(0.88 0.01 255);
+  --input: oklch(0.86 0.011 255);
+  --ring: oklch(0.55 0.19 259);
   --success: oklch(0.6 0.15 155);
   --warning: oklch(0.72 0.16 70);
-  --chart-1: oklch(0.51 0.21 275);
-  --chart-2: oklch(0.65 0.15 200);
+  --chart-1: oklch(0.55 0.19 259);
+  --chart-2: oklch(0.66 0.11 225);
   --chart-3: oklch(0.6 0.15 155);
   --chart-4: oklch(0.72 0.16 70);
   --chart-5: oklch(0.6 0.2 20);
-  --sidebar: oklch(0.975 0.002 286);
-  --sidebar-foreground: oklch(0.3 0.01 285);
-  --sidebar-accent: oklch(0.935 0.006 286);
-  --sidebar-border: oklch(0.92 0.004 286);
+  --sidebar: oklch(0.97 0.004 255);
+  --sidebar-foreground: oklch(0.3 0.02 262);
+  --sidebar-accent: oklch(0.92 0.01 255);
+  --sidebar-border: oklch(0.88 0.01 255);
+  --steel-text: linear-gradient(135deg, oklch(0.42 0.02 262) 0%, oklch(0.6 0.025 260) 45%, oklch(0.36 0.03 262) 100%);
+  --glow: oklch(0.62 0.2 259 / 45%);
+  /* The logo's steel, darker so it reads on light surfaces. */
+  --mark-1: #9aa3b1;
+  --mark-2: #4f5867;
+  --mark-3: #848e9d;
+  --mark-4: #2c3340;
 }
 
 .dark {
-  --background: oklch(0.16 0.004 285);
-  --foreground: oklch(0.97 0 0);
-  --card: oklch(0.195 0.005 285);
-  --card-foreground: oklch(0.97 0 0);
-  --popover: oklch(0.21 0.006 285);
-  --popover-foreground: oklch(0.97 0 0);
-  --primary: oklch(0.62 0.19 275);
-  --primary-foreground: oklch(0.985 0 0);
-  --secondary: oklch(0.26 0.006 285);
-  --secondary-foreground: oklch(0.97 0 0);
-  --muted: oklch(0.25 0.006 285);
-  --muted-foreground: oklch(0.7 0.015 285);
-  --accent: oklch(0.28 0.03 275);
-  --accent-foreground: oklch(0.97 0 0);
+  --background: oklch(0.17 0.018 262);
+  --foreground: oklch(0.96 0.004 255);
+  --card: oklch(0.205 0.02 262);
+  --card-foreground: oklch(0.96 0.004 255);
+  --popover: oklch(0.22 0.022 262);
+  --popover-foreground: oklch(0.96 0.004 255);
+  --primary: oklch(0.64 0.18 258);
+  --primary-foreground: oklch(0.985 0.003 255);
+  --secondary: oklch(0.26 0.022 262);
+  --secondary-foreground: oklch(0.96 0.004 255);
+  --muted: oklch(0.25 0.02 262);
+  --muted-foreground: oklch(0.72 0.018 258);
+  --accent: oklch(0.29 0.045 260);
+  --accent-foreground: oklch(0.96 0.004 255);
   --destructive: oklch(0.65 0.2 25);
   --border: oklch(1 0 0 / 10%);
   --input: oklch(1 0 0 / 14%);
-  --ring: oklch(0.62 0.19 275);
+  --ring: oklch(0.64 0.18 258);
   --success: oklch(0.7 0.15 155);
   --warning: oklch(0.78 0.15 75);
-  --sidebar: oklch(0.18 0.005 285);
-  --sidebar-foreground: oklch(0.85 0.01 285);
-  --sidebar-accent: oklch(0.25 0.008 285);
+  --sidebar: oklch(0.2 0.028 263);
+  --sidebar-foreground: oklch(0.86 0.012 255);
+  --sidebar-accent: oklch(0.28 0.04 261);
   --sidebar-border: oklch(1 0 0 / 8%);
+  --steel-text: linear-gradient(135deg, oklch(0.98 0.003 255) 0%, oklch(0.76 0.014 258) 50%, oklch(0.92 0.006 255) 100%);
+  --glow: oklch(0.66 0.2 258 / 55%);
+  --mark-1: #f5f7fb;
+  --mark-2: #a8b0bd;
+  --mark-3: #dde1e8;
+  --mark-4: #6c7583;
 }
 
 @theme inline {
@@ -122,5 +137,25 @@
   html {
     touch-action: manipulation;
     -webkit-tap-highlight-color: transparent;
+  }
+}
+
+@layer components {
+  /* "Applyance" in brushed steel. */
+  .brand-wordmark {
+    background-image: var(--steel-text);
+    background-clip: text;
+    -webkit-background-clip: text;
+    color: transparent;
+  }
+}
+
+/* The moving sliver on a running task's progress bar. */
+@keyframes task-scan {
+  0% {
+    left: -33%;
+  }
+  100% {
+    left: 100%;
   }
 }

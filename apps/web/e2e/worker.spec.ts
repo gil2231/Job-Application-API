@@ -118,7 +118,7 @@ test("Review mode: the worker fills the form, the user approves, and it is submi
   expect(await submissions()).toHaveLength(0);
 
   await card.getByRole("button", { name: "Approve & submit" }).click();
-  await expect(page.getByText("Approved. AutoApply will submit it next.")).toBeVisible();
+  await expect(page.getByText("Approved. Applyance will submit it next.")).toBeVisible();
 
   const app = await prisma.application.findFirstOrThrow({ where: { userId: user.id } });
   await expect.poll(async () => (await prisma.application.findUniqueOrThrow({ where: { id: app.id } })).status, { timeout: 60_000 }).toBe("SUBMITTED");

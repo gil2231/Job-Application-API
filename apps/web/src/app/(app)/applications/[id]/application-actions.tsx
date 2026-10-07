@@ -36,7 +36,7 @@ export function ApplicationActions({
       <StageMenu card={{ id: applicationId, stage, lockedBy }} onMove={(to) => mover.move({ id: applicationId, stage, lockedBy }, to)} pending={mover.pending} variant="button" />
       {canApprove && (
         <Button size="sm" disabled={pending} onClick={() => run(() => approveSubmissionAction(applicationId))}>
-          <Send /> {status === "READY" ? "Let AutoApply submit" : "Approve & submit"}
+          <Send /> {status === "READY" ? "Let Applyance submit" : "Approve & submit"}
         </Button>
       )}
       {canMarkSubmitted && (

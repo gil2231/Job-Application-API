@@ -34,7 +34,7 @@ test.describe("on a phone", () => {
     await expect(page.getByRole("button", { name: "I've completed it" })).toBeVisible();
 
     const app = await prisma.application.findFirstOrThrow({ where: { userId: user.id } });
-    const pages = ["/dashboard", "/needs-attention", "/flightpath", "/flightpath?view=table", "/recommended", "/jobs", `/jobs/${app.jobId}`, "/applications", `/applications/${app.id}`];
+    const pages = ["/dashboard", "/tasks", "/needs-attention", "/flightpath", "/flightpath?view=table", "/recommended", "/jobs", `/jobs/${app.jobId}`, "/applications", `/applications/${app.id}`];
     pages.push("/profile", "/documents", "/answers", "/rules", "/integrations", "/settings");
     await setUserRole(email, "ADMIN");
     pages.push("/admin", "/admin/users", `/admin/users/${user.id}`, "/admin/failures");

@@ -219,7 +219,14 @@ export default async function DashboardPage() {
                 {stats.automation.queued} queued application{stats.automation.queued === 1 ? "" : "s"} will start when the worker is running.
               </p>
             )}
-            <QueueControls paused={stats.automation.paused} pauseAfterCurrent={stats.automation.pauseAfterCurrent} processing={stats.automation.processing} />
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <QueueControls paused={stats.automation.paused} pauseAfterCurrent={stats.automation.pauseAfterCurrent} processing={stats.automation.processing} />
+              <Button asChild size="sm" variant="ghost">
+                <Link href="/tasks">
+                  Open Tasks <ArrowRight />
+                </Link>
+              </Button>
+            </div>
           </CardContent>
         </Card>
       </div>

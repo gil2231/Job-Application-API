@@ -24,7 +24,7 @@ export default async function RulesPage() {
     <div className="grid gap-5">
       <PageHeader
         title="Rules"
-        description="Decide which jobs qualify, how they're scored, and when AutoApply may submit on its own."
+        description="Decide which jobs qualify, how they're scored, and when Applyance may submit on its own."
         actions={
           <ActionButton size="sm" variant="outline" action={rescoreJobsAction} disabled={total === 0}>
             Re-score jobs

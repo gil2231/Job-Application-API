@@ -272,7 +272,7 @@ export function AttentionCard({ item }: { item: AttentionItem }) {
             (isFinal ? (
               <>
                 <Button size="sm" disabled={pending} onClick={() => run(() => approveSubmissionAction(item.id))}>
-                  <Send /> {item.status === "READY" ? "Let AutoApply submit" : "Approve & submit"}
+                  <Send /> {item.status === "READY" ? "Let Applyance submit" : "Approve & submit"}
                 </Button>
                 {open}
                 {submittedMyself}

@@ -14,7 +14,7 @@ export default async function NeedsAttentionPage() {
     <div className="grid gap-5">
       <PageHeader
         title="Needs Attention"
-        description="Steps only you can do: CAPTCHAs, sign-ins, and answers AutoApply isn't confident about. Once you finish, the application resumes."
+        description="Steps only you can do: CAPTCHAs, sign-ins, and answers Applyance isn't confident about. Once you finish, the application resumes."
       />
       {items.length === 0 ? (
         <div className="rounded-xl border">
