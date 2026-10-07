@@ -25,6 +25,7 @@ import {
   validateSessionToken,
   type PublicUser,
 } from "@autoapply/database";
+import { captureException } from "@autoapply/ops";
 import { applicationFiltersSchema, fieldErrors, interviewRoundSchema, jobFiltersSchema, manualJobSchema, trackerFiltersSchema, trackerStageSchema } from "@autoapply/shared";
 
 declare module "fastify" {
@@ -58,7 +59,7 @@ export async function buildServer(options: { logger?: boolean } = {}): Promise<F
   await app.register(cookie);
   await app.register(rateLimit, { max: 300, timeWindow: "1 minute" });
 
-  app.setErrorHandler((error, _request, reply) => {
+  app.setErrorHandler((error, request, reply) => {
     if (error instanceof z.ZodError) return reply.code(400).send({ error: "Invalid request", fields: fieldErrors(error) });
     if (error instanceof DuplicateJobError) return reply.code(409).send({ error: error.message, jobId: error.existingJobId });
     if (error instanceof NotFoundError) return reply.code(404).send({ error: error.message });
@@ -66,6 +67,8 @@ export async function buildServer(options: { logger?: boolean } = {}): Promise<F
     const status = (error as { statusCode?: number }).statusCode;
     if (status && status < 500) return reply.code(status).send({ error: (error as Error).message });
     app.log.error(error);
+    // routeOptions.url is the route pattern (/v1/applications/:id), never the real path.
+    captureException(error, { tags: { route: request.routeOptions.url, method: request.method }, userId: request.user?.id });
     return reply.code(500).send({ error: "Internal server error" });
   });
 

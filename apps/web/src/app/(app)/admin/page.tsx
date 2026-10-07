@@ -2,6 +2,8 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { ArrowRight, CreditCard } from "lucide-react";
 import { countOpenSupportRequests, getAdminOverview } from "@autoapply/database";
+import { getAdminOverview } from "@autoapply/database";
+import { backupHealthChecks } from "@autoapply/ops";
 import { enumLabel } from "@autoapply/shared";
 import { requireAdmin } from "@/lib/auth";
 import { getWorkerStatus } from "@/lib/worker-status";
@@ -15,6 +17,11 @@ export const metadata: Metadata = { title: "Admin" };
 export default async function AdminOverviewPage() {
   await requireAdmin();
   const [overview, worker, openReports] = await Promise.all([getAdminOverview(), getWorkerStatus(), countOpenSupportRequests()]);
+  const [overview, worker, backups] = await Promise.all([
+    getAdminOverview(),
+    getWorkerStatus(),
+    backupHealthChecks().catch(() => ({ backups: { state: "fail" as const, note: "can't reach the backup bucket" }, restoreTest: { state: "off" as const } })),
+  ]);
   const { users, applications } = overview;
 
   const cards = [
@@ -115,6 +122,26 @@ export default async function AdminOverviewPage() {
               </CardDescription>
               <CardAction>
                 {worker.state === "online" ? <Badge variant="success">Online</Badge> : <Badge variant="destructive">{worker.state === "offline" ? "Offline" : "Unreachable"}</Badge>}
+              </CardAction>
+            </CardHeader>
+          </Card>
+
+          <Card className="gap-3" data-testid="admin-backups">
+            <CardHeader>
+              <CardTitle className="text-sm">Database backups</CardTitle>
+              <CardDescription>
+                {backups.backups.state === "off"
+                  ? "Not set up yet. See docs/operations/monitoring-and-backups.md"
+                  : [backups.backups.note, backups.restoreTest.state !== "off" ? `restore test ${backups.restoreTest.note}` : null].filter(Boolean).join(" · ")}
+              </CardDescription>
+              <CardAction>
+                {backups.backups.state === "off" ? (
+                  <Badge variant="outline">Off</Badge>
+                ) : backups.backups.state === "ok" && backups.restoreTest.state !== "fail" ? (
+                  <Badge variant="success">OK</Badge>
+                ) : (
+                  <Badge variant="destructive">Needs attention</Badge>
+                )}
               </CardAction>
             </CardHeader>
           </Card>
