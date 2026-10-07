@@ -322,7 +322,7 @@ export async function recheckQuestion(userId: string, questionId: string) {
   await prisma.$transaction(async (tx) => {
     await tx.applicationQuestion.update({ where: { id: questionId }, data: { status: "PENDING", reviewReason: null } });
     await tx.applicationEvent.create({
-      data: { applicationId: question.application.id, userId, type: "HUMAN_INPUT_RECEIVED", message: `Asked AutoApply to check "${question.label.slice(0, 120)}" again` },
+      data: { applicationId: question.application.id, userId, type: "HUMAN_INPUT_RECEIVED", message: `Asked Applyance to check "${question.label.slice(0, 120)}" again` },
     });
     await resumeIfResolved(tx, userId, question.application.id);
   });
@@ -358,9 +358,9 @@ export async function markHumanStepComplete(userId: string, applicationId: strin
 }
 
 /**
- * The user reviewed a filled application and wants AutoApply to submit it
+ * The user reviewed a filled application and wants Applyance to submit it
  * (Review mode's final stop, an Auto run that was downgraded, or Manual mode's
- * "let AutoApply submit"). The worker refills it from the approved answers and
+ * "let Applyance submit"). The worker refills it from the approved answers and
  * submits, still stopping for any CAPTCHA or new question.
  */
 export async function approveForSubmission(userId: string, applicationId: string) {

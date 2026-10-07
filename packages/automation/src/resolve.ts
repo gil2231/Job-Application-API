@@ -8,7 +8,7 @@ import { findSimilarAnswer } from "./similarity";
 
 /**
  * Turns detected form fields into values, using only what the user has told
- * AutoApply: the Master Profile, the Answer Library, and answers they approved
+ * Applyance: the Master Profile, the Answer Library, and answers they approved
  * for this application. Nothing is invented; a field with no source is left
  * blank (optional) or sent to the user (required). For a required question with
  * no saved answer, a similarly worded saved answer or an AI draft built from the
@@ -234,7 +234,7 @@ export class FieldResolver {
     if (!field.required) return { ...base, value: null, confidence: c.confidence, source: "none", status: "SKIPPED", autoSubmitAllowed: true };
     const suggestion = await this.suggest(field, "answer.library", c.questionKey);
     if (suggestion) return suggestion;
-    return { ...base, value: null, confidence: 0, source: "none", status: "NEEDS_REVIEW", reviewReason: "No saved answer for this question. Answer it once and AutoApply can reuse it.", autoSubmitAllowed: false };
+    return { ...base, value: null, confidence: 0, source: "none", status: "NEEDS_REVIEW", reviewReason: "No saved answer for this question. Answer it once and Applyance can reuse it.", autoSubmitAllowed: false };
   }
 
   private async resolveUnknown(field: DetectedField): Promise<FieldMapping> {
@@ -245,7 +245,7 @@ export class FieldResolver {
     if (!field.required) return { ...base, confidence: 0, status: "SKIPPED", autoSubmitAllowed: true };
     const suggestion = await this.suggest(field, "unknown");
     if (suggestion) return suggestion;
-    return { ...base, confidence: 0, status: "NEEDS_REVIEW", reviewReason: "AutoApply doesn't recognize this question and won't guess. Answer it to continue." };
+    return { ...base, confidence: 0, status: "NEEDS_REVIEW", reviewReason: "Applyance doesn't recognize this question and won't guess. Answer it to continue." };
   }
 
   /**

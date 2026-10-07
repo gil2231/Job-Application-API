@@ -68,7 +68,7 @@ function parseArrangement(value: string | undefined): WorkArrangement | null {
 
 /**
  * CSV and LinkedIn-export import. The user downloads their own data from
- * LinkedIn and uploads it here; AutoApply never signs in to or scrapes LinkedIn.
+ * LinkedIn and uploads it here; Applyance never signs in to or scrapes LinkedIn.
  * Any other spreadsheet with at least a URL column works too.
  */
 export const fileImportSource: JobSourceAdapter<FileInput> = {

@@ -244,7 +244,10 @@ export function AttentionCard({ item }: { item: AttentionItem }) {
           <Badge variant="outline" className="ml-auto">
             {enumLabel(item.mode)} mode
           </Badge>
-          <Badge variant="muted">Waiting {formatRelative(item.updatedAt).replace(" ago", "")}</Badge>
+          <Badge variant="muted">
+            {/* Relative time differs by a second between server and browser; don't fail hydration over it. */}
+            <span suppressHydrationWarning>Waiting {formatRelative(item.updatedAt).replace(" ago", "")}</span>
+          </Badge>
         </div>
         <dl className="grid grid-cols-[80px_1fr] gap-x-3 gap-y-1 text-sm">
           <dt className="text-muted-foreground">Company</dt>

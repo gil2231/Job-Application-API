@@ -18,7 +18,7 @@ const firstNumber = (s: string) => {
 };
 const sameUrl = (a: string, b: string) => a.trim().replace(/^https?:\/\/(www\.)?/i, "").replace(/\/+$/, "").toLowerCase() === b.trim().replace(/^https?:\/\/(www\.)?/i, "").replace(/\/+$/, "").toLowerCase();
 
-/** Facts that disagree with each other: AutoApply won't submit until a person resolves them. */
+/** Facts that disagree with each other: Applyance won't submit until a person resolves them. */
 export function findContradictions(input: {
   mappings: FieldMapping[];
   profile: ProfileFactsForForms;
@@ -65,7 +65,7 @@ export function findContradictions(input: {
 
 export interface SubmissionCheck {
   mode: AutomationMode;
-  /** The user approved this application for submission (Review mode, or "Let AutoApply submit"). */
+  /** The user approved this application for submission (Review mode, or "Let Applyance submit"). */
   submitApproved: boolean;
   autoSubmitEnabled: boolean;
   /** The adapter that filled the form is built for the detected platform and allows unattended submission. */
@@ -98,7 +98,7 @@ export function decideSubmission(check: SubmissionCheck): SubmissionDecision {
     return { action: "review", reason: "QUESTION_REVIEW", detail: `${unresolved.length} question${unresolved.length === 1 ? "" : "s"} need${unresolved.length === 1 ? "s" : ""} your answer before this application can continue.`, reasons: unresolved.map((m) => m.detectedLabel) };
   }
   if (check.securityChallenge) {
-    return { action: "review", reason: "CAPTCHA", detail: "A security check appeared before submission. AutoApply never completes these for you.", reasons: ["Security check on the page"] };
+    return { action: "review", reason: "CAPTCHA", detail: "A security check appeared before submission. Applyance never completes these for you.", reasons: ["Security check on the page"] };
   }
   if (check.submitApproved) return { action: "submit" };
 

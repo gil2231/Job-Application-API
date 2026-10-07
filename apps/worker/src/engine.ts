@@ -238,7 +238,7 @@ class AttemptRun {
 
       const url = data.job.applicationUrl ?? data.job.url;
       if (detectPlatformFromUrl(url).platform === "LINKEDIN_EASY_APPLY") {
-        return this.attention("WAITING_FOR_USER", "UNSUPPORTED_SITE", "LinkedIn Easy Apply needs your LinkedIn sign-in, and AutoApply never signs in to LinkedIn. Add the employer's own application link to this job, or apply on LinkedIn yourself and mark it submitted.");
+        return this.attention("WAITING_FOR_USER", "UNSUPPORTED_SITE", "LinkedIn Easy Apply needs your LinkedIn sign-in, and Applyance never signs in to LinkedIn. Add the employer's own application link to this job, or apply on LinkedIn yourself and mark it submitted.");
       }
       const site = await checkSite(url, deps.config);
       if (!site.allowed) return this.attention("WAITING_FOR_USER", "UNSUPPORTED_SITE", site.reason);
@@ -334,7 +334,7 @@ class AttemptRun {
       }
       if (status.state === "failed") return this.failed(new Error(status.message));
       if (!status.hasForm) {
-        return this.attention("WAITING_FOR_USER", "UNSUPPORTED_SITE", pageIndex === 0 ? "AutoApply couldn't find an application form at this link. Add the direct application link to the job, or apply yourself." : `Page ${pageIndex + 1} of the application has no form AutoApply can fill.`);
+        return this.attention("WAITING_FOR_USER", "UNSUPPORTED_SITE", pageIndex === 0 ? "Applyance couldn't find an application form at this link. Add the direct application link to the job, or apply yourself." : `Page ${pageIndex + 1} of the application has no form Applyance can fill.`);
       }
 
       const pageNo = pageIndex + 1;
@@ -483,13 +483,13 @@ class AttemptRun {
     await this.saveSession();
     const list = validation.errors.slice(0, 4).map((e) => `${e.label}: ${e.message}`).join("; ");
     const detail = flagged.length
-      ? `The site rejected ${flagged.length === 1 ? "an answer" : `${flagged.length} answers`} (${list}). Correct ${flagged.length === 1 ? "it" : "them"} below and AutoApply will try again.`
+      ? `The site rejected ${flagged.length === 1 ? "an answer" : `${flagged.length} answers`} (${list}). Correct ${flagged.length === 1 ? "it" : "them"} below and Applyance will try again.`
       : `The site reported a problem it didn't tie to a field (${unmatched.slice(0, 3).join("; ") || list}). Check the application, then press Try again.`;
     return this.attention("REVIEW_REQUIRED", "VALIDATION_ERROR", detail);
   }
 
   /**
-   * A CAPTCHA, sign-in or verification code. AutoApply never completes these.
+   * A CAPTCHA, sign-in or verification code. Applyance never completes these.
    * With a visible browser the page stays open for the person to finish it
    * there, and the run continues as soon as the page moves on; otherwise the
    * application waits in Needs Attention.
@@ -504,12 +504,12 @@ class AttemptRun {
     const live = status.reason === "CAPTCHA" && this.page ? (deps.liveSolve ?? null) : null;
     if (!deps.browsers.interactive && !live) {
       const action = status.reason === "CAPTCHA" ? "complete the CAPTCHA" : "sign in";
-      return this.attention("WAITING_FOR_USER", status.reason, `${status.detail} Open the application to ${action} and finish it yourself, then mark it submitted. If the check was a one-off, press I've completed it and AutoApply will look again.`);
+      return this.attention("WAITING_FOR_USER", status.reason, `${status.detail} Open the application to ${action} and finish it yourself, then mark it submitted. If the check was a one-off, press I've completed it and Applyance will look again.`);
     }
 
     const detail = live
       ? `${status.detail} Solve it on the CAPTCHA screen in Applyance. The application carries on by itself as soon as it's solved.`
-      : `${status.detail} Finish it in the AutoApply browser window, then press ${status.reason === "CAPTCHA" ? "I've completed it" : "Continue"}. AutoApply carries on from there.`;
+      : `${status.detail} Finish it in the Applyance browser window, then press ${status.reason === "CAPTCHA" ? "I've completed it" : "Continue"}. Applyance carries on from there.`;
     const kept = await finishAttempt({ applicationId: input.applicationId, attemptId: input.attemptId, userId: input.userId, workerId: deps.workerId, outcome: { kind: "attention", status: "WAITING_FOR_USER", reason: status.reason, detail, keepLease: { leaseMs: deps.config.leaseMs } } });
     if (!kept) return { result: "cancelled" };
 
@@ -546,7 +546,7 @@ class AttemptRun {
           return "resumed";
         }
         if (held.status === "QUEUED") {
-          await markStillWaiting(input.applicationId, input.userId, deps.workerId, `The page still shows the ${status.reason === "CAPTCHA" ? "CAPTCHA" : "sign-in"}. ${live ? "Solve it on the CAPTCHA screen" : "Finish it in the AutoApply browser window"} first.`);
+          await markStillWaiting(input.applicationId, input.userId, deps.workerId, `The page still shows the ${status.reason === "CAPTCHA" ? "CAPTCHA" : "sign-in"}. ${live ? "Solve it on the CAPTCHA screen" : "Finish it in the Applyance browser window"} first.`);
         }
       }
       ended = "timed_out";
@@ -565,7 +565,7 @@ class AttemptRun {
     const { deps, input } = this;
     const kept = await finishAttempt({
       applicationId: input.applicationId, attemptId: input.attemptId, userId: input.userId, workerId: deps.workerId,
-      outcome: { kind: "attention", status: "READY", reason: "FINAL_REVIEW", detail: "Everything is filled in the AutoApply browser window. Review it there and click Submit; AutoApply records it automatically.", keepLease: { leaseMs: deps.config.leaseMs } },
+      outcome: { kind: "attention", status: "READY", reason: "FINAL_REVIEW", detail: "Everything is filled in the Applyance browser window. Review it there and click Submit; Applyance records it automatically.", keepLease: { leaseMs: deps.config.leaseMs } },
     });
     if (!kept) return { result: "cancelled" };
     await this.progress.waiting("submit", "Waiting for you to click Submit");

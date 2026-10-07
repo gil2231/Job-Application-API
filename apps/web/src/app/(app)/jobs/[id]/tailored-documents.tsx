@@ -37,7 +37,7 @@ function GenerationNote({ info }: { info: GenerationInfo }) {
   return (
     <div className="text-muted-foreground grid gap-0.5 text-xs">
       <p>
-        {info.method === "ai" ? `Written with AI (${info.model ?? "AI"}) from your Master Profile` : "Built from your Master Profile"} {formatRelative(info.generatedAt)}
+        {info.method === "ai" ? `Written with AI (${info.model ?? "AI"}) from your Master Profile` : "Built from your Master Profile"} <span suppressHydrationWarning>{formatRelative(info.generatedAt)}</span>
         {info.edited ? ", then edited by you" : ""}.
       </p>
       {info.fallbackReason && <p>{info.fallbackReason}.</p>}

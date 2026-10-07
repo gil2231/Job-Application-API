@@ -27,7 +27,7 @@ export async function checkSite(input: string, config: Pick<WorkerConfig, "allow
   }
   try {
     const addresses = isIP(host) ? [host] : (await lookup(host, { all: true })).map((a) => a.address);
-    if (!addresses.length || !addresses.every(isPublicAddress)) return { allowed: false, reason: `${host} points at a private or internal address, which AutoApply won't open.` };
+    if (!addresses.length || !addresses.every(isPublicAddress)) return { allowed: false, reason: `${host} points at a private or internal address, which Applyance won't open.` };
   } catch {
     return { allowed: false, reason: `Couldn't look up ${host}.` };
   }

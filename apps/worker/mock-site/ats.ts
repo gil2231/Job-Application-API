@@ -1,7 +1,7 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
 
 /**
- * Local imitations of the five ATSs AutoApply has adapters for. Each copies
+ * Local imitations of the five ATSs Applyance has adapters for. Each copies
  * the structure its real counterpart uses (field names, automation ids,
  * custom dropdowns, shadow DOM, page flow, resume parsing, sign-in walls) so
  * the adapters can be tested without ever touching a real employer's site.
@@ -26,7 +26,7 @@ export interface AtsHelpers {
   record(form: string, fields: Values, files: Files): string;
   session: AtsSession;
   signedIn(): boolean;
-  /** A button AutoApply must never press (third-party sign-in) was pressed. */
+  /** A button Applyance must never press (third-party sign-in) was pressed. */
   flagForbidden(what: string): void;
 }
 

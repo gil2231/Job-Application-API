@@ -4,7 +4,7 @@ import { FormAdapter } from "../form/form-adapter";
 
 /**
  * Workday (*.myworkdayjobs.com). Apply opens a choice of how to apply;
- * AutoApply always picks Apply Manually (never "Autofill with Resume" or
+ * Applyance always picks Apply Manually (never "Autofill with Resume" or
  * "Use My Last Application"). Workday then asks for a candidate account on
  * each employer's site, which only the person can create or sign in to; their
  * saved session is reused afterwards. The application is a series of steps

@@ -40,7 +40,7 @@ const numbersIn = (text: string) => [...text.matchAll(NUMBER)].map((m) => normal
 const lower = (s: string) => s.toLowerCase();
 const squash = (s: string) => lower(s).replace(/[^a-z0-9%]+/g, " ").trim();
 
-/** All text the person has given AutoApply, used as the source of truth. */
+/** All text the person has given Applyance, used as the source of truth. */
 function sourceText(profile: WritingProfile, factSheet: string): string {
   return squash([factSheet, ...profile.skills.map((s) => s.name)].join(" "));
 }

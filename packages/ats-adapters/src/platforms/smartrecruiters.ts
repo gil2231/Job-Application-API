@@ -5,7 +5,7 @@ import { FormAdapter } from "../form/form-adapter";
  * SmartRecruiters (jobs.smartrecruiters.com). "I'm interested" opens the
  * one-click application, whose fields are web components with their inputs
  * inside shadow roots. It asks for the email twice and offers to apply with
- * LinkedIn or Indeed, which AutoApply never uses.
+ * LinkedIn or Indeed, which Applyance never uses.
  */
 export class SmartRecruitersAdapter extends FormAdapter {
   constructor() {

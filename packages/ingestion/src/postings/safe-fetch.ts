@@ -105,7 +105,7 @@ export interface FetchedResponse {
 export type HttpFetcher = (url: string, init: { accept: string; maxBytes?: number }) => Promise<FetchedResponse>;
 
 const MAX_BYTES = 3 * 1024 * 1024;
-const USER_AGENT = "AutoApply/1.0 (job posting import; +https://github.com/gil2231/Job-Application-API)";
+const USER_AGENT = "Applyance/1.0 (job posting import; +https://github.com/gil2231/Job-Application-API)";
 
 /** GET a public URL safely. Throws on non-2xx responses. */
 export const safeFetch: HttpFetcher = async (input, init) => {

@@ -1,4 +1,4 @@
-// AutoApply data model.
+// Applyance data model.
 //
 // Conventions:
 // - Every user-owned row carries userId (directly or through its parent) and
