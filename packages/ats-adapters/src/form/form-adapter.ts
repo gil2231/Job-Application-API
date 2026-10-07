@@ -56,6 +56,9 @@ export interface FormAdapterOptions {
   uploadSettleMs?: number;
 }
 
+/** How long a single-page app may take to render its Apply button or form. */
+const SPA_RENDER_MS = 15_000;
+
 const NEXT = /^(next|continue|save (and|&) continue|next step|next page|proceed)\b/i;
 const SUBMIT = /^(submit|submit application|send application|apply|apply now|finish|complete( application)?|send)\b/i;
 const START = /^(apply|apply now|apply for this (job|position|role)|start (your )?application|i'?m interested|apply manually)\b/i;
@@ -158,6 +161,11 @@ export class FormAdapter implements ApplicationAdapter<Page> {
   async initialize(ctx: AdapterContext<Page>): Promise<void> {
     const { page } = ctx;
     await this.settle(page);
+    const landmarks = [...(this.options.scan?.roots ?? []), ...(this.options.startButtons ?? [])];
+    if (this.options.scan?.rootRequired && landmarks.length) {
+      // Single-page apps (Workday) can still be blank once the network goes quiet; give the Apply button or the form time to render.
+      await page.locator(landmarks.join(", ")).first().waitFor({ state: "visible", timeout: SPA_RENDER_MS }).catch(() => undefined);
+    }
     // A job description page: follow its Apply buttons until the form (or a sign-in wall) shows.
     for (let step = 0; step < 3; step++) {
       if ((await this.scan(page)).length > 0) return;
@@ -260,7 +268,7 @@ export class FormAdapter implements ApplicationAdapter<Page> {
     const next = await this.findButton(page, "next");
     const submit = await this.findButton(page, "submit");
     const reviewPage = fields.length === 0 && !next && !!submit && (await this.isReviewPage(page));
-    return { state: "in_progress", page: ctx.pageIndex, isFinalPage: !next && !!submit, hasForm: fields.length > 0 || reviewPage };
+    return { state: "in_progress", page: ctx.pageIndex, isFinalPage: !next && !!submit, hasForm: fields.length > 0 || reviewPage, humanSubmitOnly: security.scoreCheck };
   }
 
   async handleFailure(_ctx: AdapterContext<Page>, error: unknown): Promise<AdapterStatus> {
@@ -291,7 +299,7 @@ export class FormAdapter implements ApplicationAdapter<Page> {
   }
 
   private async security(page: Page) {
-    return (await page.evaluate(SECURITY_SCRIPT)) as { captcha: boolean; mfa: boolean; login: boolean; signInText: boolean };
+    return (await page.evaluate(SECURITY_SCRIPT)) as { captcha: boolean; mfa: boolean; login: boolean; signInText: boolean; scoreCheck: boolean };
   }
 
   /** Resolve a field to exactly one element, trying locator strategies in priority order. */

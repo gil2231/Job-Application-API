@@ -18,7 +18,7 @@ export class WorkdayAdapter extends FormAdapter {
       platform: "WORKDAY",
       displayName: "Workday",
       supportsAutoSubmit: true,
-      scan: { roots: ["[data-automation-id='applyFlowPage']"] },
+      scan: { roots: ["[data-automation-id='applyFlowPage']"], rootRequired: true },
       startButtons: ["[data-automation-id='adventureButton']", "[data-automation-id='applyManually']"],
       navigationButtons: ["[data-automation-id='bottom-navigation-next-button']", "[data-automation-id='pageFooterNextButton']"],
       humanDetail: {

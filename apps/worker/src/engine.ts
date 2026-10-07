@@ -95,6 +95,8 @@ class StoppedError extends Error {
 const MAX_PAGES = 15;
 const MAX_CONDITIONAL_ROUNDS = 5;
 const POLL_MS = 2000;
+/** How long a page with no form may show after a sign-in or CAPTCHA before the run carries on anyway. */
+const BLANK_PAGE_GRACE_MS = 15_000;
 
 const FIELD_TYPE: Record<FieldKind, QuestionRecord["fieldType"]> = {
   text: "TEXT", textarea: "TEXTAREA", email: "EMAIL", phone: "PHONE", url: "URL", number: "NUMBER", date: "DATE",
@@ -371,7 +373,8 @@ class AttemptRun {
         const outcome = await this.humanCheckpoint(adapter, ctx, final);
         if (outcome !== "resumed") return outcome;
       }
-      return this.decideAndSubmit(adapter, ctx, all, detected);
+      const humanSubmitOnly = (final.state === "in_progress" ? final : status).humanSubmitOnly === true;
+      return this.decideAndSubmit(adapter, ctx, all, detected, humanSubmitOnly);
     }
     return this.failed(new Error(`The application has more than ${MAX_PAGES} pages`));
   }
@@ -420,7 +423,7 @@ class AttemptRun {
     await this.log("NOTE", `AI was unavailable for some fields (${error}). The built-in mapper was used, and anything it couldn't answer is waiting for you.`, { level: "WARNING" });
   }
 
-  private async decideAndSubmit(adapter: ApplicationAdapter<Page>, ctx: AdapterContext<Page>, mappings: FieldMapping[], detected: Platform): Promise<RunResult> {
+  private async decideAndSubmit(adapter: ApplicationAdapter<Page>, ctx: AdapterContext<Page>, mappings: FieldMapping[], detected: Platform, humanSubmitOnly = false): Promise<RunResult> {
     const { data } = this;
     const contradictions = findContradictions({ mappings, profile: this.facts, library: data.library, job: data.job, rule: data.rule });
     const decision = decideSubmission({
@@ -439,6 +442,14 @@ class AttemptRun {
       await this.saveSession();
       await ctx.screenshot("Ready for review");
       return this.attention(WAITING_REASONS.has(decision.reason) ? "WAITING_FOR_USER" : "REVIEW_REQUIRED", decision.reason, decision.detail);
+    }
+    // Sites that score submissions with invisible reCAPTCHA: Applyance fills the form, but the final Submit is always the person's own click.
+    if (humanSubmitOnly) {
+      await this.saveSession();
+      await ctx.screenshot("Ready to submit");
+      await this.log("NOTE", "This site checks submissions with reCAPTCHA in the background, so the final Submit is left to you");
+      if (this.deps.browsers.interactive) return this.waitForManualSubmit(adapter, ctx);
+      return this.attention("READY", "FINAL_REVIEW", "Everything is filled and checked. This site checks submissions with reCAPTCHA in the background, so open the application and click Submit yourself, then mark it submitted here.");
     }
     if (decision.action === "hand_off") {
       await this.saveSession();
@@ -506,6 +517,7 @@ class AttemptRun {
     const deadline = Date.now() + waitMs;
     let window: LiveWindow | null = null;
     let ended: "solved" | "timed_out" | "stopped" = "stopped";
+    let blankSince: number | null = null;
     try {
       if (live) {
         window = await live.open(this.page!, { applicationId: input.applicationId, userId: input.userId, company: this.data.job.company, title: this.data.job.title, expiresAt: new Date(deadline) });
@@ -520,7 +532,12 @@ class AttemptRun {
           return { result: "cancelled" };
         }
         const now = await adapter.getStatus(ctx).catch(() => null);
-        if (now && now.state !== "needs_human") {
+        // Between the sign-in page and the form there is a moment with neither on screen; that isn't the person finishing.
+        // A page that stays without a form is what the site shows next, so carry on and let the run report it.
+        const blank = now?.state === "in_progress" && !now.hasForm;
+        blankSince = blank ? (blankSince ?? Date.now()) : null;
+        const settled = now && now.state !== "needs_human" && (!blank || Date.now() - blankSince! >= BLANK_PAGE_GRACE_MS);
+        if (settled) {
           ended = "solved";
           const where = live && !deps.browsers.interactive ? "on the CAPTCHA screen" : "in the browser";
           await resumeHeldApplication(input.applicationId, input.attemptId, input.userId, deps.workerId, `${label.replace(" detected", "").replace(" required", "")} completed ${where}; continuing`, deps.config.leaseMs);

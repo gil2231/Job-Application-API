@@ -123,14 +123,25 @@ const CITIES = ["New York, New York, United States", "Newark, New Jersey, United
 // ─── Greenhouse ─────────────────────────────────────────────────────────────
 
 const GH_PATH = "/greenhouse/examplecorp/jobs/4012345";
+/**
+ * Greenhouse's newer job boards: Google's invisible reCAPTCHA badge in the
+ * corner (it scores the submission in the background, there is nothing to
+ * solve) and uploads whose only label is their "Attach" button.
+ */
+const GH_BADGE_PATH = "/greenhouse/examplecorp/jobs/4012399";
+const GH_BADGE_HTML = `<div class="g-recaptcha" data-sitekey="mock-site-key" data-size="invisible" data-callback="onSubmit"></div>
+  <div class="grecaptcha-badge" data-style="bottomright" style="width:256px;height:60px;position:fixed;bottom:14px;right:-186px;box-shadow:0 0 5px gray;border-radius:2px;overflow:hidden"><div class="grecaptcha-logo"><iframe title="reCAPTCHA" src="about:blank#recaptcha/api2/anchor?ar=1&size=invisible" width="256" height="60" style="border:0"></iframe></div></div>`;
 
-function greenhousePage(values: Values = {}, errors: Record<string, string> = {}): string {
+function greenhousePage(values: Values = {}, errors: Record<string, string> = {}, badge = false): string {
+  const action = badge ? GH_BADGE_PATH : GH_PATH;
   const text = (id: string, name: string, label: string, type = "text", required = true) =>
     `<div class="field"><label for="${id}">${esc(label)}${required ? '<span class="asterisk">*</span>' : ""}</label><input type="${type}" id="${id}" name="${name}" value="${esc(str(values[name]))}"${required ? ' aria-required="true"' : ""}${invalidAttr(id, errors[name])}>${errorHtml(id, errors[name])}</div>`;
   const combo = (id: string, name: string, label: string, options: string[], required: boolean) =>
     `<div class="field"><label id="${id}-label">${esc(label)}${required ? '<span class="asterisk">*</span>' : ""}</label><div class="select__control"><input id="${id}" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="${id}-listbox" aria-labelledby="${id}-label"${required ? ' aria-required="true"' : ""} data-target="${name}" data-options="${esc(JSON.stringify(options))}" value="${esc(str(values[name]))}" autocomplete="off"${invalidAttr(id, errors[name])}><input type="hidden" name="${name}" value="${esc(str(values[name]))}"></div>${errorHtml(id, errors[name])}</div>`;
   const upload = (id: string, name: string, label: string, required: boolean) =>
-    `<div class="field"><div class="upload-label" id="upload-label-${id}">${esc(label)}${required ? '<span class="asterisk">*</span>' : ""}</div><div class="file-upload"><button type="button" class="btn btn--secondary" onclick="document.getElementById('${id}').click()">Attach</button> <span class="file-name" id="${id}-name">No file chosen</span><input type="file" id="${id}" name="${name}" class="visually-hidden" aria-labelledby="upload-label-${id}"${required ? ' aria-required="true"' : ""} accept=".pdf,.doc,.docx,.txt,.rtf" onchange="document.getElementById('${id}-name').textContent=this.files[0]?.name||'No file chosen'"></div>${errorHtml(id, errors[name])}</div>`;
+    badge
+      ? `<div class="field"><div class="upload-label">${esc(label)}${required ? '<span class="asterisk">*</span>' : ""}</div><div class="file-upload"><label for="${id}" class="btn btn--secondary">Attach</label> <span class="file-name" id="${id}-name">No file chosen</span><input type="file" id="${id}" name="${name}" class="visually-hidden"${required ? ' aria-required="true"' : ""} accept=".pdf,.doc,.docx,.txt,.rtf" onchange="document.getElementById('${id}-name').textContent=this.files[0]?.name||'No file chosen'"></div>${errorHtml(id, errors[name])}</div>`
+      : `<div class="field"><div class="upload-label" id="upload-label-${id}">${esc(label)}${required ? '<span class="asterisk">*</span>' : ""}</div><div class="file-upload"><button type="button" class="btn btn--secondary" onclick="document.getElementById('${id}').click()">Attach</button> <span class="file-name" id="${id}-name">No file chosen</span><input type="file" id="${id}" name="${name}" class="visually-hidden" aria-labelledby="upload-label-${id}"${required ? ' aria-required="true"' : ""} accept=".pdf,.doc,.docx,.txt,.rtf" onchange="document.getElementById('${id}-name').textContent=this.files[0]?.name||'No file chosen'"></div>${errorHtml(id, errors[name])}</div>`;
   const summary = Object.keys(errors).length ? `<div class="alert" role="alert">There are errors in your application. Please fix them and submit again.</div>` : "";
   return shell(
     "Business Development Representative at Example Corp",
@@ -143,14 +154,14 @@ function greenhousePage(values: Values = {}, errors: Record<string, string> = {}
       <h1>Business Development Representative</h1><p class="location">New York, NY</p>
       <p>Example Corp is hiring a BDR to build pipeline with mid-market software buyers. You'll prospect, qualify and book meetings for our account executives.</p>
       <div id="app"><h2>Apply for this job</h2>${summary}
-      <form id="application_form" action="${GH_PATH}" method="post" enctype="multipart/form-data" novalidate data-source="greenhouse">
+      <form id="application_form" action="${action}" method="post" enctype="multipart/form-data" novalidate data-source="greenhouse">
         ${text("first_name", "job_application[first_name]", "First Name")}
         ${text("last_name", "job_application[last_name]", "Last Name")}
         ${text("email", "job_application[email]", "Email", "email")}
         ${text("phone", "job_application[phone]", "Phone", "tel")}
         <div class="field"><label id="job_application_location-label">Location (City)<span class="asterisk">*</span></label><input id="job_application_location" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="location-listbox" aria-labelledby="job_application_location-label" aria-required="true" data-target="job_application[location]" data-suggest="${esc(JSON.stringify(CITIES))}" autocomplete="off" value="${esc(str(values["job_application[location]"]))}"${invalidAttr("job_application_location", errors["job_application[location]"])}><input type="hidden" name="job_application[location]" value="${esc(str(values["job_application[location]"]))}">${errorHtml("job_application_location", errors["job_application[location]"])}</div>
-        ${upload("resume", "resume", "Resume/CV", true)}
-        ${upload("cover_letter", "cover_letter", "Cover Letter", false)}
+        ${upload("resume", badge ? "attachments[0]" : "resume", "Resume/CV", true)}
+        ${upload("cover_letter", badge ? "attachments[1]" : "cover_letter", "Cover Letter", false)}
         ${text("question_7001", "job_application[answers_attributes][0][text_value]", "LinkedIn Profile", "text", false)}
         ${combo("question_8012", "job_application[answers_attributes][1][boolean_value]", AUTH_Q, ["Yes", "No"], true)}
         ${combo("question_8013", "job_application[answers_attributes][2][boolean_value]", SPONSOR_Q, ["Yes", "No"], true)}
@@ -158,7 +169,7 @@ function greenhousePage(values: Values = {}, errors: Record<string, string> = {}
         ${combo("job_application_gender", "job_application[gender]", "Gender", ["Male", "Female", "Decline To Self Identify"], false)}
         ${combo("job_application_veteran_status", "job_application[veteran_status]", "Veteran Status", ["I am not a protected veteran", "I identify as one or more of the classifications of protected veteran", "I don't wish to answer"], false)}</div>
         <p style="margin-top:28px"><button id="submit_app" type="submit">Submit Application</button></p>
-      </form></div></main>`,
+      </form></div></main>${badge ? GH_BADGE_HTML : ""}`,
     WIDGETS_JS,
   );
 }
@@ -168,19 +179,21 @@ async function greenhouse(req: IncomingMessage, res: ServerResponse, path: strin
     h.send(res, 200, shell("Thank you for applying", "main{max-width:640px;margin:64px auto;padding:0 24px}", `<main><h1>Thank you for applying.</h1><p>Your application has been received. If your application seems like a good fit for the position we will contact you soon.</p><p>Application ID: ${esc(String(new URL(req.url ?? "/", "http://x").searchParams.get("id") ?? ""))}</p></main>`));
     return true;
   }
-  if (path !== GH_PATH) return false;
+  if (path !== GH_PATH && path !== GH_BADGE_PATH) return false;
+  const badge = path === GH_BADGE_PATH;
   if (req.method === "POST") {
     const { fields, files } = await h.readForm(req);
-    const errors = requireAll(["job_application[first_name]", "job_application[last_name]", "job_application[email]", "job_application[phone]", "job_application[location]", "resume", "job_application[answers_attributes][1][boolean_value]", "job_application[answers_attributes][2][boolean_value]"], fields, files, ["resume"]);
+    const resume = badge ? "attachments[0]" : "resume";
+    const errors = requireAll(["job_application[first_name]", "job_application[last_name]", "job_application[email]", "job_application[phone]", "job_application[location]", resume, "job_application[answers_attributes][1][boolean_value]", "job_application[answers_attributes][2][boolean_value]"], fields, files, [resume]);
     if (Object.keys(errors).length) {
-      h.send(res, 422, greenhousePage(fields, errors));
+      h.send(res, 422, greenhousePage(fields, errors, badge));
       return true;
     }
     const id = h.record("greenhouse", fields, files);
     h.redirect(res, `${GH_PATH}/confirmation?id=${encodeURIComponent(id)}`);
     return true;
   }
-  h.send(res, 200, greenhousePage());
+  h.send(res, 200, greenhousePage({}, {}, badge));
   return true;
 }
 
@@ -387,6 +400,10 @@ async function ashby(req: IncomingMessage, res: ServerResponse, path: string, h:
 // ─── Workday ────────────────────────────────────────────────────────────────
 
 const WD_BASE = "/workday/examplecorp/job/New-York-NY/Business-Development-Representative_R12345";
+/** The same posting as Workday serves it to a fresh browser: rendered by script, a few seconds late. */
+const WD_SLOW = "/workday/examplecorp/details/Business-Development-Representative_R12345";
+const WD_SLOW_RENDER_MS = 2500;
+const WD_SIGNIN_BLANK_MS = 5000;
 
 interface WdField {
   name: string;
@@ -499,8 +516,19 @@ function workdayStep(step: number, values: Values, files: Files, errors: Record<
 async function workday(req: IncomingMessage, res: ServerResponse, path: string, h: AtsHelpers): Promise<boolean> {
   if (!path.startsWith("/workday/")) return false;
   const flow = h.session.steps.workday ?? (h.session.steps.workday = { values: {}, files: {} });
+  const jobPosting = `<h2 data-automation-id="jobPostingHeader">Business Development Representative</h2><p>New York, NY · Full time · R12345</p><p>Build pipeline for Example Corp's mid-market sales team.</p><a class="wd-btn wd-primary" role="button" data-automation-id="adventureButton" href="${WD_BASE}/apply">Apply</a>`;
   if (path === WD_BASE) {
-    h.send(res, 200, workdayFrame("Business Development Representative", `<h2 data-automation-id="jobPostingHeader">Business Development Representative</h2><p>New York, NY · Full time · R12345</p><p>Build pipeline for Example Corp's mid-market sales team.</p><a class="wd-btn wd-primary" role="button" data-automation-id="adventureButton" href="${WD_BASE}/apply">Apply</a>`));
+    h.send(res, 200, workdayFrame("Business Development Representative", jobPosting));
+    return true;
+  }
+  if (path === WD_SLOW) {
+    // Workday's single-page app: an empty shell, then the posting renders well after the network goes quiet.
+    h.send(res, 200, workdayFrame("Example Corp Careers", `<div id="wd-root" aria-busy="true" data-cdn="https://wd5.myworkdaycdn.com"></div>`, `<script>setTimeout(()=>{const r=document.getElementById("wd-root");r.removeAttribute("aria-busy");r.innerHTML=${JSON.stringify(jobPosting)};},${WD_SLOW_RENDER_MS})</script>`));
+    return true;
+  }
+  if (path === `${WD_BASE}/loading`) {
+    // Right after sign-in Workday shows a blank page for a moment before the first step.
+    h.send(res, 200, workdayFrame("Example Corp Careers", `<div aria-busy="true"></div>`, `<script>setTimeout(()=>{location.href="${WD_BASE}/apply/step/0"},${WD_SIGNIN_BLANK_MS})</script>`));
     return true;
   }
   if (path === `${WD_BASE}/apply`) {
@@ -527,7 +555,7 @@ async function workday(req: IncomingMessage, res: ServerResponse, path: string, 
       workdayFrame(
         "Sign In",
         `<h2>Sign In</h2><form method="post" action="${WD_BASE}/signin" style="max-width:360px"><div class="wd-field"><label for="wd-email">Email Address</label><input type="email" id="wd-email" name="email" data-automation-id="email"></div><div class="wd-field"><label for="wd-password">Password</label><input type="password" id="wd-password" name="password" data-automation-id="password"></div><button class="wd-btn wd-primary" type="submit" data-automation-id="signInSubmitButton">Sign In</button> <a href="${WD_BASE}/createAccount" data-automation-id="createAccountLink">Create Account</a></form>`,
-        `<script>setInterval(async()=>{const r=await fetch("/login/state");const j=await r.json();if(j.signedIn)location.href="${WD_BASE}/apply/step/0";},1000)</script>`,
+        `<script>setInterval(async()=>{const r=await fetch("/login/state");const j=await r.json();if(j.signedIn)location.href="${WD_BASE}/loading";},1000)</script>`,
       ),
     );
     return true;
@@ -697,10 +725,12 @@ async function smartRecruiters(req: IncomingMessage, res: ServerResponse, path: 
 /** Entry pages for each mock ATS, as a job's application link would point to them. */
 export const ATS_ENTRY_POINTS = {
   greenhouse: GH_PATH,
+  greenhouseBadge: GH_BADGE_PATH,
   lever: `/lever/examplecorp/${LEVER_ID}`,
   leverGuarded: `/lever/examplecorp/${LEVER_GUARDED_ID}`,
   ashby: `/ashby/examplecorp/${ASHBY_ID}`,
   workday: WD_BASE,
+  workdaySlow: WD_SLOW,
   smartrecruiters: SR_JOB,
 } as const;
 

@@ -116,8 +116,10 @@ export class HeuristicFieldClassifier implements FieldClassifier {
     const hints = field.hints ?? {};
 
     if (field.kind === "file") {
-      if (/cover/.test(label) || /cover/.test(hints.name ?? "")) return { mappedField: "documents.coverLetter", confidence: 95, evidence: "Cover letter upload" };
-      if (/resume|résumé|\bcv\b|curriculum/.test(label) || /resume|cv/.test(hints.name ?? "")) return { mappedField: "documents.resume", confidence: 95, evidence: "Resume upload" };
+      // Some sites label the input only "Attach" and name it by its id instead (Greenhouse: #resume, #cover_letter).
+      const handle = `${hints.name ?? ""} ${hints.id ?? ""}`.toLowerCase();
+      if (/cover/.test(label) || /cover/.test(handle)) return { mappedField: "documents.coverLetter", confidence: 95, evidence: "Cover letter upload" };
+      if (/resume|résumé|\bcv\b|curriculum/.test(label) || /resume|cv/.test(handle)) return { mappedField: "documents.resume", confidence: 95, evidence: "Resume upload" };
       return { mappedField: "unknown", confidence: 0, evidence: `Unrecognized upload "${field.label}"` };
     }
 
