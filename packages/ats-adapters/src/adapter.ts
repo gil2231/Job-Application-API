@@ -35,7 +35,14 @@ export interface ValidationResult {
 export type HumanStep = "CAPTCHA" | "MFA" | "AUTH_REQUIRED";
 
 export type AdapterStatus =
-  | { state: "in_progress"; page: number; isFinalPage: boolean; hasForm: boolean }
+  | {
+      state: "in_progress";
+      page: number;
+      isFinalPage: boolean;
+      hasForm: boolean;
+      /** The site scores submissions in the background (invisible reCAPTCHA), so the final Submit is always the person's own click. */
+      humanSubmitOnly?: boolean;
+    }
   | { state: "needs_human"; reason: HumanStep; detail: string }
   | { state: "submitted"; confirmation?: string }
   | { state: "failed"; failure: FailureType; message: string };

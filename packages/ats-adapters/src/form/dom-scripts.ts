@@ -11,6 +11,8 @@
 export interface ScanOptions {
   /** Only look for fields inside the first element matching one of these selectors (the whole page when none match). */
   roots?: string[];
+  /** When none of `roots` is on the page there is no form yet (Workday's job page has its own search fields). */
+  rootRequired?: boolean;
   /** Extra elements whose text labels a radio, checkbox or button group (e.g. Lever's `.application-label`). */
   groupLabelSelectors?: string[];
   /** Fields to leave alone, such as a "fill the form from my resume" upload. Matches the field or an ancestor. */
@@ -143,7 +145,9 @@ const withOptions = (body: string, options: ScanOptions) => String.raw`(() => {
 
 const SCAN_FIELDS_BODY = String.raw`
   let root = document;
-  for (const sel of OPTIONS.roots || []) { const r = deepAll(document, sel)[0]; if (r) { root = r; break; } }
+  let rootFound = false;
+  for (const sel of OPTIONS.roots || []) { const r = deepAll(document, sel)[0]; if (r) { root = r; rootFound = true; break; } }
+  if (OPTIONS.rootRequired && (OPTIONS.roots || []).length && !rootFound) return [];
   const out = [];
   const groups = new Map();
   const base = (el, type) => ({
@@ -255,8 +259,17 @@ export function scanFieldsScript(options: ScanOptions = {}): string {
 /** Visible security checks (CAPTCHA widgets, sign-in and verification-code forms). Read-only. */
 const SECURITY_BODY = String.raw`
   const captchaSelectors = [".g-recaptcha", ".h-captcha", ".cf-turnstile", "[data-sitekey]", "#captcha", "[data-captcha]", ".captcha", "#px-captcha", ".arkose"];
-  const frames = deepAll(document, "iframe").filter((f) => visible(f) && /recaptcha|hcaptcha|challenges\.cloudflare|turnstile|arkoselabs|funcaptcha|captcha/i.test(f.src || f.title || ""));
-  const widgets = captchaSelectors.flatMap((s) => deepAll(document, s)).filter(visible);
+  // Google's invisible reCAPTCHA only shows a corner badge and scores the submission in the background; it isn't a challenge to solve.
+  const badges = deepAll(document, ".grecaptcha-badge");
+  const scoreOnly = (el) => {
+    for (let node = el; node; node = parentOf(node)) {
+      if (node.classList && node.classList.contains("grecaptcha-badge")) return true;
+      if (node.getAttribute && node.getAttribute("data-size") === "invisible") return true;
+    }
+    return el.tagName === "IFRAME" && /[?&]size=invisible\b/.test(el.src || "");
+  };
+  const frames = deepAll(document, "iframe").filter((f) => visible(f) && !scoreOnly(f) && /recaptcha|hcaptcha|challenges\.cloudflare|turnstile|arkoselabs|funcaptcha|captcha/i.test(f.src || f.title || ""));
+  const widgets = captchaSelectors.flatMap((s) => deepAll(document, s)).filter((w) => visible(w) && !scoreOnly(w));
   const bodyText = clean(document.body ? deepText(document.body) : "").slice(0, 20000);
   const captchaText = /verify (that )?you('re| are) (a )?human|are you a robot|i'?m not a robot|complete the security check/i.test(bodyText);
   const otp = deepAll(document, 'input[autocomplete="one-time-code"], input[name*="otp" i], input[name*="verification" i], input[id*="otp" i]').filter(visible);
@@ -268,6 +281,7 @@ const SECURITY_BODY = String.raw`
     mfa: otp.length > 0 || (otpText && deepAll(document, "input:not([type=hidden])").length <= 4 && !password.length),
     login: password.length > 0,
     signInText,
+    scoreCheck: badges.length > 0,
   };`;
 export const SECURITY_SCRIPT = withOptions(SECURITY_BODY, {});
 

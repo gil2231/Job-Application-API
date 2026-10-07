@@ -64,6 +64,10 @@ describe("field classification", () => {
     expect(classify("Resume/CV", { kind: "file" }).mappedField).toBe("documents.resume");
     expect(classify("Cover Letter", { kind: "file" }).mappedField).toBe("documents.coverLetter");
     expect(classify("Writing sample", { kind: "file" }).mappedField).toBe("unknown");
+    // Greenhouse labels both uploads only "Attach"; the input's id says which is which.
+    expect(classify("Attach", { kind: "file", hints: { id: "resume" } }).mappedField).toBe("documents.resume");
+    expect(classify("Attach", { kind: "file", hints: { id: "cover_letter" } }).mappedField).toBe("documents.coverLetter");
+    expect(classify("Attach", { kind: "file", hints: { id: "portfolio" } }).mappedField).toBe("unknown");
   });
 
   it("gives duplicate labels distinct keys", () => {

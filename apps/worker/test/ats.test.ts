@@ -1,8 +1,8 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
-import { markHumanStepComplete, prisma } from "@autoapply/database";
+import { approveForSubmission, markHumanStepComplete, prisma } from "@autoapply/database";
 import { ATS_ENTRY_POINTS } from "../mock-site/ats";
 import { startMockSite, type MockSite } from "../mock-site/server";
-import { loadApplication, makeApplicant, makeEngine, queueFor, resetDatabase, runOnce, type ApplicantOptions } from "./helpers";
+import { loadApplication, makeApplicant, makeEngine, queueFor, resetDatabase, runOnce, VisibleBrowserPool, type ApplicantOptions } from "./helpers";
 import { decryptString, isEncrypted } from "@autoapply/database/crypto";
 
 /**
@@ -65,6 +65,35 @@ describe("Greenhouse", () => {
     expect(files.resume?.name).toBe("jordan-rivera-resume.pdf");
     expect(files.cover_letter).toBeUndefined();
     expect(after.confirmationNumber).toMatch(/^MOCK-/);
+  });
+});
+
+describe("Greenhouse with Google's invisible reCAPTCHA badge", () => {
+  it("fills the form and attaches files labelled only \"Attach\", but leaves the final Submit to the person even in Auto mode", async () => {
+    const { user, app, after } = await apply(ATS_ENTRY_POINTS.greenhouseBadge, { coverLetter: true });
+    expect(after.status, why(after)).toBe("READY");
+    expect(after.attentionReason).toBe("FINAL_REVIEW");
+    expect(after.attentionDetail).toContain("click Submit yourself");
+    expect(after.platform).toBe("GREENHOUSE");
+    expect(after.events.some((e) => e.type === "RESUME_UPLOADED")).toBe(true);
+    expect(after.events.some((e) => e.type === "COVER_LETTER_UPLOADED")).toBe(true);
+    expect(after.events.some((e) => e.type === "NOTE" && e.message.includes("final Submit is left to you"))).toBe(true);
+    expect(site.submissions).toHaveLength(0);
+
+    // Approving it doesn't change that: it is filled again and handed back.
+    await approveForSubmission(user.id, app.id);
+    await runOnce(engine, workerId, app.id);
+    const again = await loadApplication(app.id);
+    expect(again.status, why(again)).toBe("READY");
+    expect(again.attentionReason).toBe("FINAL_REVIEW");
+    expect(site.submissions).toHaveLength(0);
+  });
+
+  it("Review mode still stops for review first", async () => {
+    const { after } = await apply(ATS_ENTRY_POINTS.greenhouseBadge, { mode: "REVIEW" });
+    expect(after.status, why(after)).toBe("REVIEW_REQUIRED");
+    expect(after.attentionReason).toBe("FINAL_REVIEW");
+    expect(site.submissions).toHaveLength(0);
   });
 });
 
@@ -168,6 +197,34 @@ describe("Workday", () => {
     expect(site.submissions).toHaveLength(0);
   });
 
+  it("waits for a job page that renders its Apply button late", async () => {
+    site.grantSignIns();
+    const { after } = await apply(ATS_ENTRY_POINTS.workdaySlow, { library, mode: "REVIEW" });
+    expect(after.status, why(after)).toBe("REVIEW_REQUIRED");
+    expect(after.attentionReason).toBe("FINAL_REVIEW");
+    expect(after.platform).toBe("WORKDAY");
+    expect(site.submissions).toHaveLength(0);
+  });
+
+  it("after the person signs in, waits through the blank page before the form instead of giving up", async () => {
+    const visible = makeEngine({ browsers: new VisibleBrowserPool({ headless: true, navigationTimeoutMs: 15_000 }), workerId: "visible-worker" });
+    try {
+      const user = await makeApplicant({ library });
+      const app = await queueFor(user.id, `${site.url}${ATS_ENTRY_POINTS.workday}`, { mode: "REVIEW" });
+      const run = runOnce(visible.engine, visible.workerId, app.id);
+      await waitFor(async () => (await loadApplication(app.id)).attentionReason === "AUTH_REQUIRED");
+      site.grantSignIns();
+      await run;
+      const after = await loadApplication(app.id);
+      expect(after.status, why(after)).toBe("REVIEW_REQUIRED");
+      expect(after.attentionReason).toBe("FINAL_REVIEW");
+      expect(after.events.some((e) => e.message.includes("Sign-in completed"))).toBe(true);
+      expect(site.submissions).toHaveLength(0);
+    } finally {
+      await visible.browsers.close();
+    }
+  });
+
   it("asks the person about Workday questions it has no answer for", async () => {
     site.grantSignIns();
     const { after } = await apply(ATS_ENTRY_POINTS.workday);
@@ -194,3 +251,12 @@ describe("SmartRecruiters", () => {
     expect(after.confirmationNumber).toMatch(/^MOCK-/);
   });
 });
+
+async function waitFor(check: () => Promise<boolean>, timeoutMs = 20_000) {
+  const end = Date.now() + timeoutMs;
+  while (Date.now() < end) {
+    if (await check()) return;
+    await new Promise((r) => setTimeout(r, 200));
+  }
+  throw new Error("Timed out waiting for condition");
+}
