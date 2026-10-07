@@ -8,6 +8,7 @@ const pairs: Array<[string, Record<string, string>, readonly string[]]> = [
   ["ApplicationOutcome", $Enums.ApplicationOutcome, shared.APPLICATION_OUTCOMES],
   ["AutomationMode", $Enums.AutomationMode, shared.AUTOMATION_MODES],
   ["Platform", $Enums.Platform, shared.PLATFORMS],
+  ["UserRole", $Enums.UserRole, shared.USER_ROLES],
   ["FailureType", $Enums.FailureType, shared.FAILURE_TYPES],
   ["AttentionReason", $Enums.AttentionReason, shared.ATTENTION_REASONS],
   ["WorkArrangement", $Enums.WorkArrangement, shared.WORK_ARRANGEMENTS],
@@ -21,6 +22,11 @@ const pairs: Array<[string, Record<string, string>, readonly string[]]> = [
   ["EventLevel", $Enums.EventLevel, shared.EVENT_LEVELS],
   ["InterviewKind", $Enums.InterviewKind, shared.INTERVIEW_KINDS],
   ["InterviewStatus", $Enums.InterviewStatus, shared.INTERVIEW_STATUSES],
+  ["NotificationKind", $Enums.NotificationKind, shared.NOTIFICATION_KINDS],
+  ["NotificationChannel", $Enums.NotificationChannel, shared.NOTIFICATION_CHANNELS],
+  ["NotificationStatus", $Enums.NotificationStatus, shared.NOTIFICATION_STATUSES],
+  ["SupportCategory", $Enums.SupportCategory, shared.SUPPORT_CATEGORIES],
+  ["SupportStatus", $Enums.SupportStatus, shared.SUPPORT_STATUSES],
 ];
 
 describe("shared enums mirror the Prisma schema", () => {

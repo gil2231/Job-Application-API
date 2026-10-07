@@ -205,6 +205,9 @@ function FilledSummary({ item }: { item: AttentionItem }) {
   );
 }
 
+/** Stops the browser extension can help finish in the person's own browser. */
+const FINISH_IN_BROWSER = new Set(["CAPTCHA", "AUTH_REQUIRED", "MFA", "UNSUPPORTED_SITE", "FINAL_REVIEW"]);
+
 export function AttentionCard({ item }: { item: AttentionItem }) {
   const { pending, run } = useServerAction();
   const reason = item.attentionReason ?? (item.status === "READY" ? "FINAL_REVIEW" : item.status === "REVIEW_REQUIRED" ? "QUESTION_REVIEW" : "AUTH_REQUIRED");
@@ -235,7 +238,7 @@ export function AttentionCard({ item }: { item: AttentionItem }) {
   return (
     <Card className="gap-4" data-testid="attention-card">
       <CardHeader className="gap-3">
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <heading.icon className="text-warning size-4" />
           <span className="text-xs font-semibold tracking-wider uppercase">{heading.title}</span>
           <Badge variant="outline" className="ml-auto">
@@ -301,6 +304,11 @@ export function AttentionCard({ item }: { item: AttentionItem }) {
             <SkipForward /> Skip application
           </Button>
         </div>
+        {!hasQuestions && FINISH_IN_BROWSER.has(reason) && !/(^|\.)linkedin\.com$/i.test(new URL(url).hostname) && (
+          <p className="text-muted-foreground text-xs">
+            Or open the Applyance browser extension and choose Finish in my browser: it opens this application in your own browser with your answers filled in, and you {isAuth ? "sign in" : "solve the check and submit"} yourself.
+          </p>
+        )}
       </CardContent>
     </Card>
   );

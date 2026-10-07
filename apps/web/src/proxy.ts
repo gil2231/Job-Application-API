@@ -2,7 +2,9 @@ import { NextResponse, type NextRequest } from "next/server";
 import { contentSecurityPolicy, createNonce } from "./lib/csp";
 import { SESSION_COOKIE, sessionCookieOptions } from "./lib/session-cookie";
 
-const PUBLIC_PATHS = ["/sign-in", "/sign-up", "/api/health"];
+const PUBLIC_PATHS = ["/sign-in", "/sign-up", "/api/health", "/unsubscribe", "/api/unsubscribe"];
+const PUBLIC_PATHS = ["/sign-in", "/sign-up", "/api/health", "/terms", "/privacy", "/help"];
+const PUBLIC_PATHS = ["/sign-in", "/sign-up", "/api/health", "/api/client-errors"];
 
 /**
  * Optimistic routing only: sends visitors without a session cookie to sign-in.
@@ -37,5 +39,6 @@ export function proxy(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/((?!_next/static|_next/image|favicon.ico|icon.svg).*)"],
+  // The app icon, manifest, service worker and offline page load before anyone signs in.
+  matcher: ["/((?!_next/static|_next/image|favicon.ico|icon.svg|apple-icon.png|manifest.webmanifest|sw.js|offline.html|icons/).*)"],
 };

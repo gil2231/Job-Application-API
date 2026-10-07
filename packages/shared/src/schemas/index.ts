@@ -275,11 +275,20 @@ export const boardImportSchema = boardSearchSchema.extend({
   urls: z.array(z.string().trim().max(2048)).min(1, "Choose at least one job to add").max(200),
 });
 
+/** A board search saved for daily job alerts. */
+export const savedSearchSchema = boardSearchSchema.extend({
+  name: z.string().trim().min(1, "Name this search").max(80, "Keep the name under 80 characters"),
+  alertsEnabled: checkbox,
+});
+export type SavedSearchFormInput = z.infer<typeof savedSearchSchema>;
+
+export const MAX_SAVED_SEARCHES = 10;
+
 export const recommendationKeywordsSchema = z.object({
   keywords: stringList(30, 100),
 });
 
-export const AI_PROVIDER_OPTIONS = ["anthropic"] as const;
+export const AI_PROVIDER_OPTIONS = ["anthropic", "openai"] as const;
 export const aiSettingsSchema = z.object({
   aiProvider: z
     .string()
@@ -363,9 +372,16 @@ export const userSettingsSchema = z.object({
   fieldConfidenceThreshold: z.coerce.number().int().min(50).max(100),
   answerConfidenceThreshold: z.coerce.number().int().min(50).max(100),
   screenshotRetentionDays: z.coerce.number().int().min(1).max(365),
-  emailNotifications: checkbox,
 });
 export type UserSettingsInput = z.infer<typeof userSettingsSchema>;
+
+export const notificationSettingsSchema = z.object({
+  /** Needs Attention emails. */
+  emailNotifications: checkbox,
+  jobAlertEmails: checkbox,
+  jobAlertHour: z.coerce.number().int().min(0).max(23),
+});
+export type NotificationSettingsInput = z.infer<typeof notificationSettingsSchema>;
 
 /** Flatten zod issues into a { field: message } map for forms. */
 export function fieldErrors(error: z.ZodError): Record<string, string> {

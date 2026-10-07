@@ -11,6 +11,7 @@ import {
   saveJobResults,
   startJobImport,
   type AnalysisJob,
+  type InsertOutcome,
   type JobAnalysisUpdate,
   type PreparedJob,
 } from "@autoapply/database";
@@ -100,6 +101,8 @@ export interface ImportSummary {
   createdJobIds: string[];
   /** Existing jobs that got new details and need re-analysis. */
   enrichedJobIds: string[];
+  /** What happened to each stored job, in source order (invalid rows have none). */
+  outcomes: InsertOutcome[];
 }
 
 /**
@@ -130,7 +133,7 @@ export async function runImport<TInput>(
     }
     const outcomes = await insertImportedJobs(userId, { importId, sourceId, sourceType: parsed.sourceType }, prepared);
 
-    const summary: ImportSummary = { importId, total: parsed.jobs.length, created: 0, duplicates: 0, skipped: 0, failed: 0, needsDetails: 0, issues, createdJobIds: [], enrichedJobIds: [] };
+    const summary: ImportSummary = { importId, total: parsed.jobs.length, created: 0, duplicates: 0, skipped: 0, failed: 0, needsDetails: 0, issues, createdJobIds: [], enrichedJobIds: [], outcomes };
     outcomes.forEach((outcome, i) => {
       const job = prepared[i]!;
       const row = parsed.jobs.find((r) => r.url === job.url)?.row;

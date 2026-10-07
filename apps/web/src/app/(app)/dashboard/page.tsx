@@ -6,6 +6,7 @@ import { countResumes, getDailyUsage, getDashboardStats, getFullProfile, profile
 import { requireUser } from "@/lib/auth";
 import { formatRelative } from "@/lib/format";
 import { getWorkerStatus } from "@/lib/worker-status";
+import { InstallBanner } from "@/components/install-app";
 import { LiveRuns } from "@/components/live-progress";
 import { EmptyState, PageHeader } from "@/components/page-header";
 import { LocalTime } from "@/components/local-time";
@@ -45,6 +46,7 @@ export default async function DashboardPage() {
   return (
     <div className="grid gap-6">
       <PageHeader title={`Welcome back, ${firstName}`} description="Your application pipeline at a glance. Updates live as work progresses." />
+      <InstallBanner />
 
       {completeness.percent < 100 && (
         <Card className="border-primary/25 bg-primary/[0.03]">

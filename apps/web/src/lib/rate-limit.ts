@@ -80,4 +80,6 @@ export const LIMITS = {
   /** Tailored resumes and cover letters may call the AI provider. */
   generate: { limit: relaxed ? 500 : 40, windowMs: 60 * 60_000 },
   mutation: { limit: 120, windowMs: 60_000 },
+  /** "Report a problem" messages, per account or, when signed out, per IP. */
+  support: { limit: relaxed ? 500 : 10, windowMs: 60 * 60_000 },
 } as const;

@@ -1,5 +1,5 @@
 import type { Education, Employment, MasterProfile, Prisma, Skill } from "@prisma/client";
-import type { EducationInput, EmploymentInput, PersonalInput, ProfessionalInput, SkillCategory } from "@autoapply/shared";
+import type { EducationInput, EmploymentInput, PersonalInput, ProfessionalInput, ResumeImportInput, SkillCategory } from "@autoapply/shared";
 import { prisma } from "../client";
 import { NotFoundError } from "./errors";
 
@@ -116,6 +116,54 @@ export async function updateEmployment(userId: string, id: string, input: Employ
 export async function deleteEmployment(userId: string, id: string) {
   const { count } = await prisma.employment.deleteMany({ where: { id, profile: { userId } } });
   if (count === 0) throw new NotFoundError("Employment record");
+}
+
+export interface ResumeImportResult {
+  fieldsUpdated: number;
+  skillsAdded: number;
+  employmentAdded: number;
+  educationAdded: number;
+}
+
+const IMPORT_SKILL_LISTS: Array<[keyof ResumeImportInput["skills"], SkillCategory]> = [
+  ["skills", "SKILL"],
+  ["software", "SOFTWARE"],
+  ["technicalSkills", "TECHNICAL"],
+  ["languages", "LANGUAGE"],
+];
+
+/**
+ * Save what the person confirmed from a resume import, in one transaction.
+ * Fields present replace the profile's value; skills are added to the existing
+ * lists (duplicates skipped); jobs and schools are added as new records.
+ */
+export async function importResumeIntoProfile(userId: string, input: ResumeImportInput): Promise<ResumeImportResult> {
+  const profileId = await profileIdFor(userId);
+  const fields: Prisma.MasterProfileUpdateInput = {};
+  for (const [key, value] of Object.entries(input.personal)) {
+    if (value != null) (fields as Record<string, unknown>)[key] = value;
+  }
+  if (input.currentTitle) fields.currentTitle = input.currentTitle;
+  if (input.summary) fields.summary = input.summary;
+
+  const skillRows: Prisma.SkillCreateManyInput[] = [];
+  for (const [list, category] of IMPORT_SKILL_LISTS) {
+    for (const name of input.skills[list]) skillRows.push({ profileId, name, normalizedName: name.toLowerCase(), category });
+  }
+
+  return prisma.$transaction(async (tx) => {
+    if (Object.keys(fields).length) await tx.masterProfile.update({ where: { id: profileId }, data: fields });
+    const skills = skillRows.length ? await tx.skill.createMany({ data: skillRows, skipDuplicates: true }) : { count: 0 };
+    const { _max } = await tx.education.aggregate({ where: { profileId }, _max: { sortOrder: true } });
+    const firstOrder = (_max.sortOrder ?? -1) + 1;
+    const education = input.education.length
+      ? await tx.education.createMany({ data: input.education.map((e, i) => ({ ...e, profileId, sortOrder: firstOrder + i })) })
+      : { count: 0 };
+    const employment = input.employment.length
+      ? await tx.employment.createMany({ data: input.employment.map((e, i) => ({ ...employmentData(e), profileId, sortOrder: i })) })
+      : { count: 0 };
+    return { fieldsUpdated: Object.keys(fields).length, skillsAdded: skills.count, employmentAdded: employment.count, educationAdded: education.count };
+  });
 }
 
 export interface ProfileCompleteness {

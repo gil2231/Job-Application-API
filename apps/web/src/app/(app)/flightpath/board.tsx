@@ -48,14 +48,14 @@ export function FlightpathBoard({ board, searching }: { board: TrackerBoard; sea
   return (
     <>
       {mover.dialog}
-      <nav aria-label="Jump to stage" className="flex flex-wrap items-center gap-1.5">
+      <nav aria-label="Jump to stage" className="-mx-4 flex items-center gap-1.5 overflow-x-auto px-4 pb-1 md:mx-0 md:flex-wrap md:overflow-visible md:px-0 md:pb-0">
         {columns.map((column) => (
           <button
             key={column.stage}
             type="button"
             onClick={() => document.getElementById(`stage-${column.stage}`)?.scrollIntoView({ behavior: "smooth", inline: "start", block: "nearest" })}
             className={cn(
-              "hover:bg-muted inline-flex h-7 items-center gap-1.5 rounded-full border px-2.5 text-xs font-medium transition-colors",
+              "hover:bg-muted inline-flex h-7 shrink-0 items-center gap-1.5 rounded-full border px-2.5 text-xs font-medium transition-colors",
               column.stage === "SUBMITTED" && "sm:ml-3",
               column.total === 0 && "text-muted-foreground",
             )}
@@ -66,7 +66,7 @@ export function FlightpathBoard({ board, searching }: { board: TrackerBoard; sea
           </button>
         ))}
       </nav>
-      <div className="-mx-4 scroll-px-4 overflow-x-auto px-4 pb-2 md:-mx-6 md:scroll-px-6 md:px-6" role="list" aria-label="Flightpath board">
+      <div className="-mx-4 snap-x snap-mandatory scroll-px-4 overflow-x-auto px-4 pb-2 md:-mx-6 md:snap-none md:scroll-px-6 md:px-6" role="list" aria-label="Flightpath board">
         <div className="flex min-w-max gap-3">
           {columns.map((column) => {
             const allowed = dragging ? checkStageMove(dragging.stage, column.stage, { locked: !!dragging.lockedBy }) : null;
@@ -82,7 +82,7 @@ export function FlightpathBoard({ board, searching }: { board: TrackerBoard; sea
                 aria-label={`${STAGE_META[column.stage].label}, ${column.total}`}
                 data-stage={column.stage}
                 className={cn(
-                  "bg-muted/40 flex shrink-0 flex-col rounded-xl border transition-colors",
+                  "bg-muted/40 flex shrink-0 snap-start flex-col rounded-xl border transition-colors",
                   collapsed ? "w-11" : "w-64",
                   column.stage === "SUBMITTED" && "ml-3",
                   dragging && !canDrop && dragging.stage !== column.stage && "opacity-50",

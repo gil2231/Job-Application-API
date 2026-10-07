@@ -179,6 +179,7 @@ enum JobSourceType {
   CSV_IMPORT
   API
   JOB_BOARD
+  BROWSER_EXTENSION
 }
 
 enum ApplicationEventType {
@@ -245,6 +246,21 @@ enum AttemptStatus {
   CANCELLED
 }
 
+enum SupportCategory {
+  BUG
+  APPLICATION
+  ACCOUNT
+  BILLING
+  PRIVACY
+  FEEDBACK
+  OTHER
+}
+
+enum SupportStatus {
+  OPEN
+  RESOLVED
+}
+
 enum BrowserSessionStatus {
   ACTIVE
   EXPIRED
@@ -253,10 +269,18 @@ enum BrowserSessionStatus {
 
 // ─── Identity & security ────────────────────────────────────────────────────
 
+enum UserRole {
+  USER
+  ADMIN
+}
+
 model User {
   id               String    @id @default(cuid())
   email            String    @unique
   name             String
+  /// ADMIN opens the owner admin panel (/admin). Granted only from the command
+  /// line (pnpm admin:grant), never from the app.
+  role             UserRole  @default(USER)
   /// argon2id hash. Plaintext passwords are never stored or logged.
   passwordHash     String
   emailVerifiedAt  DateTime?
@@ -280,8 +304,16 @@ model User {
   events          ApplicationEvent[]
   interviewRounds InterviewRound[]
   browserSessions BrowserSession[]
+  extensions      ExtensionConnection[]
   automationRule  AutomationRule?
   settings        UserSetting?
+  mailConnections MailConnection[]
+  emailMessages   EmailMessage[]
+  savedSearches   SavedSearch[]
+  notifications   Notification[]
+  supportRequests SupportRequest[]
+
+  @@index([createdAt])
 }
 
 /// Server-side session. Only a SHA-256 hash of the cookie token is stored.
@@ -299,6 +331,27 @@ model Session {
 
   @@index([userId])
   @@index([expiresAt])
+}
+
+/// A browser extension linked to the account. The person creates a one-time
+/// pairing code while signed in; the extension trades it for its own token.
+/// Only SHA-256 hashes of the code and the token are stored.
+model ExtensionConnection {
+  id               String    @id @default(cuid())
+  userId           String
+  pairingCodeHash  String?   @unique
+  pairingExpiresAt DateTime?
+  tokenHash        String?   @unique
+  /// Browser and OS the extension reported when it connected, for the Settings list.
+  browser          String?
+  connectedAt      DateTime?
+  lastUsedAt       DateTime?
+  revokedAt        DateTime?
+  createdAt        DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
 }
 
 model AuditLog {
@@ -342,11 +395,11 @@ model MasterProfile {
   githubUrl     String?
 
   // Professional
-  currentTitle    String?
-  targetTitles    String[]
-  summary         String?
-  industries      String[]
-  yearsExperience Decimal? @db.Decimal(4, 1)
+  currentTitle           String?
+  targetTitles           String[]
+  summary                String?
+  industries             String[]
+  yearsExperience        Decimal? @db.Decimal(4, 1)
   /// Keywords the user wants jobs recommended by (Recommended page).
   recommendationKeywords String[]
 
@@ -573,7 +626,7 @@ model JobImport {
 }
 
 model Job {
-  id             String          @id @default(cuid())
+  id             String        @id @default(cuid())
   userId         String
   sourceId       String?
   importId       String?
@@ -589,10 +642,10 @@ model Job {
   location       String?
   description    String?
   postedAt       DateTime?
-  savedAt        DateTime        @default(now())
-  easyApply      Boolean         @default(false)
-  platform       Platform        @default(UNKNOWN)
-  status         JobStatus       @default(IMPORTED)
+  savedAt        DateTime      @default(now())
+  easyApply      Boolean       @default(false)
+  platform       Platform      @default(UNKNOWN)
+  status         JobStatus     @default(IMPORTED)
 
   // Analysis (populated by the analysis pipeline)
   department              String?
@@ -704,6 +757,7 @@ model Application {
   events      ApplicationEvent[]
   attempts    ApplicationAttempt[]
   interviews  InterviewRound[]
+  emails      EmailMessage[]
 
   @@index([userId, status, priority, queuedAt])
   @@index([userId, status, outcome])
@@ -711,6 +765,7 @@ model Application {
   @@index([userId, updatedAt])
   @@index([status, nextAttemptAt])
   @@index([status, lockedUntil])
+  @@index([status, updatedAt])
 }
 
 /// A field or question found on an application form.
@@ -744,17 +799,17 @@ model ApplicationQuestion {
 
 /// The value actually used for one question on one application.
 model ApplicationAnswerInstance {
-  id                  String       @id @default(cuid())
-  questionId          String       @unique
-  libraryAnswerId     String?
+  id              String       @id @default(cuid())
+  questionId      String       @unique
+  libraryAnswerId String?
   /// Encrypted (prefix "enc:v1:") when the source answer is sensitive.
-  value               String
-  source              AnswerSource
-  confidence          Int
-  approvedByUser      Boolean      @default(false)
-  approvedAt          DateTime?
-  createdAt           DateTime     @default(now())
-  updatedAt           DateTime     @updatedAt
+  value           String
+  source          AnswerSource
+  confidence      Int
+  approvedByUser  Boolean      @default(false)
+  approvedAt      DateTime?
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
 
   question      ApplicationQuestion @relation(fields: [questionId], references: [id], onDelete: Cascade)
   libraryAnswer ApplicationAnswer?  @relation(fields: [libraryAnswerId], references: [id], onDelete: SetNull)
@@ -771,6 +826,9 @@ model ApplicationEvent {
   level         EventLevel           @default(INFO)
   message       String
   data          Json?
+  /// HUMAN_INPUT_REQUIRED only: when the Needs Attention alert for it was sent
+  /// (or skipped because the user had already dealt with it).
+  notifiedAt    DateTime?
   createdAt     DateTime             @default(now())
 
   application Application @relation(fields: [applicationId], references: [id], onDelete: Cascade)
@@ -778,27 +836,38 @@ model ApplicationEvent {
 
   @@index([applicationId, createdAt])
   @@index([userId, createdAt])
+  @@index([type, notifiedAt])
 }
 
 /// One interview round on an application (Flightpath).
 model InterviewRound {
-  id              String          @id @default(cuid())
-  applicationId   String
-  userId          String
-  kind            InterviewKind   @default(OTHER)
-  title           String?
-  scheduledAt     DateTime?
-  durationMinutes Int?
+  id                   String          @id @default(cuid())
+  applicationId        String
+  userId               String
+  kind                 InterviewKind   @default(OTHER)
+  title                String?
+  scheduledAt          DateTime?
+  durationMinutes      Int?
   /// Address or meeting link.
-  location        String?
-  interviewers    String?
-  notes           String?
-  status          InterviewStatus @default(SCHEDULED)
-  createdAt       DateTime        @default(now())
-  updatedAt       DateTime        @updatedAt
+  location             String?
+  interviewers         String?
+  notes                String?
+  status               InterviewStatus @default(SCHEDULED)
+  /// Came with a calendar invite in the user's email, so it is already on their calendar.
+  fromInvite           Boolean         @default(false)
+  /// The event Applyance put on the user's calendar for this round.
+  calendarConnectionId String?
+  calendarEventId      String?
+  /// Hash of what was last written to the calendar; a change means the event needs updating.
+  calendarHash         String?
+  calendarSyncedAt     DateTime?
+  calendarError        String?
+  createdAt            DateTime        @default(now())
+  updatedAt            DateTime        @updatedAt
 
-  application Application @relation(fields: [applicationId], references: [id], onDelete: Cascade)
-  user        User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  application        Application     @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+  user               User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  calendarConnection MailConnection? @relation(fields: [calendarConnectionId], references: [id], onDelete: SetNull)
 
   @@index([applicationId, scheduledAt])
   @@index([userId, status, scheduledAt])
@@ -887,7 +956,14 @@ model UserSetting {
   /// Library/AI answers below this confidence (0-100) require human review.
   answerConfidenceThreshold Int      @default(85)
   screenshotRetentionDays   Int      @default(30)
+  /// Needs Attention emails: sent when an application stops and waits for the user.
   emailNotifications        Boolean  @default(true)
+  /// Daily job alert emails for saved searches.
+  jobAlertEmails            Boolean  @default(true)
+  /// Local hour (0-23, in timezone) the daily job alerts run.
+  jobAlertHour              Int      @default(8)
+  /// Local date (YYYY-MM-DD) the daily job alerts last ran, so they run once a day.
+  jobAlertsRanOn            String?
   /// Queue controls read by the worker.
   queuePaused               Boolean  @default(false)
   pauseAfterCurrent         Boolean  @default(false)
@@ -897,4 +973,243 @@ model UserSetting {
   updatedAt                 DateTime @updatedAt
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+// ─── Email and calendar sync ─────────────────────────────────────────────────
+
+enum MailProvider {
+  GOOGLE
+  MICROSOFT
+}
+
+enum MailConnectionStatus {
+  ACTIVE
+  /// The provider refused the saved sign-in (revoked, expired or password changed).
+  NEEDS_RECONNECT
+}
+
+/// What a job-related email says.
+enum EmailKind {
+  CONFIRMATION
+  RESPONSE
+  INTERVIEW
+  OFFER
+  REJECTION
+}
+
+/// What Applyance did with a job-related email.
+enum EmailOutcome {
+  /// The application moved stage.
+  MOVED
+  /// An interview round was added to an application already interviewing.
+  INTERVIEW_ADDED
+  /// Left as a note on the application for the user to act on.
+  SUGGESTED
+  /// Nothing to change (for example an application-received email).
+  NO_CHANGE
+  /// No sent application matched.
+  UNMATCHED
+  /// More than one application could match.
+  AMBIGUOUS
+  /// The user dismissed it.
+  DISMISSED
+}
+
+/// A user's Gmail or Outlook account. Tokens are encrypted (enc:v1).
+model MailConnection {
+  id              String               @id @default(cuid())
+  userId          String
+  provider        MailProvider
+  email           String
+  accessToken     String
+  refreshToken    String?
+  tokenExpiresAt  DateTime?
+  scopes          String[]
+  status          MailConnectionStatus @default(ACTIVE)
+  /// Read job-related email and update Flightpath.
+  readEmail       Boolean              @default(true)
+  /// Apply confident forward moves; when off every update is left as a suggestion.
+  autoUpdate      Boolean              @default(true)
+  /// Put interview rounds on this account's calendar. At most one connection per user has it on.
+  calendarSync    Boolean              @default(false)
+  /// When the last sync finished (successful or not); the worker schedules from it.
+  lastSyncedAt    DateTime?
+  /// Email has been read up to here. Only a successful email sync moves it.
+  syncedThrough   DateTime?
+  lastError       String?
+  /// Sync lease, so the worker and a "Sync now" click never run together.
+  syncLockedUntil DateTime?
+  createdAt       DateTime             @default(now())
+  updatedAt       DateTime             @updatedAt
+
+  user             User                   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  messages         EmailMessage[]
+  calendarRounds   InterviewRound[]
+  calendarRemovals CalendarEventRemoval[]
+
+  @@unique([userId, provider])
+  @@index([status, readEmail, lastSyncedAt])
+}
+
+/// A job-related email Applyance read. Only the sender, subject and a short
+/// snippet are kept; other email is never stored.
+model EmailMessage {
+  id            String       @id @default(cuid())
+  userId        String
+  connectionId  String
+  /// The provider's message id.
+  externalId    String
+  threadId      String?
+  fromName      String?
+  fromAddress   String
+  subject       String
+  snippet       String
+  receivedAt    DateTime
+  kind          EmailKind
+  /// Flightpath stage the email points to.
+  stage         String?
+  confidence    Int
+  outcome       EmailOutcome
+  applicationId String?
+  /// { scheduledAt, location, kind, durationMinutes } when it is an interview invite.
+  interview     Json?
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
+
+  user        User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  connection  MailConnection @relation(fields: [connectionId], references: [id], onDelete: Cascade)
+  application Application?   @relation(fields: [applicationId], references: [id], onDelete: SetNull)
+
+  @@unique([connectionId, externalId])
+  @@index([userId, receivedAt])
+  @@index([userId, outcome])
+  @@index([connectionId, threadId])
+}
+
+/// A calendar event to delete because its interview round was deleted.
+model CalendarEventRemoval {
+  id           String   @id @default(cuid())
+  connectionId String
+  eventId      String
+  attempts     Int      @default(0)
+  createdAt    DateTime @default(now())
+
+  connection MailConnection @relation(fields: [connectionId], references: [id], onDelete: Cascade)
+
+  @@index([connectionId])
+// ─── Alerts and notifications ───────────────────────────────────────────────
+
+/// A job board keyword search the user saved. Daily job alerts run every
+/// enabled one each morning and email the postings not seen before.
+model SavedSearch {
+  id                 String    @id @default(cuid())
+  userId             String
+  name               String
+  /// Board links (see parseBoardRef in packages/ingestion).
+  boards             String[]
+  query              String
+  location           String?
+  searchDescriptions Boolean   @default(false)
+  matchAny           Boolean   @default(false)
+  alertsEnabled      Boolean   @default(true)
+  lastRunAt          DateTime?
+  lastError          String?
+  /// Postings that were new on the last run.
+  lastNewCount       Int?
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+
+  user    User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  matches SavedSearchMatch[]
+
+  @@unique([userId, name])
+  @@index([alertsEnabled])
+}
+
+/// A posting a saved search has found. Its presence is what makes a later run
+/// treat the posting as already seen.
+model SavedSearchMatch {
+  id            String    @id @default(cuid())
+  savedSearchId String
+  userId        String
+  canonicalUrl  String
+  url           String
+  title         String
+  company       String
+  location      String?
+  salaryText    String?
+  postedAt      DateTime?
+  /// False for postings found by the first run, which only sets the baseline.
+  wasNew        Boolean   @default(true)
+  firstSeenAt   DateTime  @default(now())
+  /// Set when the user adds the posting to their jobs from the alert.
+  addedAt       DateTime?
+
+  savedSearch SavedSearch @relation(fields: [savedSearchId], references: [id], onDelete: Cascade)
+
+  @@unique([savedSearchId, canonicalUrl])
+  @@index([userId, firstSeenAt])
+}
+
+enum NotificationKind {
+  NEEDS_ATTENTION
+  JOB_ALERT
+  TEST
+}
+
+enum NotificationChannel {
+  EMAIL
+}
+
+enum NotificationStatus {
+  SENT
+  FAILED
+  /// Not sent because no email provider is set up.
+  SKIPPED
+}
+
+/// Every alert Applyance sent (or tried to), for the user's history and support.
+model Notification {
+  id                String              @id @default(cuid())
+  userId            String
+  kind              NotificationKind
+  channel           NotificationChannel @default(EMAIL)
+  status            NotificationStatus
+  recipient         String
+  subject           String
+  /// Items the alert covered: application ids or saved search match counts.
+  data              Json?
+  providerMessageId String?
+  error             String?
+  createdAt         DateTime            @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, kind, createdAt])
+// ─── Support ────────────────────────────────────────────────────────────────
+
+/// A "Report a problem" or contact-support message. userId is null when it was
+/// sent by someone who isn't signed in (for example, locked out of an account).
+model SupportRequest {
+  id            String          @id @default(cuid())
+  userId        String?
+  /// Where to reply. The account email for signed-in users.
+  email         String
+  name          String?
+  category      SupportCategory
+  subject       String
+  message       String
+  /// Page the report was sent from, path only (no query string).
+  pagePath      String?
+  applicationId String?
+  userAgent     String?
+  status        SupportStatus   @default(OPEN)
+  resolvedAt    DateTime?
+  createdAt     DateTime        @default(now())
+  updatedAt     DateTime        @updatedAt
+
+  user User? @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([status, createdAt])
+  @@index([userId, createdAt])
 }

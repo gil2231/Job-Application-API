@@ -1,5 +1,7 @@
 import type { Metadata } from "next";
-import { getUserSettings, listAuditLogs, listBrowserSessions, listSessions } from "@autoapply/database";
+import { getUserSettings, listAuditLogs, listBrowserSessions, listExtensionConnections, listSessions } from "@autoapply/database";
+import { getUserSettings, listAuditLogs, listBrowserSessions, listNotifications, listSessions } from "@autoapply/database";
+import { createEmailSender } from "@autoapply/notifications";
 import { enumLabel } from "@autoapply/shared";
 import { requireUser } from "@/lib/auth";
 import { formatDate, formatRelative } from "@/lib/format";
@@ -7,8 +9,10 @@ import { PageHeader } from "@/components/page-header";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { ANTHROPIC_DEFAULT_MODEL } from "@autoapply/ai";
+import { ANTHROPIC_DEFAULT_MODEL, OPENAI_DEFAULT_MODEL } from "@autoapply/ai";
 import { AccountForm, AnalysisForm, BrowserSessionList, PasswordForm, PreferencesForm, SessionList } from "./settings-forms";
+import { ExtensionCard } from "./extension-card";
+import { AccountForm, AnalysisForm, BrowserSessionList, NotificationHistory, NotificationsForm, PasswordForm, PreferencesForm, SessionList } from "./settings-forms";
 
 export const metadata: Metadata = { title: "Settings" };
 
@@ -21,7 +25,18 @@ function describeAgent(ua: string | null): string {
 
 export default async function SettingsPage() {
   const user = await requireUser();
-  const [settings, sessions, logs, browserSessions] = await Promise.all([getUserSettings(user.id), listSessions(user.id), listAuditLogs(user.id, 40), listBrowserSessions(user.id)]);
+  const [settings, sessions, logs, browserSessions, extensions] = await Promise.all([
+  const [settings, sessions, logs, browserSessions, notifications] = await Promise.all([
+    getUserSettings(user.id),
+    listSessions(user.id),
+    listAuditLogs(user.id, 40),
+    listBrowserSessions(user.id),
+    listExtensionConnections(user.id),
+  ]);
+  const serverAddress = process.env.API_PUBLIC_URL ?? `http://localhost:${process.env.API_PORT ?? 4000}`;
+    listNotifications(user.id, 10),
+  ]);
+  const email = createEmailSender();
 
   return (
     <div className="grid gap-5">
@@ -38,7 +53,7 @@ export default async function SettingsPage() {
         <Card>
           <CardHeader>
             <CardTitle className="text-sm">Password</CardTitle>
-            <CardDescription>Changing it signs out your other sessions.</CardDescription>
+            <CardDescription>Changing it signs out your other sessions and disconnects the browser extension.</CardDescription>
           </CardHeader>
           <CardContent>
             <PasswordForm />
@@ -54,6 +69,24 @@ export default async function SettingsPage() {
           <PreferencesForm settings={settings} />
         </CardContent>
       </Card>
+      <Card id="notifications" className="scroll-mt-20">
+        <CardHeader>
+          <CardTitle className="text-sm">Notifications</CardTitle>
+          <CardDescription>
+            Emails go to {user.email}.
+            {!email.configured && " Email isn't set up on this server yet, so alerts are listed below but not sent."}
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="grid gap-5">
+          <NotificationsForm settings={settings} emailReady={email.configured} />
+          <div className="grid gap-2">
+            <p className="text-[13px] font-medium">Recent alerts</p>
+            <NotificationHistory
+              rows={notifications.map((n) => ({ id: n.id, kind: enumLabel(n.kind), subject: n.subject, status: n.status, error: n.status === "SENT" ? null : n.error, createdAt: n.createdAt.toISOString() }))}
+            />
+          </div>
+        </CardContent>
+      </Card>
       <Card>
         <CardHeader>
           <CardTitle className="text-sm">AI</CardTitle>
@@ -62,7 +95,27 @@ export default async function SettingsPage() {
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <AnalysisForm settings={settings} anthropicConfigured={!!process.env.ANTHROPIC_API_KEY} defaultModel={ANTHROPIC_DEFAULT_MODEL} />
+          <AnalysisForm
+            settings={settings}
+            providers={[
+              { id: "anthropic", label: "Claude (Anthropic)", keyName: "ANTHROPIC_API_KEY", configured: !!process.env.ANTHROPIC_API_KEY, defaultModel: ANTHROPIC_DEFAULT_MODEL },
+              { id: "openai", label: "OpenAI", keyName: "OPENAI_API_KEY", configured: !!process.env.OPENAI_API_KEY, defaultModel: OPENAI_DEFAULT_MODEL },
+            ]}
+          />
+        </CardContent>
+      </Card>
+      <Card id="browser-extension">
+        <CardHeader>
+          <CardTitle className="text-sm">Browser extension</CardTitle>
+          <CardDescription>
+            Save a job from any site in one click, and finish applications that stop for a CAPTCHA or a sign-in in your own browser. The extension fills in your approved answers; you solve the check and press Submit yourself. On LinkedIn it saves only the link.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <ExtensionCard
+            serverAddress={serverAddress}
+            connections={extensions.map((c) => ({ id: c.id, browser: c.browser ?? "Browser extension", connected: c.connectedAt ? formatRelative(c.connectedAt) : "recently", lastUsed: c.lastUsedAt ? formatRelative(c.lastUsedAt) : null }))}
+          />
         </CardContent>
       </Card>
       <Card>

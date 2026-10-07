@@ -113,4 +113,14 @@
   [role="button"]:not(:disabled) {
     cursor: pointer;
   }
+  /* Grid children may shrink below their content, so a wide table scrolls
+     inside its card instead of stretching the whole page on a phone. */
+  main .grid > * {
+    min-width: 0;
+  }
+  /* Taps shouldn't wait for a double-tap zoom. */
+  html {
+    touch-action: manipulation;
+    -webkit-tap-highlight-color: transparent;
+  }
 }

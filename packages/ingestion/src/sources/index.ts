@@ -1,10 +1,12 @@
 import type { JobSourceAdapter } from "../types";
 import { fileImportSource } from "./file";
+import { browserPageSource } from "./browser-page";
 import { jobBoardSearchSource } from "./job-boards";
 import { urlListSource } from "./url-list";
 
 export { fileImportSource, ImportFileError, type FileInput } from "./file";
 export { urlListSource, extractUrls, companyFromUrl } from "./url-list";
+export { browserPageSource, isLinkedInUrl, type CapturedPage } from "./browser-page";
 export {
   jobBoardSearchSource,
   searchJobBoards,
@@ -29,4 +31,5 @@ export const JOB_SOURCES = {
   file: fileImportSource,
   urls: urlListSource,
   jobBoards: jobBoardSearchSource,
+  extension: browserPageSource,
 } satisfies Record<string, JobSourceAdapter<never>>;
