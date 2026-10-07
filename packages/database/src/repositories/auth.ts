@@ -34,7 +34,7 @@ const getDummyHash = () => (dummyHash ??= hashPassword("autoapply-timing-equaliz
 
 export type PublicUser = Pick<User, "id" | "email" | "name" | "role" | "createdAt">;
 
-const toPublicUser = (u: User): PublicUser => ({ id: u.id, email: u.email, name: u.name, role: u.role, createdAt: u.createdAt });
+export const toPublicUser = (u: User): PublicUser => ({ id: u.id, email: u.email, name: u.name, role: u.role, createdAt: u.createdAt });
 
 export class EmailTakenError extends Error {
   constructor() {

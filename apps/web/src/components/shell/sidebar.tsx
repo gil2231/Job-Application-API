@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState } from "react";
-import { LogOut, Menu, Moon, Sun } from "lucide-react";
+import { Flag, LifeBuoy, LogOut, Menu, Moon, Sun } from "lucide-react";
 import { useTheme } from "next-themes";
 import { signOutAction } from "@/actions/auth";
 import { InstallMenuItem, useInstallApp } from "@/components/install-app";
@@ -17,6 +17,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Sheet, SheetContent, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
+import { ReportProblemDialog } from "@/components/support/report-problem-dialog";
 import { cn } from "@/lib/utils";
 import { MOBILE_TABS, NAV_ITEMS, type NavItem } from "./nav";
 
@@ -54,6 +55,25 @@ function NavLinks({ attentionCount, isAdmin, onNavigate }: { attentionCount: num
         );
       })}
     </nav>
+  );
+}
+
+const supportLinkClass = "text-muted-foreground hover:bg-sidebar-accent hover:text-foreground flex h-8 w-full items-center gap-2.5 rounded-md px-2.5 text-[13px] font-medium transition-colors";
+
+function SupportLinks({ onNavigate }: { onNavigate?: () => void }) {
+  return (
+    <div className="grid gap-0.5 pb-1">
+      <Link href="/help" onClick={onNavigate} className={supportLinkClass}>
+        <LifeBuoy className="size-4" />
+        Help center
+      </Link>
+      <ReportProblemDialog>
+        <button type="button" className={supportLinkClass}>
+          <Flag className="size-4" />
+          Report a problem
+        </button>
+      </ReportProblemDialog>
+    </div>
   );
 }
 
@@ -114,6 +134,7 @@ export function Sidebar({ user, attentionCount }: SidebarProps) {
         <NavLinks attentionCount={attentionCount} isAdmin={user.role === "ADMIN"} />
       </div>
       <div className="border-sidebar-border border-t p-2">
+        <SupportLinks />
         <UserMenu user={user} />
       </div>
     </aside>
@@ -185,5 +206,19 @@ export function MobileNav({ user, attentionCount }: SidebarProps) {
         </button>
       </nav>
     </Sheet>
+        <SheetContent side="left" className="bg-sidebar w-64 gap-0 p-0">
+          <SheetTitle className="sr-only">Navigation</SheetTitle>
+          <Brand />
+          <div className="flex-1 overflow-y-auto py-2">
+            <NavLinks attentionCount={attentionCount} isAdmin={user.role === "ADMIN"} onNavigate={() => setOpen(false)} />
+          </div>
+          <div className="border-t p-2">
+            <SupportLinks onNavigate={() => setOpen(false)} />
+            <UserMenu user={user} />
+          </div>
+        </SheetContent>
+      </Sheet>
+      <span className="font-semibold tracking-tight">AutoApply</span>
+    </div>
   );
 }

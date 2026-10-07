@@ -6,7 +6,7 @@ import globals from "globals";
 
 export default tseslint.config(
   {
-    ignores: ["**/node_modules/**", "**/.next/**", "**/dist/**", "**/coverage/**", "**/next-env.d.ts", "**/playwright-report/**", "**/test-results/**", "**/.storage/**"],
+    ignores: ["**/node_modules/**", "**/.next/**", "**/dist/**", "**/coverage/**", "**/next-env.d.ts", "**/playwright-report/**", "**/test-results/**", "**/.storage/**", "apps/extension/content/page-scripts.js"],
   },
   js.configs.recommended,
   ...tseslint.configs.recommended,
@@ -33,6 +33,8 @@ export default tseslint.config(
   {
     files: ["apps/web/public/sw.js"],
     languageOptions: { globals: { ...globals.serviceworker } },
+    files: ["apps/extension/**/*.js"],
+    languageOptions: { globals: { ...globals.browser, ...globals.webextensions } },
   },
   {
     files: ["**/test/**", "**/e2e/**", "**/*.test.ts", "**/prisma/seed.ts"],
