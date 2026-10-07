@@ -79,7 +79,7 @@ export function TagInput({
             add(text);
           }
         }}
-        className="placeholder:text-muted-foreground min-w-24 flex-1 bg-transparent text-sm outline-none"
+        className="placeholder:text-muted-foreground min-w-24 flex-1 bg-transparent text-base outline-none md:text-sm"
       />
       <input type="hidden" name={name} value={[...tags, ...(draft.trim() ? [draft.trim()] : [])].join("\n")} />
     </div>

@@ -31,6 +31,8 @@ export default tseslint.config(
     },
   },
   {
+    files: ["apps/web/public/sw.js"],
+    languageOptions: { globals: { ...globals.serviceworker } },
     files: ["apps/extension/**/*.js"],
     languageOptions: { globals: { ...globals.browser, ...globals.webextensions } },
   },

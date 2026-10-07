@@ -25,7 +25,11 @@ const nextConfig: NextConfig = {
     serverActions: { bodySizeLimit: "11mb" },
   },
   async headers() {
-    return [{ source: "/:path*", headers: securityHeaders }];
+    return [
+      { source: "/:path*", headers: securityHeaders },
+      // Browsers must always fetch the newest service worker so fixes reach installed apps.
+      { source: "/sw.js", headers: [{ key: "Cache-Control", value: "no-cache, no-store, must-revalidate" }] },
+    ];
   },
 };
 

@@ -10,7 +10,8 @@ import { EmptyState } from "@/components/page-header";
 import { AttentionBadge, MatchScore, PlatformLabel, StatusBadge } from "@/components/status";
 import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { formatDate, formatRelative } from "@/lib/format";
+import { TimeAgo } from "@/components/local-time";
+import { formatDate } from "@/lib/format";
 import { useSearchParamsState } from "@/lib/use-search-params-state";
 import { cn } from "@/lib/utils";
 
@@ -76,7 +77,26 @@ export function ApplicationsView({
         </div>
       ) : (
         <>
-          <div className="bg-card rounded-xl border">
+          {/* Phones get a stacked list; the full table starts at tablet width. */}
+          <ul className="bg-card divide-y rounded-xl border md:hidden" data-testid="applications-list">
+            {data.rows.map((a) => (
+              <li key={a.id} className="relative px-3 py-3">
+                <p className="text-muted-foreground truncate text-xs">{a.job.company}</p>
+                <Link href={`/applications/${a.id}`} className="line-clamp-2 text-sm leading-snug font-medium after:absolute after:inset-0">
+                  {a.job.title}
+                </Link>
+                <div className="text-muted-foreground mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs">
+                  <StatusBadge status={a.status} />
+                  {a.attentionReason && <AttentionBadge reason={a.attentionReason} />}
+                  <MatchScore score={a.matchScore} />
+                  <span>
+                    Updated <TimeAgo value={a.updatedAt} />
+                  </span>
+                </div>
+              </li>
+            ))}
+          </ul>
+          <div className="bg-card hidden rounded-xl border md:block">
             <Table>
               <TableHeader>
                 <TableRow className="hover:bg-transparent">
@@ -117,7 +137,9 @@ export function ApplicationsView({
                     <TableCell className="text-[13px] tabular-nums">{a.attemptCount}</TableCell>
                     <TableCell className="text-muted-foreground text-[13px]">{formatDate(a.createdAt, "MMM d")}</TableCell>
                     <TableCell className="text-muted-foreground text-[13px]">{formatDate(a.submittedAt, "MMM d")}</TableCell>
-                    <TableCell className="text-muted-foreground pr-4 text-[13px]">{formatRelative(a.updatedAt)}</TableCell>
+                    <TableCell className="text-muted-foreground pr-4 text-[13px]">
+                      <TimeAgo value={a.updatedAt} />
+                    </TableCell>
                   </TableRow>
                 ))}
               </TableBody>

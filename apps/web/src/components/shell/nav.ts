@@ -19,6 +19,8 @@ import {
 export interface NavItem {
   href: string;
   label: string;
+  /** Label in the phone tab bar, where space is tight. */
+  shortLabel?: string;
   icon: LucideIcon;
   badgeKey?: "attention";
   /** Only shown to admins (the pages themselves also check). */
@@ -32,7 +34,7 @@ export const NAV_ITEMS: NavItem[] = [
   { href: "/jobs", label: "Jobs", icon: Briefcase },
   { href: "/job-alerts", label: "Job alerts", icon: BellRing },
   { href: "/applications", label: "Applications", icon: Send },
-  { href: "/needs-attention", label: "Needs Attention", icon: AlertCircle, badgeKey: "attention" },
+  { href: "/needs-attention", label: "Needs Attention", shortLabel: "Needs you", icon: AlertCircle, badgeKey: "attention" },
   { href: "/profile", label: "Master Profile", icon: UserRound },
   { href: "/documents", label: "Documents", icon: FileText },
   { href: "/answers", label: "Answer Library", icon: BookOpenText },
@@ -41,3 +43,6 @@ export const NAV_ITEMS: NavItem[] = [
   { href: "/settings", label: "Settings", icon: Settings },
   { href: "/admin", label: "Admin", icon: ShieldCheck, adminOnly: true },
 ];
+
+/** The pages in the phone tab bar; everything else is under More. */
+export const MOBILE_TABS = ["/dashboard", "/needs-attention", "/flightpath", "/jobs"];

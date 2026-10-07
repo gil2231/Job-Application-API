@@ -169,6 +169,14 @@ Stages aren't stored separately: Flightpath derives them from the application's 
 
 The REST API exposes the same operations: `GET /v1/tracker/board`, `GET /v1/tracker/applications`, `PATCH /v1/applications/:id/stage`, and interview rounds under `/v1/applications/:id/interviews` and `/v1/interviews/:id`.
 
+## Installing the app and using it on a phone
+
+Applyance is a web app that can also be installed, so it gets its own icon on the desktop or home screen and opens in its own window. Choose **Install Applyance** in the account menu (or on the dashboard card): Chrome and Edge open their install dialog, and Safari on iPhone, iPad and Mac shows the steps (Share, then Add to Home Screen; or File, then Add to Dock).
+
+- `apps/web/src/app/manifest.ts` describes the installed app (name, icons, start page, shortcuts to Needs Attention, Flightpath and Jobs). Icons live in `apps/web/public/icons` and `apps/web/src/app/apple-icon.png`.
+- `apps/web/public/sw.js` is a small service worker. It caches only the offline page and an icon: app pages hold private data, so they always come from the network, and when it's unreachable you see `offline.html` instead of a browser error.
+- On phones a tab bar along the bottom holds Dashboard, Needs you (with its count), Flightpath, Jobs and More. Job, application and Flightpath lists become stacked cards, other tables scroll inside their card, buttons grow to finger size on touch screens, and inputs use 16px text so iPhones don't zoom in on them.
+- Installing needs HTTPS in production (localhost works for development).
 ## Alerts
 
 The worker sends two kinds of email. Both can be turned off in **Settings → Notifications**, and every email has a one-click unsubscribe link. Settings also lists recent alerts and whether each one was sent.
