@@ -20,4 +20,6 @@ export * from "./repositories/worker";
 export * from "./repositories/generated";
 export * from "./repositories/tracker";
 export * from "./repositories/extension";
+export * from "./repositories/notifications";
+export * from "./repositories/support";
 export * from "./repositories/admin";

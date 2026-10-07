@@ -165,6 +165,15 @@ export type ApplicationEventType = (typeof APPLICATION_EVENT_TYPES)[number];
 export const EVENT_LEVELS = ["INFO", "WARNING", "ERROR"] as const;
 export type EventLevel = (typeof EVENT_LEVELS)[number];
 
+export const NOTIFICATION_KINDS = ["NEEDS_ATTENTION", "JOB_ALERT", "TEST"] as const;
+export type NotificationKind = (typeof NOTIFICATION_KINDS)[number];
+
+export const NOTIFICATION_CHANNELS = ["EMAIL"] as const;
+export type NotificationChannel = (typeof NOTIFICATION_CHANNELS)[number];
+
+export const NOTIFICATION_STATUSES = ["SENT", "FAILED", "SKIPPED"] as const;
+export type NotificationStatus = (typeof NOTIFICATION_STATUSES)[number];
+
 const titleCase = (value: string) =>
   value
     .toLowerCase()
@@ -188,6 +197,9 @@ const LABEL_OVERRIDES: Record<string, string> = {
   API: "API",
   JOB_BOARD: "Job board search",
   BROWSER_EXTENSION: "Browser extension",
+  NEEDS_ATTENTION: "Needs Attention",
+  JOB_ALERT: "Job alert",
+  TEST: "Test email",
 };
 
 /** Human-readable label for any enum value in this file. */

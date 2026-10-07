@@ -1,5 +1,7 @@
 import type { Metadata } from "next";
 import { getUserSettings, listAuditLogs, listBrowserSessions, listExtensionConnections, listSessions } from "@autoapply/database";
+import { getUserSettings, listAuditLogs, listBrowserSessions, listNotifications, listSessions } from "@autoapply/database";
+import { createEmailSender } from "@autoapply/notifications";
 import { enumLabel } from "@autoapply/shared";
 import { requireUser } from "@/lib/auth";
 import { formatDate, formatRelative } from "@/lib/format";
@@ -10,6 +12,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { ANTHROPIC_DEFAULT_MODEL, OPENAI_DEFAULT_MODEL } from "@autoapply/ai";
 import { AccountForm, AnalysisForm, BrowserSessionList, PasswordForm, PreferencesForm, SessionList } from "./settings-forms";
 import { ExtensionCard } from "./extension-card";
+import { AccountForm, AnalysisForm, BrowserSessionList, NotificationHistory, NotificationsForm, PasswordForm, PreferencesForm, SessionList } from "./settings-forms";
 
 export const metadata: Metadata = { title: "Settings" };
 
@@ -23,6 +26,7 @@ function describeAgent(ua: string | null): string {
 export default async function SettingsPage() {
   const user = await requireUser();
   const [settings, sessions, logs, browserSessions, extensions] = await Promise.all([
+  const [settings, sessions, logs, browserSessions, notifications] = await Promise.all([
     getUserSettings(user.id),
     listSessions(user.id),
     listAuditLogs(user.id, 40),
@@ -30,6 +34,9 @@ export default async function SettingsPage() {
     listExtensionConnections(user.id),
   ]);
   const serverAddress = process.env.API_PUBLIC_URL ?? `http://localhost:${process.env.API_PORT ?? 4000}`;
+    listNotifications(user.id, 10),
+  ]);
+  const email = createEmailSender();
 
   return (
     <div className="grid gap-5">
@@ -60,6 +67,24 @@ export default async function SettingsPage() {
         </CardHeader>
         <CardContent>
           <PreferencesForm settings={settings} />
+        </CardContent>
+      </Card>
+      <Card id="notifications" className="scroll-mt-20">
+        <CardHeader>
+          <CardTitle className="text-sm">Notifications</CardTitle>
+          <CardDescription>
+            Emails go to {user.email}.
+            {!email.configured && " Email isn't set up on this server yet, so alerts are listed below but not sent."}
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="grid gap-5">
+          <NotificationsForm settings={settings} emailReady={email.configured} />
+          <div className="grid gap-2">
+            <p className="text-[13px] font-medium">Recent alerts</p>
+            <NotificationHistory
+              rows={notifications.map((n) => ({ id: n.id, kind: enumLabel(n.kind), subject: n.subject, status: n.status, error: n.status === "SENT" ? null : n.error, createdAt: n.createdAt.toISOString() }))}
+            />
+          </div>
         </CardContent>
       </Card>
       <Card>

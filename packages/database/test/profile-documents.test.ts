@@ -1,7 +1,15 @@
 import { beforeEach, describe, expect, it } from "vitest";
-import { answerSchema, employmentSchema, professionalSchema } from "@autoapply/shared";
+import { answerSchema, employmentSchema, professionalSchema, resumeImportSchema } from "@autoapply/shared";
 import { prisma } from "../src/client";
-import { createEmployment, deleteEmployment, getFullProfile, profileCompleteness, updateProfessional } from "../src/repositories/profile";
+import {
+  createEmployment,
+  deleteEmployment,
+  getFullProfile,
+  importResumeIntoProfile,
+  profileCompleteness,
+  updatePersonal,
+  updateProfessional,
+} from "../src/repositories/profile";
 import { createDocument, deleteDocument, listDocuments, setDefaultDocument } from "../src/repositories/documents";
 import { createAnswer, getAnswerSuggestions, listAnswers } from "../src/repositories/answers";
 import { NotFoundError } from "../src/repositories/errors";
@@ -28,6 +36,44 @@ describe("master profile", () => {
     const profile = await getFullProfile(a.id);
     expect(profile.employment).toHaveLength(1);
     expect(profileCompleteness(profile, { resumes: 0 }).missing).toContain("Resume");
+  });
+});
+
+describe("resume import", () => {
+  it("writes only the confirmed fields, adds skills without duplicates and appends records", async () => {
+    const user = await makeUser();
+    await updatePersonal(user.id, { firstName: "Janet", lastName: "Doe", phone: "212-555-0100" });
+    await updateProfessional(user.id, professionalSchema.parse({ skills: "Negotiation", software: "Salesforce" }));
+    await createEmployment(user.id, employmentSchema.parse({ company: "Old Co", title: "Rep", startDate: "2015-01-01", endDate: "2016-01-01" }));
+
+    const input = resumeImportSchema.parse({
+      personal: { firstName: "Jane", email: "Jane.Doe@Example.com", linkedinUrl: "https://linkedin.com/in/janedoe" },
+      summary: "Quota-carrying seller.",
+      skills: { skills: ["negotiation", "Prospecting"], software: ["Salesforce", "HubSpot"], languages: ["Spanish (professional)"] },
+      employment: [{ company: "Northwind Software Inc.", title: "Senior Account Executive", startDate: "2022-01", isCurrent: true, achievements: ["Closed $1.2M in new ARR"] }],
+      education: [{ school: "University of Texas at Austin", degree: "BBA", major: "Marketing", gpa: 3.6, gpaScale: 4, graduationDate: "2019-05" }],
+    });
+    const result = await importResumeIntoProfile(user.id, input);
+    expect(result).toEqual({ fieldsUpdated: 4, skillsAdded: 3, employmentAdded: 1, educationAdded: 1 });
+
+    const profile = await getFullProfile(user.id);
+    // Unconfirmed fields keep their value.
+    expect(profile).toMatchObject({ firstName: "Jane", lastName: "Doe", phone: "212-555-0100", email: "jane.doe@example.com", summary: "Quota-carrying seller." });
+    expect(profile.skills.map((s) => `${s.category}:${s.name}`).sort()).toEqual([
+      "LANGUAGE:Spanish (professional)",
+      "SKILL:Negotiation",
+      "SKILL:Prospecting",
+      "SOFTWARE:HubSpot",
+      "SOFTWARE:Salesforce",
+    ]);
+    expect(profile.employment.map((e) => e.company)).toEqual(["Northwind Software Inc.", "Old Co"]);
+    expect(profile.employment[0]).toMatchObject({ isCurrent: true, endDate: null, startDate: new Date("2022-01-01T00:00:00Z") });
+    expect(profile.education[0]).toMatchObject({ school: "University of Texas at Austin", gpa: 3.6, graduationDate: new Date("2019-05-01T00:00:00Z") });
+  });
+
+  it("rejects invalid records before writing anything", () => {
+    expect(resumeImportSchema.safeParse({ employment: [{ company: "Acme", title: "Rep" }] }).success).toBe(false);
+    expect(resumeImportSchema.safeParse({ personal: { email: "not-an-email" } }).success).toBe(false);
   });
 });
 

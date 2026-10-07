@@ -29,6 +29,9 @@ packages/
   matching/   Match score (0–100, weighted and explained) and the qualification rules engine
   ingestion/  Job sources (LinkedIn export, CSV, pasted URLs), public posting readers, dedup, analysis pipeline
   documents/  Local/S3 storage drivers, upload validation, PDF and Word rendering of generated documents
+  notifications/ Email sender (Resend, or console in development), email templates, Needs Attention alerts,
+              saved searches and daily job alerts, signed unsubscribe links
+  ops/        Error reporting, alerts, health checks, encrypted database backups and restore tests (`pnpm ops`)
 ```
 
 ## Getting started
@@ -69,6 +72,15 @@ Duplicates are skipped by canonical URL (including the LinkedIn job id) and by c
 The search box on the Jobs page looks in titles, companies, locations and descriptions, with the same `"phrase"` and `-word` syntax.
 
 Every new job is analyzed (seniority, location and arrangement, pay, required and preferred qualifications, experience, education, skills, industry, sponsorship, travel, platform), scored against your Master Profile with the weights on the Rules page, and marked Qualified, Not Qualified or Needs Details. On the Rules page, **Include keywords** require a job to mention at least one of them and **Exclude keywords** skip any job that mentions one. Analysis uses the AI provider when `AI_PROVIDER` and its key are set, and the built-in deterministic analyzer otherwise, so it works without a key. Changing your profile or rules re-scores waiting jobs without re-analyzing them.
+
+## Importing your resume
+
+**Master Profile → Import from resume** (`/profile/import`) fills the profile from a resume: upload a PDF, Word (.docx) or text file, or pick a resume already in Documents. Nothing is saved until you confirm.
+
+- The file is read on the server (PDF text by position, so right-aligned dates stay on their line; Word paragraphs with list bullets). Scanned images and old .doc files are refused with a message.
+- With an AI provider set in Settings, the model copies fields out of the resume; otherwise the built-in reader finds the contact block, summary, work history, education and skills sections. If the model fails, the built-in reader is used.
+- Every value is checked against the resume text before you see it. Anything the AI suggested that isn't in the resume (an employer, a skill, a GPA, a country it inferred) is dropped and listed. A month the resume doesn't write is flagged for you to check.
+- On the review page you edit any field and tick what to keep. Personal fields replace the profile's value (a value that differs from your profile starts unticked), skills are added to your lists, and jobs and schools already in your profile start unticked. You can also save the file to Documents as a resume.
 
 ## Running applications
 
@@ -157,6 +169,15 @@ Stages aren't stored separately: Flightpath derives them from the application's 
 
 The REST API exposes the same operations: `GET /v1/tracker/board`, `GET /v1/tracker/applications`, `PATCH /v1/applications/:id/stage`, and interview rounds under `/v1/applications/:id/interviews` and `/v1/interviews/:id`.
 
+## Alerts
+
+The worker sends two kinds of email. Both can be turned off in **Settings → Notifications**, and every email has a one-click unsubscribe link. Settings also lists recent alerts and whether each one was sent.
+
+- **Needs Attention emails.** When an application stops for the person (a CAPTCHA, a sign-in or code, questions to answer, form errors, or the final review), an email lists what's waiting, with a link to each application. The worker waits two minutes so several pauses in a row become one email, and sends at most one every 15 minutes; pauses that come in meanwhile go out together after that. Pauses the person already dealt with are dropped.
+- **Daily job alerts.** On **Job alerts** (or with **Email me new matches** after a job board search) you save up to 10 keyword searches over Greenhouse, Lever and Ashby boards. Every morning at the hour you pick (in your time zone) the worker runs them and emails the postings that weren't there the day before, in one email. The first run only records what's open, jobs already in your list are never reported, and nothing is sent when nothing is new. New matches stay on the Job alerts page for 14 days, where you can add them to your jobs.
+
+To send real email, create a [Resend](https://resend.com) account, verify your domain there, and set `EMAIL_PROVIDER=resend`, `RESEND_API_KEY` and `EMAIL_FROM` for the worker and the web app. Without them, development prints each email in the worker's console and production records alerts as "Not sent". Links in emails use `APP_URL`. Phone push notifications are planned once the installable app ships.
+
 ## Admin panel
 
 `/admin` is for the owner of the Applyance service. It shows every user (when they joined, when they were last active, their jobs, submitted and failed applications), failures grouped by cause and by site, applications that have waited on their user for more than 3 days, and whether the worker is running. It never shows anyone's Master Profile, resumes, cover letters, answers, salary or work authorization. Plans and payments appear once billing is connected.
@@ -187,6 +208,10 @@ pnpm test:e2e    # Playwright browser tests against the dev server, then with th
 - Sensitive answers (demographics, sponsorship) and browser session state are encrypted with AES-256-GCM.
 - Every mutation is checked for authorization, validated with zod, rate-limited, and written to the audit log (Settings → Security log).
 - Uploads are checked against their file signature (magic bytes) and capped at 10 MB.
+
+## Monitoring and backups
+
+Crashes in the web app, API, worker and browser are reported to Sentry (or GlitchTip) with personal data removed, `/api/health/ready` gives uptime monitors one URL that fails when the database, Redis, the worker, the nightly backup or the restore test does, and the worker takes an encrypted (AES-256-GCM) database backup every night and restores it into a scratch database every week to prove it works. All of it is off until configured; [docs/operations/monitoring-and-backups.md](docs/operations/monitoring-and-backups.md) has the sign-up steps, settings, and how to restore. Commands run through `pnpm ops` (`backup`, `list`, `test-restore`, `restore`, `status`, `test-alert`, `generate-key`).
 
 ## Roadmap
 

@@ -16,6 +16,7 @@
     "@autoapply/database": "workspace:*",
     "@autoapply/documents": "workspace:*",
     "@autoapply/ingestion": "workspace:*",
+    "@autoapply/ops": "workspace:*",
     "@autoapply/shared": "workspace:*",
     "@fastify/cookie": "^11.0.2",
     "@fastify/helmet": "^13.0.1",

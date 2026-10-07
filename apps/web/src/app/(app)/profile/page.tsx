@@ -1,9 +1,11 @@
 import type { Metadata } from "next";
-import { CheckCircle2 } from "lucide-react";
+import Link from "next/link";
+import { CheckCircle2, FileUp } from "lucide-react";
 import { getFullProfile, profileCompleteness } from "@autoapply/database";
 import { requireUser } from "@/lib/auth";
 import { loadDocumentData } from "@/lib/documents-data";
 import { PageHeader } from "@/components/page-header";
+import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { DocumentManager } from "../documents/document-manager";
@@ -25,6 +27,14 @@ export default async function ProfilePage({ searchParams }: { searchParams: Prom
       <PageHeader
         title="Master Profile"
         description="Enter your information once. Every application is filled from here, and nothing outside it is ever invented."
+        actions={
+          <Button variant={completeness.percent < 50 ? "default" : "outline"} size="sm" asChild>
+            <Link href="/profile/import">
+              <FileUp />
+              Import from resume
+            </Link>
+          </Button>
+        }
       />
       <Card className="gap-3 py-4">
         <CardHeader className="px-4">
