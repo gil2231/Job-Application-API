@@ -28,6 +28,7 @@ packages/
   matching/   Match score (0–100, weighted and explained) and the qualification rules engine
   ingestion/  Job sources (LinkedIn export, CSV, pasted URLs), public posting readers, dedup, analysis pipeline
   documents/  Local/S3 storage drivers, upload validation, PDF and Word rendering of generated documents
+  ops/        Error reporting, alerts, health checks, encrypted database backups and restore tests (`pnpm ops`)
 ```
 
 ## Getting started
@@ -171,6 +172,10 @@ pnpm test:e2e    # Playwright browser tests against the dev server, then with th
 - Sensitive answers (demographics, sponsorship) and browser session state are encrypted with AES-256-GCM.
 - Every mutation is checked for authorization, validated with zod, rate-limited, and written to the audit log (Settings → Security log).
 - Uploads are checked against their file signature (magic bytes) and capped at 10 MB.
+
+## Monitoring and backups
+
+Crashes in the web app, API, worker and browser are reported to Sentry (or GlitchTip) with personal data removed, `/api/health/ready` gives uptime monitors one URL that fails when the database, Redis, the worker, the nightly backup or the restore test does, and the worker takes an encrypted (AES-256-GCM) database backup every night and restores it into a scratch database every week to prove it works. All of it is off until configured; [docs/operations/monitoring-and-backups.md](docs/operations/monitoring-and-backups.md) has the sign-up steps, settings, and how to restore. Commands run through `pnpm ops` (`backup`, `list`, `test-restore`, `restore`, `status`, `test-alert`, `generate-key`).
 
 ## Roadmap
 

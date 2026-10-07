@@ -12,6 +12,7 @@
   "dependencies": {
     "@autoapply/ats-adapters": "workspace:*",
     "@autoapply/database": "workspace:*",
+    "@autoapply/ops": "workspace:*",
     "@autoapply/shared": "workspace:*",
     "@fastify/cookie": "^11.0.2",
     "@fastify/helmet": "^13.0.1",
