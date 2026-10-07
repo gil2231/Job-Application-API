@@ -25,6 +25,7 @@ import {
   validateSessionToken,
   type PublicUser,
 } from "@autoapply/database";
+import { extensionRoutes } from "./extension";
 import { captureException } from "@autoapply/ops";
 import { applicationFiltersSchema, fieldErrors, interviewRoundSchema, jobFiltersSchema, manualJobSchema, trackerFiltersSchema, trackerStageSchema } from "@autoapply/shared";
 
@@ -49,7 +50,7 @@ async function authenticate(request: FastifyRequest, reply: FastifyReply) {
 const idParam = z.object({ id: z.string().regex(/^[a-z0-9]{20,40}$/i) });
 
 /**
- * REST API for non-browser clients (the worker, future browser extension,
+ * REST API for non-browser clients (the worker, the browser extension,
  * integrations). Uses the same data-access layer and authorization rules as
  * the web app: every query is scoped to the authenticated user.
  */
@@ -151,6 +152,8 @@ export async function buildServer(options: { logger?: boolean } = {}): Promise<F
     },
     { prefix: "/v1" },
   );
+
+  await app.register(extensionRoutes, { prefix: "/v1/extension" });
 
   return app;
 }

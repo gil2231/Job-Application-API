@@ -44,3 +44,14 @@ test("settings show sessions and the security log", async ({ page }) => {
   await page.getByRole("button", { name: "Change password" }).click();
   await expect(page.getByText("Current password is incorrect").first()).toBeVisible();
 });
+
+test("settings create a code that connects the browser extension", async ({ page }) => {
+  await signUp(page);
+  await page.goto("/settings");
+  const card = page.locator("#browser-extension");
+  await card.getByRole("button", { name: "Create code" }).click();
+  const code = card.getByTestId("extension-code");
+  await expect(code).toContainText(/[A-Z2-9]{4}-[A-Z2-9]{4}/);
+  await expect(code).toContainText("http://localhost:4000");
+  await expect(page.getByText("extension.code_created")).toBeVisible();
+});

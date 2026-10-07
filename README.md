@@ -14,8 +14,9 @@ AutoApply imports the jobs you've saved, scores them against your Master Profile
 ```
 apps/
   web/        Next.js 16 dashboard (App Router, server actions, SSE live updates)
-  api/        Fastify REST API (/v1/me, /v1/dashboard, /v1/jobs, /v1/applications, /v1/tracker)
+  api/        Fastify REST API (/v1/me, /v1/dashboard, /v1/jobs, /v1/applications, /v1/tracker, /v1/extension)
   worker/     Playwright/BullMQ worker that fills applications, plus mock application pages for tests
+  extension/  Applyance browser extension for Chrome, Edge and Brave (Manifest V3): save jobs, finish applications yourself
 packages/
   database/   Prisma schema, migrations, repositories (all queries are scoped to the user)
   shared/     Enums, zod schemas, salary/URL parsing, standard questions, queue names
@@ -89,7 +90,7 @@ Choose **Apply** on the Jobs page (the arrow next to it picks Manual, Review or 
 - **Review** fills the form and stops for you to approve. **Approve & submit** in Needs Attention lets AutoApply submit it.
 - **Auto** submits only when every check passes: auto-submit is on in Rules, the site is supported, every required field was mapped confidently, every answer is allowed to be sent without review, nothing contradicts your profile, and there's no CAPTCHA. Otherwise it stops for review and says why.
 
-The worker stops before leaving any page that has a question it isn't sure about, so nothing you haven't approved is sent. Approved answers are reused when the application resumes, and **Remember this answer** saves them to your Answer Library. CAPTCHAs, MFA and sign-ins always go to Needs Attention. With `WORKER_HEADLESS=false` the worker opens a real browser window and keeps the page open, so you can finish the check there and it carries on by itself.
+The worker stops before leaving any page that has a question it isn't sure about, so nothing you haven't approved is sent. Approved answers are reused when the application resumes, and **Remember this answer** saves them to your Answer Library. CAPTCHAs, MFA and sign-ins always go to Needs Attention. With `WORKER_HEADLESS=false` the worker opens a real browser window and keeps the page open, so you can finish the check there and it carries on by itself. Otherwise the [browser extension](#browser-extension) opens the application in your own browser with your answers filled in.
 
 The dashboard shows each running application's steps live (server-sent events), and Pause, Resume, Pause after current and Stop now take effect immediately. Daily and concurrency limits from Rules are enforced when the worker claims an application. Postgres holds the state; a crashed worker's applications return to the queue when its lease runs out.
 
@@ -135,6 +136,20 @@ Adding an ATS is one class that describes the site (its buttons, where questions
 | `AUTOMATION_ALLOWED_HOSTS` | `localhost,127.0.0.1` | Hosts the worker may open |
 | `AUTOMATION_ALLOW_ALL_HOSTS` | `false` | Allow public employer sites |
 | `PLAYWRIGHT_CHROMIUM_EXECUTABLE` | | Chromium to launch, if not Playwright's own |
+
+## Browser extension
+
+The Applyance extension (`apps/extension`) works in Chrome, Edge, Brave and other Chromium browsers.
+
+- **Save job.** Click the toolbar icon (or press Alt+Shift+A) on a job's page and choose **Save job**, or right-click a page or a link and choose **Save this job to Applyance**. The job lands on the Jobs page and is scored like any other. On LinkedIn the extension saves only the link and never reads the page, exactly as if you had pasted it; paste the description in Applyance to score it. Elsewhere it uses the page's job posting data, then the public posting a pasted link would get, then the page's heading and text (select the description first to save just that).
+- **Finish in my browser.** The popup lists the applications that need you, with the count on the toolbar icon. **Finish in my browser** opens one in a new tab of your own browser and fills in the answers Applyance has, worked out exactly as the worker would (Master Profile, Answer Library, answers you approved), including your resume. Questions it has no answer for are outlined on the page and listed in a small panel. You solve any CAPTCHA and press the site's Submit button yourself; when the site shows its confirmation, Applyance records the application as submitted (or press **I submitted it**).
+- **Sign-ins.** For an application stopped at a sign-in or verification code, sign in on the page yourself and press **Continue in Applyance**. The extension sends that site's cookies to Applyance, which saves them encrypted (they appear under Settings, Saved application sign-ins) and puts the application back in the queue, so the worker carries on signed in.
+
+The extension never solves a CAPTCHA, never reads or types a password, never presses Submit, and never opens or fills LinkedIn pages. It asks Chrome for access to each application's site when you choose **Finish in my browser**, and reads a page for **Save job** only when you click it.
+
+**Install (development).** In Chrome open `chrome://extensions`, turn on **Developer mode**, choose **Load unpacked** and pick the `apps/extension` folder. Then in Applyance open **Settings, Browser extension**, choose **Create code**, and type the code into the extension's popup. The code works once, for 10 minutes; the extension gets its own key, which only opens the extension's routes (`/v1/extension/*`) and can be disconnected from Settings. The server address defaults to `http://localhost:4000` (`pnpm dev:api`); set `API_PUBLIC_URL` to show a different one in Settings.
+
+`content/page-scripts.js` is generated from the worker's own page scans (`packages/ats-adapters/src/form/dom-scripts.ts`) so both read forms the same way: run `pnpm --filter @autoapply/extension build` after changing them (a test fails until you do). The extension's tests load it into Chromium against the real API.
 
 ## Flightpath: tracking every application
 
@@ -189,6 +204,7 @@ pnpm test:e2e    # Playwright browser tests against the dev server, then with th
 
 - Passwords are hashed with argon2id. Accounts lock for 15 minutes after 5 failed sign-ins.
 - Sessions live in the database, which stores only a SHA-256 hash of each token. The cookie is httpOnly, SameSite=Lax, and `__Host-` prefixed in production.
+- The browser extension connects with a one-time code that lasts 10 minutes and gets its own token (only its SHA-256 hash is stored). That token opens only the extension's routes, and changing your password disconnects it.
 - Sensitive answers (demographics, sponsorship) and browser session state are encrypted with AES-256-GCM.
 - Every mutation is checked for authorization, validated with zod, rate-limited, and written to the audit log (Settings → Security log).
 - Uploads are checked against their file signature (magic bytes) and capped at 10 MB.
@@ -208,3 +224,4 @@ Crashes in the web app, API, worker and browser are reported to Sentry (or Glitc
 | 5 | AI field mapping, answer drafting, resume/cover-letter generation | Done |
 | 6 | Analytics, retries, real-time hardening | Next |
 | — | Flightpath application tracker: stages after submission, interview rounds, board and table, dashboard metrics | Done |
+| — | Browser extension: save jobs from any site, finish CAPTCHAs and sign-ins in your own browser | Done |

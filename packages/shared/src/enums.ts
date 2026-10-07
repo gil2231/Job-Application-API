@@ -131,7 +131,7 @@ export type AnswerCategory = (typeof ANSWER_CATEGORIES)[number];
 export const ANSWER_SOURCES = ["USER", "PROFILE", "AI_GENERATED", "IMPORTED"] as const;
 export type AnswerSource = (typeof ANSWER_SOURCES)[number];
 
-export const JOB_SOURCE_TYPES = ["MANUAL", "LINKEDIN_SAVED", "CSV_IMPORT", "API", "JOB_BOARD"] as const;
+export const JOB_SOURCE_TYPES = ["MANUAL", "LINKEDIN_SAVED", "CSV_IMPORT", "API", "JOB_BOARD", "BROWSER_EXTENSION"] as const;
 export type JobSourceType = (typeof JOB_SOURCE_TYPES)[number];
 
 export const APPLICATION_EVENT_TYPES = [
@@ -196,6 +196,7 @@ const LABEL_OVERRIDES: Record<string, string> = {
   CSV_IMPORT: "CSV import",
   API: "API",
   JOB_BOARD: "Job board search",
+  BROWSER_EXTENSION: "Browser extension",
   NEEDS_ATTENTION: "Needs Attention",
   JOB_ALERT: "Job alert",
   TEST: "Test email",
