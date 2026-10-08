@@ -27,7 +27,7 @@ test("tailors, edits, exports and approves a resume and cover letter for a job",
   await addJob(page, { url: "https://example.com/careers/ae-42", title: "Senior Account Executive", company: "Acme Payments" });
   await expect(page.getByText("Added Senior Account Executive")).toBeVisible();
   await page.goto("/jobs");
-  await page.getByRole("link", { name: "Senior Account Executive" }).click();
+  await page.getByRole("table").getByRole("link", { name: "Senior Account Executive" }).click();
 
   // Tailor the resume: built only from the profile, and a draft until approved.
   const resume = page.getByTestId("generated-resume");

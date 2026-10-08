@@ -101,25 +101,49 @@ export interface FetchedResponse {
   text: string;
 }
 
-/** maxBytes overrides the default 3 MB response cap (e.g. for a whole job board listing). */
-export type HttpFetcher = (url: string, init: { accept: string; maxBytes?: number }) => Promise<FetchedResponse>;
+export interface HttpRequestInit {
+  accept: string;
+  /** Overrides the default 3 MB response cap (e.g. for a whole job board listing). */
+  maxBytes?: number;
+  /** POST is only for public search endpoints that take a JSON body (Workday). Redirects aren't followed for POST. */
+  method?: "GET" | "POST";
+  /** JSON request body, sent with POST. */
+  body?: string;
+  /** Extra headers, e.g. an API key. They are dropped if a redirect leads to another host. */
+  headers?: Record<string, string>;
+  /** Overrides the default 15 second limit for the whole request. */
+  timeoutMs?: number;
+}
+
+export type HttpFetcher = (url: string, init: HttpRequestInit) => Promise<FetchedResponse>;
 
 const MAX_BYTES = 3 * 1024 * 1024;
 const USER_AGENT = "Applyance/1.0 (job posting import; +https://github.com/gil2231/Job-Application-API)";
 
-/** GET a public URL safely. Throws on non-2xx responses. */
+/** Fetch a public URL safely. Throws on non-2xx responses. */
 export const safeFetch: HttpFetcher = async (input, init) => {
   let url = assertFetchableUrl(input);
+  const firstHost = url.host;
+  const post = init.method === "POST";
+  const signal = AbortSignal.timeout(init.timeoutMs ?? 15_000);
   for (let redirects = 0; redirects <= 3; redirects++) {
     const response = await undiciFetch(url, {
       dispatcher: agent,
       redirect: "manual",
-      headers: { accept: init.accept, "user-agent": USER_AGENT },
-      signal: AbortSignal.timeout(15_000),
+      method: post ? "POST" : "GET",
+      body: post ? init.body : undefined,
+      headers: {
+        ...(url.host === firstHost ? init.headers : undefined),
+        ...(post ? { "content-type": "application/json" } : undefined),
+        accept: init.accept,
+        "user-agent": USER_AGENT,
+      },
+      signal,
     });
     if (response.status >= 300 && response.status < 400) {
       const location = response.headers.get("location");
       await response.body?.cancel();
+      if (post) throw new Error(`The site redirected the search (${response.status})`);
       if (!location) throw new Error(`Redirect without a location (${response.status})`);
       url = assertFetchableUrl(new URL(location, url).toString());
       continue;

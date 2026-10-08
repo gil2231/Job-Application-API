@@ -15,6 +15,15 @@ const job = (title: string, extra: Partial<RecommendationCandidate> = {}): Recom
 });
 
 describe("rankRecommendations", () => {
+  it("treats places in the preferences as a boost, not a keyword", () => {
+    const jobs = [job("Account Executive", { location: "Austin, TX" }), job("Account Executive", { location: "New York, NY" }), job("Office Manager", { location: "New York, NY" })];
+    const ranked = rankRecommendations(jobs, ["Account Executive", "SaaS", "NYC", "New York City"]);
+    expect(ranked.map((r) => [r.job.location, r.relevance, r.places])).toEqual([
+      ["New York, NY", 75, ["NYC", "New York City"]],
+      ["Austin, TX", 60, []],
+    ]);
+  });
+
   it("needs a keyword hit and ranks title hits above description hits", () => {
     const jobs = [
       job("Software Engineer", { description: "Partner with our SaaS sales team." }),

@@ -37,7 +37,7 @@ test("saved searches list their new matches and can be paused and deleted", asyn
   await dialog.getByLabel("Keywords").fill('"account executive"');
   await dialog.getByLabel("Job boards").fill("https://boards.greenhouse.io/acme\nhttps://www.linkedin.com/jobs");
   await dialog.getByRole("button", { name: "Save search" }).click();
-  await expect(dialog.locator("#search-boards-error")).toHaveText("Not a Greenhouse, Lever or Ashby board: https://www.linkedin.com/jobs");
+  await expect(dialog.locator("#search-boards-error")).toHaveText("Not a Greenhouse, Lever, Ashby, Workday, Workable, SmartRecruiters or Recruitee board: https://www.linkedin.com/jobs");
   await dialog.getByLabel("Job boards").fill("https://boards.greenhouse.io/acme");
   await dialog.getByRole("button", { name: "Save search" }).click();
   await expect(page.getByText(/Saved "AE roles"/)).toBeVisible();

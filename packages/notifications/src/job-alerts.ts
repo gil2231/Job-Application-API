@@ -47,7 +47,7 @@ export async function runSavedSearch(search: SavedSearchRow, options: { http?: H
   let result;
   try {
     result = await searchJobBoards(
-      { boards, query: search.query, location: search.location, searchDescriptions: search.searchDescriptions, matchAny: search.matchAny },
+      { boards, query: search.query, location: search.location, searchDescriptions: search.searchDescriptions, matchAny: search.matchAny, fresh: true },
       options.http ?? safeFetch,
     );
   } catch (error) {

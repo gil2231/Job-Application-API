@@ -11,6 +11,8 @@ function fakeHttp(routes: Record<string, unknown>) {
 }
 
 const GREENHOUSE = "https://boards-api.greenhouse.io/v1/boards/acme/jobs?content=true";
+/** Without descriptions, which is how searches over titles read Greenhouse. */
+const GREENHOUSE_TITLES = "https://boards-api.greenhouse.io/v1/boards/acme/jobs";
 const LEVER = "https://api.lever.co/v0/postings/globex?mode=json";
 const ASHBY = "https://api.ashbyhq.com/posting-api/job-board/initech?includeCompensation=true";
 
@@ -51,6 +53,8 @@ const routes = {
   },
 };
 
+Object.assign(routes, { [GREENHOUSE_TITLES]: routes[GREENHOUSE] });
+
 const boards = parseBoardList("boards.greenhouse.io/acme\nhttps://jobs.lever.co/globex\nashby:initech").boards;
 
 describe("parseBoardRef", () => {
@@ -65,7 +69,19 @@ describe("parseBoardRef", () => {
     expect(parseBoardRef("https://jobs.lever.co/globex/0a1b2c3d-1111-2222-3333-444455556666")).toEqual({ provider: "lever", slug: "globex" });
     expect(parseBoardRef("https://jobs.ashbyhq.com/initech/aaaaaaaa-1111-2222-3333-444455556666")).toEqual({ provider: "ashby", slug: "initech" });
   });
+  it("reads Workday, Workable, SmartRecruiters and Recruitee boards", () => {
+    expect(parseBoardRef("https://acme.wd5.myworkdayjobs.com/en-US/External/job/New-York/AE_R1")).toEqual({ provider: "workday", slug: "External", host: "acme.wd5.myworkdayjobs.com" });
+    expect(parseBoardRef("acme.wd1.myworkdayjobs.com/Careers")).toEqual({ provider: "workday", slug: "Careers", host: "acme.wd1.myworkdayjobs.com" });
+    expect(parseBoardRef("workday:acme.wd5/External")).toEqual({ provider: "workday", slug: "External", host: "acme.wd5.myworkdayjobs.com" });
+    expect(parseBoardRef("https://apply.workable.com/hooli/j/ABC123/")).toEqual({ provider: "workable", slug: "hooli" });
+    expect(parseBoardRef("https://jobs.smartrecruiters.com/Umbrella/7440000")).toEqual({ provider: "smartrecruiters", slug: "Umbrella" });
+    expect(parseBoardRef("https://piedpiper.recruitee.com/o/sales-rep")).toEqual({ provider: "recruitee", slug: "piedpiper" });
+    expect(parseBoardRef("workday:acme")).toBeNull();
+    expect(parseBoardRef("https://evil.example.com.myworkdayjobs.com/External")).toBeNull();
+  });
   it("rejects other sites, LinkedIn included, and odd names", () => {
+    expect(parseBoardRef("https://app.joinhandshake.com/jobs/123")).toBeNull();
+    expect(parseBoardRef("https://www.indeed.com/viewjob?jk=1")).toBeNull();
     expect(parseBoardRef("https://www.linkedin.com/jobs/search?keywords=sales")).toBeNull();
     expect(parseBoardRef("https://careers.acme.com")).toBeNull();
     expect(parseBoardRef("greenhouse:../../admin")).toBeNull();
@@ -86,7 +102,7 @@ describe("searchJobBoards", () => {
     expect(result.jobs[0]).toMatchObject({ company: "Acme Inc", provider: "greenhouse", url: "https://boards.greenhouse.io/acme/jobs/101", applicationUrl: null, matchedIn: "title" });
     expect(result.boards.map((b) => [b.slug, b.postings, b.matches])).toEqual([["acme", 3, 1], ["globex", 1, 0], ["initech", 1, 1]]);
     // Only the documented public APIs are called.
-    expect(http.mock.calls.map((c) => c[0]).sort()).toEqual([ASHBY, GREENHOUSE, LEVER].sort());
+    expect(http.mock.calls.map((c) => c[0]).sort()).toEqual([ASHBY, GREENHOUSE_TITLES, LEVER].sort());
   });
 
   it("searches descriptions when asked, listing title matches first", async () => {

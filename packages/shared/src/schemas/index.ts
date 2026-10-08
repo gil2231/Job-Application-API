@@ -310,8 +310,33 @@ export type SavedSearchFormInput = z.infer<typeof savedSearchSchema>;
 
 export const MAX_SAVED_SEARCHES = 10;
 
-export const recommendationKeywordsSchema = z.object({
-  keywords: stringList(30, 100),
+export const searchPreferencesSchema = z.object({
+  preferences: z.string().max(5_000, "Keep your preferences under 5,000 characters").transform((v) => v.replace(/\s*\n\s*/g, ", ").trim()),
+});
+
+/** The Jobs page search bar. */
+export const jobFinderSchema = z.object({
+  query: z.string().trim().max(300, "Keep the search under 300 characters"),
+  location: optionalText(100),
+});
+export type JobFinderInput = z.input<typeof jobFinderSchema>;
+
+/** Results picked from the Jobs page search, to add to the list. */
+export const foundJobsSchema = z.object({
+  jobs: z
+    .array(
+      z.object({
+        url: z.string().trim().url().max(2048),
+        title: z.string().trim().min(1).max(200),
+        company: z.string().trim().min(1).max(200),
+        location: z.string().trim().max(200).nullish(),
+        postedAt: z.coerce.date().nullish(),
+        salaryText: z.string().trim().max(200).nullish(),
+        workArrangement: z.enum(WORK_ARRANGEMENTS).nullish(),
+      }),
+    )
+    .min(1, "Choose at least one job to add")
+    .max(200),
 });
 
 export const AI_PROVIDER_OPTIONS = ["anthropic", "openai"] as const;

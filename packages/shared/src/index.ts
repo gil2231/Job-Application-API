@@ -10,6 +10,7 @@ export * from "./schemas";
 export * from "./queue";
 export * from "./live-solve";
 export * from "./keywords";
+export * from "./preferences";
 export * from "./documents";
 export * from "./tracker";
 export * from "./plans";

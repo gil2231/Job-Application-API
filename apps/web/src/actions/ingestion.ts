@@ -7,6 +7,7 @@ import { htmlToText } from "@autoapply/ai";
 import {
   analyzeJobs,
   BOARD_PROVIDER_LABELS,
+  BOARD_PROVIDER_LIST,
   BoardSearchError,
   boardKey,
   boardUrl,
@@ -142,7 +143,7 @@ export interface BoardSearchData {
 function readBoards(input: BoardSearchFormInput) {
   const { boards, invalid } = parseBoardList(input.boards);
   if (invalid.length) {
-    const message = `Not a Greenhouse, Lever or Ashby board: ${invalid.slice(0, 3).join(", ")}${invalid.length > 3 ? "…" : ""}`;
+    const message = `Not a ${BOARD_PROVIDER_LIST} board: ${invalid.slice(0, 3).join(", ")}${invalid.length > 3 ? "…" : ""}`;
     return { error: { ok: false, message, errors: { boards: message } } as ActionResult<never> };
   }
   if (!boards.length) return { error: { ok: false, message: "Add at least one job board", errors: { boards: "Add at least one job board" } } as ActionResult<never> };
@@ -154,7 +155,7 @@ function readBoards(input: BoardSearchFormInput) {
 }
 
 /**
- * Search companies' public Greenhouse, Lever and Ashby job boards by keyword.
+ * Search the job boards the user listed by keyword.
  * Nothing is saved except the search itself; the user picks what to add.
  */
 export async function searchJobBoardsAction(input: BoardSearchFormInput): Promise<ActionResult<BoardSearchData>> {

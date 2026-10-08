@@ -72,20 +72,20 @@ export function RecommendedList({ rows, hasKeywords }: { rows: RecommendedRow[];
           title="No recommendations yet"
           description={
             hasKeywords
-              ? "None of your saved jobs mention your keywords. Find more on job boards, or import jobs from the Jobs page."
-              : "Add keywords above, or import jobs and fill in your Master Profile so they can be scored."
+              ? "None of your saved jobs mention your preferences yet."
+              : "Add preferences, or import jobs and fill in your Master Profile so they can be scored."
           }
         />
       </Card>
     );
   }
   return (
-    <Card className="py-0">
+    <div className="rounded-lg border">
       <ul className="divide-y" data-testid="recommendations">
         {rows.map((row) => (
           <Row key={row.id} row={row} />
         ))}
       </ul>
-    </Card>
+    </div>
   );
 }

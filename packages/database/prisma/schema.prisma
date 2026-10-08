@@ -488,8 +488,8 @@ model MasterProfile {
   summary                String?
   industries             String[]
   yearsExperience        Decimal? @db.Decimal(4, 1)
-  /// Keywords the user wants jobs recommended by (Recommended page).
-  recommendationKeywords String[]
+  /// Job search preferences: comma-separated roles, industries, keywords and places. Null until the user writes their own.
+  searchPreferences      String?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

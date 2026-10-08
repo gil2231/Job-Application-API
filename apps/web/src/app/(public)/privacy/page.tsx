@@ -110,8 +110,9 @@ export default function PrivacyPage() {
       <LegalSection {...section("other-sources")}>
         <ul>
           <li>
-            <strong>Job postings:</strong> we read the public job posting pages you save and the public job board listings (Greenhouse, Lever and Ashby) you choose to
-            search.
+            <strong>Job postings:</strong> we read the public job posting pages you save, and when you search for jobs, companies&apos; public job board listings
+            (Greenhouse, Lever, Ashby, Workday, Workable, SmartRecruiters and Recruitee). If search across job sites is turned on, the words and place you search for are
+            also sent to JSearch, a job listings service, which returns matching listings.
           </li>
           <li>
             <strong>LinkedIn:</strong> we only read a LinkedIn data export file you download from LinkedIn and upload to us, or links you paste. {name} never signs in to

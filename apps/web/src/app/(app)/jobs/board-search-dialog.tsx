@@ -254,8 +254,9 @@ function BoardSearch({ saved, onDone }: { saved: SavedBoardSearchView | null; on
         error={errors.boards}
         hint={
           <>
-            One per line, up to 25: a company&apos;s Greenhouse, Lever or Ashby job board link (for example boards.greenhouse.io/acme or jobs.lever.co/acme). Open a company&apos;s careers
-            page and copy the link of its job list. These boards publish their openings for anyone to read. LinkedIn is never searched.
+            One per line, up to 25: a company&apos;s Greenhouse, Lever, Ashby, Workday, Workable, SmartRecruiters or Recruitee job board link (for example
+            boards.greenhouse.io/acme or acme.wd5.myworkdayjobs.com/External). Open a company&apos;s careers page and copy the link of its job list. These boards are also
+            included in the search bar on the Jobs page.
           </>
         }
       >
@@ -295,7 +296,7 @@ export function BoardSearchDialog({ saved, label = "Search job boards" }: { save
       </DialogTrigger>
       <DialogContent className="sm:max-w-2xl">
         <DialogHeader>
-          <DialogTitle>Search job boards</DialogTitle>
+          <DialogTitle>Search specific boards</DialogTitle>
           <DialogDescription>Find open jobs on companies&apos; public job boards by keyword, then pick the ones to add. Added jobs are scored like any other.</DialogDescription>
         </DialogHeader>
         {open && <BoardSearch saved={saved} onDone={() => setOpen(false)} />}
