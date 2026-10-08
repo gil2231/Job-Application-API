@@ -175,6 +175,11 @@ export async function setApplicationPlatform(applicationId: string, platform: Pl
   await prisma.job.updateMany({ where: { id: app.jobId, platform: { in: ["UNKNOWN", "GENERIC"] } }, data: { platform } });
 }
 
+/** Point a job at the company's own application, found for a job saved from LinkedIn, Handshake or another listing site. */
+export async function setJobApplicationUrl(jobId: string, applicationUrl: string, platform: Platform) {
+  await prisma.job.update({ where: { id: jobId }, data: { applicationUrl, platform } });
+}
+
 export async function setProfileSnapshot(applicationId: string, snapshot: Record<string, unknown>, materials: { resumeId?: string | null; coverLetterId?: string | null }) {
   await prisma.application.update({
     where: { id: applicationId },

@@ -1,4 +1,4 @@
-import { extractLinkedInJobId, parseHttpUrl, type WorkArrangement } from "@autoapply/shared";
+import { extractLinkedInJobId, listingSite, parseHttpUrl, type WorkArrangement } from "@autoapply/shared";
 import type { RawJob } from "../types";
 import { safeFetch, type HttpFetcher } from "./safe-fetch";
 
@@ -342,7 +342,8 @@ const READERS: PostingReader[] = [greenhouse, lever, ashby, smartRecruiters, wor
  */
 export async function fetchPosting(input: string, http: HttpFetcher = safeFetch): Promise<RawJob | null> {
   const url = parseHttpUrl(input);
-  if (!url || extractLinkedInJobId(input) || /(^|\.)linkedin\.com$/i.test(url.hostname)) return null;
+  // Listing sites (LinkedIn, Handshake, Indeed…) are never fetched.
+  if (!url || extractLinkedInJobId(input) || listingSite(input)) return null;
   const reader = READERS.find((r) => r.matches(url))!;
   const job = await reader.read(url, http);
   if (!job) return null;

@@ -24,7 +24,7 @@ const PLATFORM_NOTES: Partial<Record<Platform, string>> = {
   LEVER: "Fields Lever fills from your resume are reset to your profile.",
   ASHBY: "Resume autofill is skipped; answers come from your profile.",
   SMARTRECRUITERS: "Never uses Apply with LinkedIn or Indeed.",
-  LINKEDIN_EASY_APPLY: "Needs your LinkedIn sign-in, so it's never automated. Add the employer's own link instead.",
+  LINKEDIN_EASY_APPLY: "Needs your LinkedIn sign-in, so it's never automated. Applyance follows LinkedIn jobs to the employer's own application when it can find one.",
   GENERIC: "Any other application form, filled by its labels.",
 };
 
