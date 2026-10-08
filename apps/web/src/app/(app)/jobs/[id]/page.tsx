@@ -8,6 +8,8 @@ import {
   canonicalSkillKey,
   EDUCATION_LEVEL_LABELS,
   enumLabel,
+  LISTING_SITE_LABELS,
+  listingSite,
   MATCH_DIMENSION_LABELS,
   SENIORITY_LABELS,
   type JobAnalysis,
@@ -25,6 +27,7 @@ import { cn } from "@/lib/utils";
 import { EditJobDialog } from "./edit-job-dialog";
 import { JobActions, ReanalyzeButton } from "./job-actions";
 import { TailoredDocuments } from "./tailored-documents";
+import { WhereToApply } from "./where-to-apply";
 
 export const metadata: Metadata = { title: "Job" };
 
@@ -66,6 +69,8 @@ export default async function JobPage({ params }: { params: Promise<{ id: string
   const qualification = (job.qualification && typeof job.qualification === "object" ? job.qualification : null) as unknown as QualificationResult | null;
   const ownedSkills = new Set([...profile.skills.map((s) => s.name), ...profile.employment.flatMap((e) => e.skills)].map(canonicalSkillKey));
   const canEdit = !job.application;
+  const applyUrl = job.applicationUrl ?? job.url;
+  const fromListing = listingSite(applyUrl);
   const status = job.application?.status ?? job.status;
   const editable = {
     id: job.id,
@@ -133,6 +138,16 @@ export default async function JobPage({ params }: { params: Promise<{ id: string
           <JobActions jobId={job.id} applicationId={job.application?.id ?? null} applicationStatus={job.application?.status ?? null} jobStatus={job.status} />
         </div>
       </div>
+
+      {fromListing && !job.application && (
+        <WhereToApply
+          jobId={job.id}
+          company={job.company}
+          site={LISTING_SITE_LABELS[fromListing]}
+          listingUrl={applyUrl}
+          searchesJSearch={!!process.env.JSEARCH_API_KEY?.trim() || process.env.E2E_FAKE_JOB_SOURCES === "1"}
+        />
+      )}
 
       {job.status === "NEEDS_DETAILS" && !job.application && (
         <div role="status" className="border-warning/40 bg-warning/10 flex flex-wrap items-center gap-3 rounded-lg border px-4 py-3 text-sm">

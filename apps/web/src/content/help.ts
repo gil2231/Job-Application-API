@@ -108,7 +108,7 @@ export const HELP_ARTICLES: HelpArticle[] = [
         `In ${P}, open Jobs, choose Import, and upload the archive (or the Saved Jobs.csv inside it).`,
       ] },
       { p: `You can also paste job links on the same screen. Any spreadsheet with a job URL column works too.` },
-      { tip: `${P} never signs in to LinkedIn, reads LinkedIn pages, or uses Easy Apply, because LinkedIn's terms don't allow automation. Apply to Easy Apply jobs on LinkedIn yourself, then track them here.` },
+      { tip: `${P} never signs in to LinkedIn or Handshake, reads their pages, or uses Easy Apply or Handshake's built-in apply, because their terms don't allow automation. When you apply to a job saved from LinkedIn, Handshake or Indeed, ${P} looks for the same job on the company's own site (its Greenhouse, Lever, Ashby, Workday or other job board) and applies there. Jobs it can't find there, like Easy Apply jobs, go to Needs Attention with a link so you can apply on LinkedIn or Handshake yourself, then track them here.` },
     ],
     links: [{ href: "/jobs", label: "Open Jobs" }],
   },

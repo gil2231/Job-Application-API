@@ -23,6 +23,8 @@ export interface WorkerConfig {
   /** Send Needs Attention and daily job alert emails from this worker. */
   notificationsEnabled: boolean;
   notifierIntervalMs: number;
+  /** JSearch key, used to find the company's own application for jobs saved from LinkedIn and other listing sites. */
+  jsearchApiKey: string | null;
 }
 
 const bool = (v: string | undefined, fallback: boolean) => (v == null || v === "" ? fallback : /^(1|true|yes|on)$/i.test(v));
@@ -46,6 +48,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): WorkerConfig {
       .map((h) => h.trim().toLowerCase())
       .filter(Boolean),
     allowAllHosts: bool(env.AUTOMATION_ALLOW_ALL_HOSTS, false),
+    jsearchApiKey: env.JSEARCH_API_KEY?.trim() || null,
     chromiumExecutable: env.PLAYWRIGHT_CHROMIUM_EXECUTABLE || undefined,
     navigationTimeoutMs: int(env.WORKER_NAVIGATION_TIMEOUT_MS, 30_000, 1000),
     mailSyncIntervalMs: int(env.MAIL_SYNC_INTERVAL_MS, 10 * 60_000, 0),

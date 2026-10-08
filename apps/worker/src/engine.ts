@@ -40,13 +40,15 @@ import {
   saveApplicationQuestions,
   saveBrowserSession,
   setApplicationPlatform,
+  setJobApplicationUrl,
   setProfileSnapshot,
   type AttemptOutcome,
   type ProcessingContext,
   type QuestionRecord,
 } from "@autoapply/database";
 import type { StorageDriver } from "@autoapply/documents";
-import { APPLICATION_EVENT_TYPES, enumLabel, FAILURE_INFO, type ApplicationEventType, type AttentionReason, type EventLevel, type Platform } from "@autoapply/shared";
+import { applyYourselfMessage, followToCompany, type FollowJob, type FollowResult } from "@autoapply/ingestion";
+import { APPLICATION_EVENT_TYPES, enumLabel, FAILURE_INFO, LISTING_SITE_LABELS, listingSite, type ApplicationEventType, type AttentionReason, type EventLevel, type Platform } from "@autoapply/shared";
 import type { BrowserPool } from "./browser";
 import type { WorkerConfig } from "./config";
 import type { LiveSolveHub, LiveWindow } from "./live-solve";
@@ -65,6 +67,8 @@ export interface EngineDeps {
   siteHealth?: SiteHealth;
   /** Set when CAPTCHAs can be solved live from the app's CAPTCHA screen. */
   liveSolve?: LiveSolveHub | null;
+  /** Finds the company's own application for a job saved from a listing site; followToCompany when not given. */
+  follow?: (job: FollowJob) => Promise<FollowResult | null>;
 }
 
 export interface RunInput {
@@ -236,7 +240,18 @@ class AttemptRun {
       await this.log("PROFILE_LOADED", "Master Profile loaded");
       await this.progress.done("profile", "Profile loaded");
 
-      const url = data.job.applicationUrl ?? data.job.url;
+      let url = data.job.applicationUrl ?? data.job.url;
+      // Saved from LinkedIn, Handshake or another listing site: apply on the company's own site instead, never on the listing site.
+      const listing = listingSite(url);
+      if (listing) {
+        await this.progress.running("detected", `Finding ${data.job.company}'s own application`);
+        const follow = deps.follow ?? ((job: FollowJob) => followToCompany(job, { aggregatorKey: deps.config.jsearchApiKey }));
+        const found = await follow({ url: data.job.url, applicationUrl: data.job.applicationUrl, title: data.job.title, company: data.job.company, location: data.job.location }).catch(() => null);
+        if (!found) return this.attention("WAITING_FOR_USER", "UNSUPPORTED_SITE", applyYourselfMessage(listing, url, data.job));
+        url = found.url;
+        await setJobApplicationUrl(data.job.id, url, detectPlatformFromUrl(url).platform);
+        await this.log("NOTE", `Followed the ${LISTING_SITE_LABELS[listing]} job to ${data.job.company}'s own application (found on ${found.foundOn}): ${url}`);
+      }
       if (detectPlatformFromUrl(url).platform === "LINKEDIN_EASY_APPLY") {
         return this.attention("WAITING_FOR_USER", "UNSUPPORTED_SITE", "LinkedIn Easy Apply needs your LinkedIn sign-in, and Applyance never signs in to LinkedIn. Add the employer's own application link to this job, or apply on LinkedIn yourself and mark it submitted.");
       }

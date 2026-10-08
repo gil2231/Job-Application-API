@@ -483,6 +483,11 @@ const CACHE_TTL_MS = 10 * 60_000;
 const CACHE_MAX_ENTRIES = 1_000;
 const caches = new WeakMap<HttpFetcher, Map<string, { at: number; jobs: RawJob[] }>>();
 
+/** Every open posting on one board (cached), for looking a known job up. Throws when the board can't be read. */
+export function readBoardPostings(board: BoardRef, http: HttpFetcher, options: { timeoutMs?: number } = {}): Promise<RawJob[]> {
+  return readBoard(board, http, { searchText: null, descriptions: false, timeoutMs: options.timeoutMs });
+}
+
 async function readBoard(board: BoardRef, http: HttpFetcher, options: ReadOptions): Promise<RawJob[]> {
   let cache = caches.get(http);
   if (!cache) caches.set(http, (cache = new Map()));

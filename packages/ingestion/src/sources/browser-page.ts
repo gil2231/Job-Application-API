@@ -1,4 +1,4 @@
-import { extractLinkedInJobId, parseHttpUrl } from "@autoapply/shared";
+import { extractHandshakeJobId, extractLinkedInJobId, parseHttpUrl } from "@autoapply/shared";
 import { parseJobPostingJsonLd } from "../postings";
 import type { JobSourceAdapter, RawJob, SourceParseResult } from "../types";
 import { companyFromUrl } from "./url-list";
@@ -46,8 +46,8 @@ function titleFromDocumentTitle(title: string, company: string | null): string {
 /**
  * The job page the person is looking at, saved from the browser extension.
  *
- * LinkedIn pages are never read: only the job link is kept, exactly as if it
- * were pasted, even if the extension sent more. Everywhere else the page's own
+ * LinkedIn and Handshake pages are never read: only the job link is kept,
+ * exactly as if it were pasted, even if the extension sent more. Everywhere else the page's own
  * JobPosting data is used first, then the public posting data a pasted link
  * would get, then what the page shows (its heading and the selected or main
  * text).
@@ -65,6 +65,13 @@ export const browserPageSource: JobSourceAdapter<CapturedPage> = {
       const id = extractLinkedInJobId(url);
       if (!id) return result([], [{ url, kind: "invalid", message: "Open the LinkedIn job's own page (its link has /jobs/view/), then save it." }]);
       return result([{ url, externalId: id, title: `LinkedIn job ${id}`, company: "Unknown company", needsDetails: true }]);
+    }
+
+    // Handshake is treated like LinkedIn: its pages are behind a school sign-in and aren't read.
+    if (/(^|\.)joinhandshake\.com$/i.test(new URL(url).hostname)) {
+      const id = extractHandshakeJobId(url);
+      if (!id) return result([], [{ url, kind: "invalid", message: "Open the Handshake job's own page, then save it." }]);
+      return result([{ url, externalId: id, title: `Handshake job ${id}`, company: "Unknown company", needsDetails: true }]);
     }
 
     const ld = (input.jsonLd ?? []).slice(0, 5).map((block) => `<script type="application/ld+json">${block.slice(0, 200_000)}</script>`).join("");

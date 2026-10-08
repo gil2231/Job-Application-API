@@ -311,7 +311,41 @@ describe("safety and failures", () => {
     const user = await makeApplicant();
     const app = await queueFor(user.id, "https://www.linkedin.com/jobs/view/3987654321");
     await runOnce(engine, workerId, app.id);
-    expect((await loadApplication(app.id)).attentionReason).toBe("UNSUPPORTED_SITE");
+    const after = await loadApplication(app.id);
+    expect(after.attentionReason).toBe("UNSUPPORTED_SITE");
+    expect(after.attentionDetail).toContain("apply on LinkedIn yourself: https://www.linkedin.com/jobs/view/3987654321");
+  });
+
+  it("follows a LinkedIn job to the company's own application and fills it there", async () => {
+    const asked: string[] = [];
+    const following = makeEngine({
+      browsers,
+      workerId: "follow-worker",
+      follow: async (job) => {
+        asked.push(`${job.company}|${job.title}|${job.url}`);
+        return { url: `${site.url}/simple`, via: "company_board", foundOn: "Greenhouse" };
+      },
+    });
+    const user = await makeApplicant();
+    const app = await queueFor(user.id, "https://www.linkedin.com/jobs/view/3987654321", { mode: "AUTO" });
+    await runOnce(following.engine, "follow-worker", app.id);
+    const after = await loadApplication(app.id);
+    expect(after.status, after.attentionDetail ?? after.lastError ?? "").toBe("SUBMITTED");
+    expect(asked).toHaveLength(1);
+    expect(asked[0]).toContain("https://www.linkedin.com/jobs/view/3987654321");
+    const job = await prisma.job.findUniqueOrThrow({ where: { id: after.jobId } });
+    expect(job.applicationUrl).toBe(`${site.url}/simple`);
+    const events = await prisma.applicationEvent.findMany({ where: { applicationId: app.id, type: "NOTE" } });
+    expect(events.map((e) => e.message).join(" ")).toContain("Followed the LinkedIn job to");
+  });
+
+  it("leaves Handshake-only jobs for the user to apply to on Handshake", async () => {
+    const user = await makeApplicant();
+    const app = await queueFor(user.id, "https://app.joinhandshake.com/stu/jobs/9876543");
+    await runOnce(engine, workerId, app.id);
+    const after = await loadApplication(app.id);
+    expect(after.status).toBe("WAITING_FOR_USER");
+    expect(after.attentionDetail).toContain("apply on Handshake yourself: https://app.joinhandshake.com/stu/jobs/9876543");
   });
 
   it("retries network failures with backoff, then hands repeated failures to the user", async () => {

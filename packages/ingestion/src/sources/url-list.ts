@@ -1,5 +1,5 @@
 import { isIP } from "node:net";
-import { canonicalizeJobUrl, extractLinkedInJobId, parseHttpUrl } from "@autoapply/shared";
+import { canonicalizeJobUrl, extractHandshakeJobId, extractLinkedInJobId, parseHttpUrl } from "@autoapply/shared";
 import type { ImportIssue, JobSourceAdapter, RawJob, SourceParseResult } from "../types";
 import { MAX_URLS_PER_PASTE } from "../types";
 
@@ -45,8 +45,8 @@ export function companyFromUrl(url: string): string {
 /**
  * Pasted job URLs. Public ATS postings (Greenhouse, Lever, Ashby, SmartRecruiters,
  * Workday, and pages with schema.org JobPosting data) are filled in from their
- * public posting data. LinkedIn URLs are never fetched: they are added with
- * their job id and marked as needing details.
+ * public posting data. LinkedIn and Handshake URLs are never fetched: they are
+ * added with their job id and marked as needing details.
  */
 export const urlListSource: JobSourceAdapter<{ text: string }> = {
   id: "urls",
@@ -62,6 +62,11 @@ export const urlListSource: JobSourceAdapter<{ text: string }> = {
       const linkedInId = extractLinkedInJobId(url);
       if (linkedInId) {
         return { url, externalId: linkedInId, title: `LinkedIn job ${linkedInId}`, company: "Unknown company", needsDetails: true };
+      }
+      // Handshake jobs need a school sign-in, so they're kept like LinkedIn ones: the link, for the user to fill in.
+      const handshakeId = extractHandshakeJobId(url);
+      if (handshakeId) {
+        return { url, externalId: handshakeId, title: `Handshake job ${handshakeId}`, company: "Unknown company", needsDetails: true };
       }
       if (context.fetchPosting) {
         try {
