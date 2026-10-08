@@ -8,7 +8,7 @@ import { Input } from "@/components/ui/input";
 export function SignUpForm() {
   const { state, onSubmit, pending } = useActionForm(signUpAction, { ok: false });
   return (
-    <form onSubmit={onSubmit} className="mt-8 grid gap-4" noValidate>
+    <form method="post" onSubmit={onSubmit} className="mt-8 grid gap-4" noValidate>
       <FormMessage state={state} />
       <Field label="Full name" htmlFor="name" error={state.errors?.name}>
         <Input id="name" name="name" autoComplete="name" required autoFocus aria-invalid={!!state.errors?.name} />

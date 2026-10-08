@@ -8,7 +8,7 @@ import { Input } from "@/components/ui/input";
 export function ResetPasswordForm({ token }: { token: string }) {
   const { state, onSubmit, pending } = useActionForm(resetPasswordAction, { ok: false });
   return (
-    <form onSubmit={onSubmit} className="mt-8 grid gap-4" noValidate>
+    <form method="post" onSubmit={onSubmit} className="mt-8 grid gap-4" noValidate>
       <FormMessage state={state} />
       {state.message?.includes("expired") && (
         <Link href="/forgot-password" className="text-primary text-sm font-medium hover:underline">

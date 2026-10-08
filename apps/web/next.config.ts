@@ -20,6 +20,9 @@ const nextConfig: NextConfig = {
   transpilePackages: ["@autoapply/shared", "@autoapply/database", "@autoapply/documents", "@autoapply/ats-adapters", "@autoapply/automation", "@autoapply/ai", "@autoapply/matching", "@autoapply/ingestion", "@autoapply/queue", "@autoapply/inbox", "@autoapply/notifications", "@autoapply/ops"],
   serverExternalPackages: ["@prisma/client", "@node-rs/argon2", "ioredis", "bullmq", "undici"],
   poweredByHeader: false,
+  // `next dev` refuses its scripts to other hosts, which leaves pages dead when
+  // the app is shared through a Cloudflare quick tunnel (a new name each start).
+  allowedDevOrigins: ["*.trycloudflare.com"],
   experimental: {
     serverActions: { bodySizeLimit: "11mb" },
   },

@@ -98,7 +98,7 @@ function SetupFlow({ onCancel, onDone }: { onCancel: () => void; onDone: () => v
     <div className="grid gap-5 sm:grid-cols-[180px_1fr]">
       {/* The SVG is generated on the server from the otpauth link; it holds no user-supplied markup. */}
       <div className="size-[180px] rounded-lg border bg-white p-2" role="img" aria-label="QR code for your authenticator app" dangerouslySetInnerHTML={{ __html: setup.qrSvg }} />
-      <form onSubmit={onSubmit} className="grid content-start gap-3" noValidate>
+      <form method="post" onSubmit={onSubmit} className="grid content-start gap-3" noValidate>
         <ol className="text-muted-foreground list-decimal space-y-1 pl-4 text-sm">
           <li>Open an authenticator app (Google Authenticator, Microsoft Authenticator, 1Password, Authy…).</li>
           <li>Scan the QR code, or enter this key by hand:</li>
@@ -144,7 +144,7 @@ function RegenerateCodes() {
             }}
           />
         ) : (
-          <form onSubmit={onSubmit} className="grid gap-4" noValidate>
+          <form method="post" onSubmit={onSubmit} className="grid gap-4" noValidate>
             <DialogHeader>
               <DialogTitle>Make new recovery codes</DialogTitle>
               <DialogDescription>Your current recovery codes will stop working.</DialogDescription>
@@ -182,7 +182,7 @@ function DisableTwoFactor() {
         </Button>
       </DialogTrigger>
       <DialogContent>
-        <form onSubmit={onSubmit} className="grid gap-4" noValidate>
+        <form method="post" onSubmit={onSubmit} className="grid gap-4" noValidate>
           <DialogHeader>
             <DialogTitle>Turn off two-factor sign-in?</DialogTitle>
             <DialogDescription>Signing in will need only your password again.</DialogDescription>
@@ -272,7 +272,7 @@ export function DataPrivacySection({ twoFactorEnabled, hasSubscription }: { twoF
             </Button>
           </DialogTrigger>
           <DialogContent>
-            <form onSubmit={onSubmit} className="grid gap-4" noValidate>
+            <form method="post" onSubmit={onSubmit} className="grid gap-4" noValidate>
               <DialogHeader>
                 <DialogTitle>Delete your account?</DialogTitle>
                 <DialogDescription>
