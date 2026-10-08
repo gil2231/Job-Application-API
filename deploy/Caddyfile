@@ -1,0 +1,13 @@
+# Caddy gets and renews the HTTPS certificates on its own once the domain's
+# DNS points at this server.
+
+{$DOMAIN} {
+	encode zstd gzip
+	reverse_proxy web:3000
+}
+
+# The browser extension talks to the API here.
+api.{$DOMAIN} {
+	encode zstd gzip
+	reverse_proxy api:4000
+}

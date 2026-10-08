@@ -1,0 +1,136 @@
+# Applyance on one server: the web app, API, browser worker, Postgres, Redis and
+# Caddy (HTTPS) together. deploy/install.sh writes deploy/.env and starts this;
+# see docs/deployment-one-server.md.
+
+name: applyance
+
+x-logging: &logging
+  driver: json-file
+  options: { max-size: "10m", max-file: "3" }
+
+# Settings every app container shares. Everything in deploy/.env (email,
+# Stripe and AI keys) is passed through as well.
+x-app-env: &app-env
+  NODE_ENV: production
+  DATABASE_URL: postgresql://applyance:${POSTGRES_PASSWORD:?}@postgres:5432/applyance
+  REDIS_URL: redis://redis:6379
+  STORAGE_DRIVER: local
+  STORAGE_LOCAL_DIR: /data/storage
+  # Caddy is the one proxy in front of the app.
+  TRUSTED_PROXY_HOPS: "1"
+
+services:
+  postgres:
+    image: postgres:16
+    restart: unless-stopped
+    logging: *logging
+    environment:
+      POSTGRES_USER: applyance
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?}
+      POSTGRES_DB: applyance
+    volumes: ["pgdata:/var/lib/postgresql/data"]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U applyance -d applyance"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  redis:
+    image: redis:7
+    restart: unless-stopped
+    logging: *logging
+    # BullMQ needs Redis to never evict queue keys.
+    command: ["redis-server", "--appendonly", "yes", "--maxmemory-policy", "noeviction"]
+    volumes: ["redisdata:/data"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  # Documents live on this volume. The web app and API run as uid 1000, so the
+  # worker does too, and this makes the folder theirs.
+  storage-init:
+    image: busybox:1.37
+    command: ["sh", "-c", "mkdir -p /data/storage && chown -R 1000:1000 /data/storage"]
+    volumes: ["storage:/data"]
+
+  migrate:
+    image: applyance-web
+    pull_policy: never
+    env_file: .env
+    environment: *app-env
+    command: ["sh", "-c", "cd packages/database && exec node_modules/.bin/prisma migrate deploy"]
+    depends_on:
+      postgres: { condition: service_healthy }
+      web-image: { condition: service_completed_successfully }
+
+  # Builds the web image once for both `migrate` and `web`, then exits.
+  web-image:
+    image: applyance-web
+    build: { context: .., dockerfile: docker/web.Dockerfile }
+    command: ["true"]
+
+  web:
+    image: applyance-web
+    pull_policy: never
+    restart: unless-stopped
+    logging: *logging
+    env_file: .env
+    environment: *app-env
+    volumes: ["storage:/data"]
+    depends_on:
+      migrate: { condition: service_completed_successfully }
+      redis: { condition: service_healthy }
+      storage-init: { condition: service_completed_successfully }
+
+  api:
+    image: applyance-api
+    build: { context: .., dockerfile: docker/api.Dockerfile }
+    restart: unless-stopped
+    logging: *logging
+    env_file: .env
+    environment: *app-env
+    volumes: ["storage:/data"]
+    depends_on:
+      migrate: { condition: service_completed_successfully }
+      redis: { condition: service_healthy }
+      storage-init: { condition: service_completed_successfully }
+
+  worker:
+    image: applyance-worker
+    build: { context: .., dockerfile: docker/worker.Dockerfile }
+    restart: unless-stopped
+    logging: *logging
+    # Same uid as the web app so both can write in the shared storage folder.
+    user: "1000:1000"
+    shm_size: 1gb
+    env_file: .env
+    environment:
+      <<: *app-env
+      HOME: /home/ubuntu
+    volumes: ["storage:/data"]
+    depends_on:
+      migrate: { condition: service_completed_successfully }
+      redis: { condition: service_healthy }
+      storage-init: { condition: service_completed_successfully }
+
+  caddy:
+    image: caddy:2
+    restart: unless-stopped
+    logging: *logging
+    ports: ["80:80", "443:443", "443:443/udp"]
+    environment:
+      DOMAIN: ${DOMAIN:?}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddydata:/data
+      - caddyconfig:/config
+    depends_on: [web, api]
+
+volumes:
+  pgdata:
+  redisdata:
+  storage:
+  caddydata:
+  caddyconfig:
