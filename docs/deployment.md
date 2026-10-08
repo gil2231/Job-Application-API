@@ -16,15 +16,9 @@ The AI features are optional; they need an [Anthropic](https://console.anthropic
 
 ---
 
-## 1. Make the encryption key
+## 1. The encryption key
 
-On your computer, in a terminal:
-
-```bash
-openssl rand -base64 32
-```
-
-Copy the output into a password manager and label it **Applyance DATA_ENCRYPTION_KEY**. It encrypts sensitive answers and saved sign-ins. If it's lost, that data can't be read; if it leaks, change it only with a plan to re-encrypt.
+Render makes it for you on the first deploy (step 5). Afterwards, open **Environment Groups → applyance-shared** on Render, reveal `DATA_ENCRYPTION_KEY`, and copy it into a password manager labelled **Applyance DATA_ENCRYPTION_KEY**. It encrypts sensitive answers and saved sign-ins. If it's lost, that data can't be read; if it leaks, change it only with a plan to re-encrypt.
 
 ## 2. File storage (Cloudflare R2)
 
@@ -59,7 +53,6 @@ Start in **test mode** (the "Test mode" switch at the top of the Stripe dashboar
 
 | Name | Value |
 | --- | --- |
-| `DATA_ENCRYPTION_KEY` | From step 1 |
 | `APP_URL` | For now, `https://applyance-web.onrender.com` (you'll change it to your domain in step 6) |
 | `S3_ENDPOINT`, `S3_BUCKET`, `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY` | From step 2 |
 | `RESEND_API_KEY`, `EMAIL_FROM` | From step 3 |

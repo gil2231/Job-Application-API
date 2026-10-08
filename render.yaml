@@ -19,6 +19,9 @@ services:
         fromDatabase: { name: applyance-db, property: connectionString }
       - key: REDIS_URL
         fromService: { type: keyvalue, name: applyance-redis, property: connectionString }
+      # Shown in Settings as the browser extension's server address.
+      - key: API_PUBLIC_URL
+        fromService: { type: web, name: applyance-api, property: host }
 
   - type: web
     name: applyance-api
@@ -72,10 +75,11 @@ envVarGroups:
     envVars:
       - key: NODE_ENV
         value: production
-      # openssl rand -base64 32. Keep a copy somewhere safe: without it,
-      # encrypted answers and saved sign-ins can't be read.
+      # Render makes a random 32-byte base64 key on first deploy. Copy it from
+      # the dashboard into a password manager: without it, encrypted answers
+      # and saved sign-ins can't be read.
       - key: DATA_ENCRYPTION_KEY
-        sync: false
+        generateValue: true
       # The public address, e.g. https://app.applyance.com (no trailing slash).
       - key: APP_URL
         sync: false

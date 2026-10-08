@@ -43,7 +43,7 @@ export default async function SettingsPage() {
     getTwoFactorStatus(user.id),
     getSubscription(user.id),
   ]);
-  const serverAddress = process.env.API_PUBLIC_URL ?? `http://localhost:${process.env.API_PORT ?? 4000}`;
+  const serverAddress = publicApiAddress(process.env.API_PUBLIC_URL) ?? `http://localhost:${process.env.API_PORT ?? 4000}`;
   const email = createEmailSender();
 
   return (
@@ -197,4 +197,10 @@ export default async function SettingsPage() {
       </Card>
     </div>
   );
+}
+
+/** Render passes the API's bare host name; the extension needs a full https address. */
+function publicApiAddress(value: string | undefined): string | undefined {
+  if (!value) return undefined;
+  return (/^https?:\/\//.test(value) ? value : `https://${value}`).replace(/\/+$/, "");
 }
