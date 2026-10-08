@@ -14,7 +14,7 @@ import {
   updateSavedSearch,
   type SavedSearchInput,
 } from "@autoapply/database";
-import { BoardSearchError, boardKey, boardUrl, jobBoardSearchSource, MAX_BOARDS_PER_SEARCH, parseBoardList, parseBoardRef, runImport } from "@autoapply/ingestion";
+import { BOARD_PROVIDER_LIST, BoardSearchError, boardKey, boardUrl, jobBoardSearchSource, MAX_BOARDS_PER_SEARCH, parseBoardList, parseBoardRef, runImport } from "@autoapply/ingestion";
 import { createEmailSender, runSavedSearch, sendTestEmail } from "@autoapply/notifications";
 import { canonicalizeJobUrl, notificationSettingsSchema, savedSearchSchema, type SavedSearchFormInput } from "@autoapply/shared";
 import { authedAction, formToObject, parseIds, validationFailed, type ActionResult } from "@/lib/action";
@@ -34,7 +34,7 @@ function readSearch(input: SavedSearchFormInput): { search: SavedSearchInput } |
   if (!parsed.success) return { error: validationFailed(parsed.error) };
   const { boards, invalid } = parseBoardList(parsed.data.boards);
   const fail = (field: string, message: string) => ({ error: { ok: false, message, errors: { [field]: message } } as ActionResult<never> });
-  if (invalid.length) return fail("boards", `Not a Greenhouse, Lever or Ashby board: ${invalid.slice(0, 3).join(", ")}${invalid.length > 3 ? "…" : ""}`);
+  if (invalid.length) return fail("boards", `Not a ${BOARD_PROVIDER_LIST} board: ${invalid.slice(0, 3).join(", ")}${invalid.length > 3 ? "…" : ""}`);
   if (!boards.length) return fail("boards", "Add at least one job board");
   if (boards.length > MAX_BOARDS_PER_SEARCH) return fail("boards", `Search up to ${MAX_BOARDS_PER_SEARCH} boards at a time`);
   if (!parsed.data.query && !parsed.data.location) return fail("query", "Enter keywords to search for");

@@ -114,17 +114,18 @@ export const HELP_ARTICLES: HelpArticle[] = [
   },
   {
     slug: "search-job-boards",
-    title: "Search company job boards by keyword",
-    summary: "Search the public job boards of companies that use Greenhouse, Lever or Ashby.",
+    title: "Search for jobs and set your preferences",
+    summary: "Search company job boards everywhere at once, and get jobs recommended from one box of preferences.",
     category: "Finding jobs",
-    keywords: ["search", "keyword", "greenhouse", "lever", "ashby", "boards"],
+    keywords: ["search", "keyword", "greenhouse", "lever", "ashby", "workday", "workable", "smartrecruiters", "linkedin", "indeed", "boards", "preferences", "recommended"],
     blocks: [
-      { p: "Many companies publish their openings on a public Greenhouse, Lever or Ashby job board. You can search up to 25 of these boards at once by keyword, and add the results you want to your jobs." },
+      { p: "The search bar at the top of Jobs searches the public job boards of hundreds of companies on Greenhouse, Lever, Ashby, Workday, Workable, SmartRecruiters and Recruitee at once. When your Applyance has a JSearch key, it also includes listings from LinkedIn, Indeed and other sites. A job found in several places is listed once." },
+      { p: "Under the search bar, Recommended for you lists jobs that fit your preferences: one box of roles, industries, keywords and places separated by commas (for example Account Executive, SaaS, FinTech, NYC). Edit it whenever what you want changes." },
       { steps: [
-        "Open Jobs and choose Search job boards.",
-        "Add the companies' board links (for example boards.greenhouse.io/acme).",
-        "Enter keywords. Use quotes for exact phrases, and a minus sign to leave jobs out (for example -commission).",
-        "Pick the results to add.",
+        "Open Jobs and type a job title or keywords in the search bar, with a place if you like.",
+        "Use quotes for exact phrases, and a minus sign to leave jobs out (for example -commission).",
+        "Pick the results to add. They're scored like any other job.",
+        "To search particular companies' boards, choose Search specific boards and paste their board links.",
       ] },
     ],
     links: [{ href: "/jobs", label: "Open Jobs" }],
@@ -132,16 +133,16 @@ export const HELP_ARTICLES: HelpArticle[] = [
   {
     slug: "match-scores-and-rules",
     title: "Match scores, rules and recommendations",
-    summary: "How jobs are scored, how to decide which ones qualify, and how Recommended works.",
+    summary: "How jobs are scored, how to decide which ones qualify, and how recommendations work.",
     category: "Finding jobs",
     keywords: ["score", "match", "qualified", "not qualified", "rules", "keywords", "recommended", "filter"],
     blocks: [
       { p: "Each job gets a match score from 0 to 100 based on how well its requirements fit your skills, titles, experience, location and salary. On Rules you choose how much each part counts and the minimum score a job needs to qualify." },
       { p: "Rules can also exclude companies, industries or keywords (for example \"commission-only\"), require certain keywords, set a minimum salary and limit how many applications go out per day." },
-      { p: "Recommended shows jobs that mention keywords you choose, ranked by how many they mention and how well they match." },
+      { p: "Recommended for you, on the Jobs page, shows jobs that mention the roles and keywords in your preferences, ranked by how many they mention, how well they match, and whether they're in a place you listed." },
       { tip: "A job saved without a description can't be scored. Open it and add the description, then restart the analysis." },
     ],
-    links: [{ href: "/rules", label: "Open Rules" }, { href: "/recommended", label: "Open Recommended" }],
+    links: [{ href: "/rules", label: "Open Rules" }, { href: "/jobs", label: "Open Jobs" }],
   },
 
   // ── Applying ─────────────────────────────────────────────────────────────

@@ -15,7 +15,7 @@ function boards() {
     leverDown: false,
   };
   const http = vi.fn<HttpFetcher>(async (url) => {
-    if (url === GREENHOUSE) return { url, status: 200, contentType: "application/json", text: JSON.stringify({ jobs: state.greenhouse }) };
+    if (url === GREENHOUSE || url === GREENHOUSE.replace("?content=true", "")) return { url, status: 200, contentType: "application/json", text: JSON.stringify({ jobs: state.greenhouse }) };
     if (url === LEVER && !state.leverDown) return { url, status: 200, contentType: "application/json", text: JSON.stringify(state.lever) };
     throw new Error("The posting was not found (it may have closed)");
   });

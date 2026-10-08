@@ -21,7 +21,8 @@ test.describe("on a phone", () => {
     await addJob(page, { url: "https://example.com/jobs/phone", title: "Account Executive", company: "Pocket Co" });
     await expect(page.getByText("Added Account Executive")).toBeVisible();
     await page.getByRole("checkbox", { name: "Select all" }).check();
-    await page.getByRole("button", { name: "Apply", exact: true }).click();
+    // The last Apply is the bulk action; the one above belongs to the recommended list.
+    await page.getByRole("button", { name: "Apply", exact: true }).last().click();
     await expect(page.getByText(/Queued 1 application/)).toBeVisible();
     const user = await prisma.user.findUniqueOrThrow({ where: { email } });
     await prisma.application.updateMany({ where: { userId: user.id }, data: { status: "WAITING_FOR_USER", attentionReason: "CAPTCHA" } });
@@ -34,7 +35,7 @@ test.describe("on a phone", () => {
     await expect(page.getByRole("button", { name: "I've completed it" })).toBeVisible();
 
     const app = await prisma.application.findFirstOrThrow({ where: { userId: user.id } });
-    const pages = ["/dashboard", "/tasks", "/needs-attention", "/flightpath", "/flightpath?view=table", "/recommended", "/jobs", `/jobs/${app.jobId}`, "/applications", `/applications/${app.id}`];
+    const pages = ["/dashboard", "/tasks", "/needs-attention", "/flightpath", "/flightpath?view=table", "/jobs", `/jobs/${app.jobId}`, "/applications", `/applications/${app.id}`];
     pages.push("/profile", "/documents", "/answers", "/rules", "/integrations", "/settings");
     await setUserRole(email, "ADMIN");
     pages.push("/admin", "/admin/users", `/admin/users/${user.id}`, "/admin/failures");

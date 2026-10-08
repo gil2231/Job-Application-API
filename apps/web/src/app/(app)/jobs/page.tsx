@@ -1,6 +1,8 @@
 import type { Metadata } from "next";
-import { getJobFilterOptions, getSavedBoardSearch, listJobs, prisma } from "@autoapply/database";
-import { jobFiltersSchema } from "@autoapply/shared";
+import { getJobFilterOptions, getSavedBoardSearch, getSearchPreferences, listJobs, listRecommendationCandidates, prisma } from "@autoapply/database";
+import { rankRecommendations } from "@autoapply/matching";
+import { jobFiltersSchema, parsePreferences } from "@autoapply/shared";
+import { formatSalary } from "@/lib/format";
 import { requireUser } from "@/lib/auth";
 import { ActionButton } from "@/components/action-button";
 import { PageHeader } from "@/components/page-header";
@@ -10,6 +12,8 @@ import { Loader2 } from "lucide-react";
 import { AddJobDialog } from "./add-job-dialog";
 import { BoardSearchDialog } from "./board-search-dialog";
 import { ImportDialog } from "./import-dialog";
+import { JobFinder } from "./job-finder";
+import type { RecommendedRow } from "./recommended-list";
 import { JobsTable } from "./jobs-table";
 import { JobsToolbar } from "./jobs-toolbar";
 
@@ -19,13 +23,29 @@ export default async function JobsPage({ searchParams }: { searchParams: Promise
   const user = await requireUser();
   const raw = await searchParams;
   const filters = jobFiltersSchema.parse(Object.fromEntries(Object.entries(raw).map(([k, v]) => [k, Array.isArray(v) ? v[0] : v])));
-  const [data, options, qualifiedWaiting, analyzing, savedBoardSearch] = await Promise.all([
+  const [data, options, qualifiedWaiting, analyzing, savedBoardSearch, preferences, candidates] = await Promise.all([
     listJobs(user.id, filters),
     getJobFilterOptions(user.id),
     prisma.job.count({ where: { userId: user.id, deletedAt: null, status: "QUALIFIED", application: null } }),
     prisma.job.count({ where: { userId: user.id, deletedAt: null, status: { in: ["IMPORTED", "ANALYZING"] } } }),
     getSavedBoardSearch(user.id),
+    getSearchPreferences(user.id),
+    listRecommendationCandidates(user.id),
   ]);
+  const saved: RecommendedRow[] = rankRecommendations(candidates, parsePreferences(preferences.text), 5).map((r) => ({
+    id: r.job.id,
+    title: r.job.title,
+    company: r.job.company,
+    location: r.job.location,
+    matchScore: r.job.matchScore,
+    status: r.job.status,
+    platform: r.job.platform,
+    salary: r.job.salaryMin != null || r.job.salaryMax != null ? formatSalary(r.job) : null,
+    relevance: r.relevance,
+    titleKeywords: r.titleKeywords,
+    descriptionKeywords: r.descriptionKeywords,
+  }));
+  const searchesLinkedIn = !!process.env.JSEARCH_API_KEY?.trim() || process.env.E2E_FAKE_JOB_SOURCES === "1";
   const hasFilters = ["q", "status", "platform", "remote", "minMatch", "company", "location", "minSalary", "savedFrom", "savedTo"].some((k) => raw[k]);
 
   // minmax(0, 1fr) keeps the wide table scrolling inside its container instead of widening the page.
@@ -33,13 +53,13 @@ export default async function JobsPage({ searchParams }: { searchParams: Promise
     <div className="grid grid-cols-[minmax(0,1fr)] gap-5">
       <PageHeader
         title="Jobs"
-        description="Every job you've saved, with its match and where it is in the pipeline."
+        description="Search every job site at once, see what's recommended for you, and track every job you've saved."
         actions={
           <>
             <ActionButton variant="outline" size="sm" disabled={qualifiedWaiting === 0} action={applyToAllQualifiedAction}>
               Apply to all qualified ({qualifiedWaiting})
             </ActionButton>
-            <BoardSearchDialog saved={savedBoardSearch} />
+            <BoardSearchDialog saved={savedBoardSearch} label="Search specific boards" />
             <ImportDialog />
             <AddJobDialog />
           </>
@@ -56,6 +76,8 @@ export default async function JobsPage({ searchParams }: { searchParams: Promise
           </ActionButton>
         </div>
       )}
+      <JobFinder preferences={preferences} saved={saved} searchesLinkedIn={searchesLinkedIn} />
+      <h2 className="-mb-2 text-sm font-semibold">Your jobs</h2>
       <JobsToolbar companies={options.companies} platforms={options.platforms} />
       <JobsTable data={data} hasFilters={hasFilters} />
     </div>

@@ -1,18 +1,20 @@
+import { DEFAULT_SEARCH_PREFERENCES } from "@autoapply/shared";
 import { prisma } from "../client";
 
-export async function getRecommendationKeywords(userId: string): Promise<string[]> {
-  const profile = await prisma.masterProfile.findUnique({ where: { userId }, select: { recommendationKeywords: true } });
-  return profile?.recommendationKeywords ?? [];
+/** The user's search preferences box, or the default list until they write their own. */
+export async function getSearchPreferences(userId: string): Promise<{ text: string; isDefault: boolean }> {
+  const profile = await prisma.masterProfile.findUnique({ where: { userId }, select: { searchPreferences: true } });
+  const text = profile?.searchPreferences;
+  return text == null ? { text: DEFAULT_SEARCH_PREFERENCES, isDefault: true } : { text, isDefault: false };
 }
 
-export async function saveRecommendationKeywords(userId: string, keywords: string[]) {
+export async function saveSearchPreferences(userId: string, text: string) {
   await prisma.masterProfile.upsert({
     where: { userId },
-    update: { recommendationKeywords: keywords },
-    create: { userId, recommendationKeywords: keywords },
+    update: { searchPreferences: text },
+    create: { userId, searchPreferences: text },
   });
 }
-
 /**
  * Jobs that could be recommended: saved, not applied to or skipped. Which
  * Not Qualified jobs stay in is decided from their qualification checks.

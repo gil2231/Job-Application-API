@@ -95,7 +95,7 @@ export function SavedSearchForm({ initial, onDone }: { initial: SavedSearchValue
           </Label>
         </div>
       </div>
-      <Field label="Job boards" htmlFor="search-boards" error={errors.boards} hint="One per line, up to 25 Greenhouse, Lever or Ashby job board links.">
+      <Field label="Job boards" htmlFor="search-boards" error={errors.boards} hint="One per line, up to 25 Greenhouse, Lever, Ashby, Workday, Workable, SmartRecruiters or Recruitee job board links.">
         <Textarea
           id="search-boards"
           rows={4}

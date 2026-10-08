@@ -50,6 +50,8 @@ export default defineConfig({
         GOOGLE_CLIENT_SECRET: "e2e-google-secret",
         MICROSOFT_CLIENT_ID: "e2e-microsoft-client",
         MICROSOFT_CLIENT_SECRET: "e2e-microsoft-secret",
+        // Job search reads stand-in boards instead of real employers' (see src/lib/fake-job-sources.ts).
+        E2E_FAKE_JOB_SOURCES: "1",
       },
     },
   ],
