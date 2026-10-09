@@ -174,7 +174,27 @@ function greenhousePage(values: Values = {}, errors: Record<string, string> = {}
   );
 }
 
+/**
+ * An employer's own careers page with the Greenhouse form in an iframe, the
+ * way Greenhouse's embed script draws it. The embed script itself is only
+ * named (never loaded), so nothing reaches the real Greenhouse.
+ */
+const GH_CAREERS_PATH = "/careers/examplecorp/business-development-representative";
+
+function greenhouseCareersPage(): string {
+  return shell(
+    "Business Development Representative | Example Corp Careers",
+    "main{max-width:900px;margin:0 auto;padding:24px 32px} iframe{width:100%;height:1400px;border:0}",
+    `<main><h1>Business Development Representative</h1><p>New York, NY</p><p>Join the team that books meetings for our account executives.</p>
+      <div id="grnhse_app" data-embed="https://boards.greenhouse.io/embed/job_board/js?for=examplecorp"><iframe id="grnhse_iframe" title="Greenhouse Job Board" src="${GH_PATH}?embed=true"></iframe></div></main>`,
+  );
+}
+
 async function greenhouse(req: IncomingMessage, res: ServerResponse, path: string, h: AtsHelpers): Promise<boolean> {
+  if (path === GH_CAREERS_PATH) {
+    h.send(res, 200, greenhouseCareersPage());
+    return true;
+  }
   if (path === `${GH_PATH}/confirmation`) {
     h.send(res, 200, shell("Thank you for applying", "main{max-width:640px;margin:64px auto;padding:0 24px}", `<main><h1>Thank you for applying.</h1><p>Your application has been received. If your application seems like a good fit for the position we will contact you soon.</p><p>Application ID: ${esc(String(new URL(req.url ?? "/", "http://x").searchParams.get("id") ?? ""))}</p></main>`));
     return true;
@@ -726,6 +746,7 @@ async function smartRecruiters(req: IncomingMessage, res: ServerResponse, path: 
 export const ATS_ENTRY_POINTS = {
   greenhouse: GH_PATH,
   greenhouseBadge: GH_BADGE_PATH,
+  greenhouseCareersPage: GH_CAREERS_PATH,
   lever: `/lever/examplecorp/${LEVER_ID}`,
   leverGuarded: `/lever/examplecorp/${LEVER_GUARDED_ID}`,
   ashby: `/ashby/examplecorp/${ASHBY_ID}`,

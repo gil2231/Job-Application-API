@@ -29,6 +29,7 @@ export const STANDARD_QUESTIONS: StandardQuestion[] = [
   { key: "portfolio_url", question: "Portfolio URL", category: "LINKS", requiresHumanReview: false, autoSubmitAllowed: true, sensitive: false },
   { key: "start_date", question: "When can you start?", category: "AVAILABILITY", requiresHumanReview: false, autoSubmitAllowed: true, sensitive: false },
   { key: "demographic_gender", question: "Gender (voluntary self-identification)", category: "DEMOGRAPHIC", requiresHumanReview: false, autoSubmitAllowed: true, sensitive: true },
+  { key: "demographic_hispanic", question: "Are you Hispanic or Latino? (voluntary self-identification)", category: "DEMOGRAPHIC", requiresHumanReview: false, autoSubmitAllowed: true, sensitive: true },
   { key: "demographic_race", question: "Race / ethnicity (voluntary self-identification)", category: "DEMOGRAPHIC", requiresHumanReview: false, autoSubmitAllowed: true, sensitive: true },
   { key: "military_status", question: "Are you currently serving, or have you served, in the military?", category: "DEMOGRAPHIC", requiresHumanReview: false, autoSubmitAllowed: true, sensitive: true },
   { key: "demographic_veteran", question: "Veteran status (voluntary self-identification)", category: "DEMOGRAPHIC", requiresHumanReview: false, autoSubmitAllowed: true, sensitive: true },
