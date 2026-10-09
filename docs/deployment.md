@@ -2,6 +2,8 @@
 
 This guide puts Applyance on [Render](https://render.com), which runs everything Applyance needs (the web app, the API, the browser worker, Postgres and Redis) from one file in this repository, `render.yaml`. It takes about an hour the first time. Nothing here costs money until you create the Render services in step 5.
 
+For a much cheaper start (around $8 a month), run everything on one small server instead: see [deployment-one-server.md](deployment-one-server.md).
+
 You need accounts with five services. All of them have a free tier or free trial except Render itself.
 
 | Service | What it's for | Rough cost |

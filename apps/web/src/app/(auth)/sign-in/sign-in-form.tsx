@@ -8,7 +8,7 @@ import { Input } from "@/components/ui/input";
 export function SignInForm({ next }: { next?: string }) {
   const { state, onSubmit, pending } = useActionForm(signInAction, { ok: false });
   return (
-    <form onSubmit={onSubmit} className="mt-8 grid gap-4" noValidate>
+    <form method="post" onSubmit={onSubmit} className="mt-8 grid gap-4" noValidate>
       <FormMessage state={state} />
       <input type="hidden" name="next" value={next ?? ""} />
       <Field label="Email" htmlFor="email" error={state.errors?.email}>
