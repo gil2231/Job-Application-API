@@ -42,7 +42,7 @@ interface JSearchJob {
 }
 
 /** Sites whose pages Applyance never fetches; a listing's direct company link is preferred over them. */
-const NEVER_FETCHED = /(^|\.)(linkedin\.com|indeed\.com|glassdoor\.com|ziprecruiter\.com|joinhandshake\.com)$/i;
+const NEVER_FETCHED = /(^|\.)(linkedin\.com|indeed\.com|glassdoor\.com|ziprecruiter\.com|joinhandshake\.com|builtin(nyc|chicago|la|sf|boston|austin|colorado|seattle)?\.(com|org))$/i;
 
 function hostOf(url: string): string {
   try {

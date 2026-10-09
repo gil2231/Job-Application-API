@@ -19,7 +19,8 @@ export class WorkdayAdapter extends FormAdapter {
       displayName: "Workday",
       supportsAutoSubmit: true,
       scan: { roots: ["[data-automation-id='applyFlowPage']"], rootRequired: true },
-      startButtons: ["[data-automation-id='adventureButton']", "[data-automation-id='applyManually']"],
+      // Apply stays on the page behind the choice it opens, so Apply Manually has to be looked for first.
+      startButtons: ["[data-automation-id='applyManually']", "[data-automation-id='adventureButton']"],
       navigationButtons: ["[data-automation-id='bottom-navigation-next-button']", "[data-automation-id='pageFooterNextButton']"],
       humanDetail: {
         AUTH_REQUIRED:

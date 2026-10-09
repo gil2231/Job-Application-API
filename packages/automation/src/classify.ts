@@ -76,6 +76,9 @@ const ATTRIBUTE_TOKENS: Array<[RegExp, ProfileFieldKey]> = [
 /** Labels with these words describe someone or something other than the applicant. */
 const NEGATIVE = /\b(reference|referee|referr|emergency|manager|supervisor|previous|former|recruiter|company name|employer name|school name|hiring|spouse|parent|guardian)\b/;
 
+/** "Will you be able to commute to the office in this location?" asks for a yes or no, not the profile value its words mention. */
+const YES_NO_QUESTION = /^\s*(are|do|does|did|will|would|have|has|can|could|is|were|should|may)\b/;
+
 /** Single words too generic to match inside a longer label. */
 const NO_PARTIAL = new Set(["name", "cell", "street", "state", "region", "apt", "suite", "employer", "website", "address", "town", "mobile", "phone", "email", "city", "country", "portfolio", "zip"]);
 
@@ -94,6 +97,8 @@ const QUESTION_PATTERNS: Array<[RegExp, string]> = [
   [/(how many )?years of (professional |relevant |work )?experience|total experience/, "years_experience"],
   [/start date|when can you start|available to start|earliest start|notice period/, "start_date"],
   [/\bgender\b|\bsex\b/, "demographic_gender"],
+  // "Are you Hispanic/Latino?" is its own Yes / No question on US forms, separate from race.
+  [/^(?!.*\b(race|racial|ethnicity)\b).*\b(hispanic|latin[oax]|latine)\b/, "demographic_hispanic"],
   [/\brace\b|ethnicity|hispanic|latino/, "demographic_race"],
   [/veteran/, "demographic_veteran"],
   [/\b(active|current(ly)?|serv(e|ed|ing)|member of|in) (the )?(us |u s )?(military|armed forces|national guard|reserves?)\b|\bactive duty\b|\bactive-duty\b|\bmilitary (service|status|member|experience)\b/, "military_status"],
@@ -137,7 +142,7 @@ export class HeuristicFieldClassifier implements FieldClassifier {
       if (key.startsWith("documents.")) continue;
       if (synonyms.includes(label)) return { mappedField: key, confidence: 95, evidence: `Label "${field.label}"` };
     }
-    if (!negative) {
+    if (!negative && !YES_NO_QUESTION.test(label)) {
       let best: { key: ProfileFieldKey; length: number } | null = null;
       for (const [key, synonyms] of Object.entries(FIELD_LABEL_SYNONYMS) as Array<[ProfileFieldKey, string[]]>) {
         if (key.startsWith("documents.")) continue;

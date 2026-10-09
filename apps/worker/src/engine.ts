@@ -20,7 +20,7 @@ import {
   type ProfileFactsForForms,
 } from "@autoapply/automation";
 import { createApplicationAI, type ApplicationAI } from "@autoapply/ai";
-import { detectPlatformFromUrl, type AdapterContext, type AdapterRegistry, type AdapterStatus, type ApplicationAdapter, type DocumentsToUpload, type HumanStep, type ValidationResult } from "@autoapply/ats-adapters";
+import { detectPlatformFromUrl, findApplicationForm, greenhouseEmbedForRedirect, type AdapterContext, type PageSnapshot, type AdapterRegistry, type AdapterStatus, type ApplicationAdapter, type DocumentsToUpload, type HumanStep, type ValidationResult } from "@autoapply/ats-adapters";
 import {
   addApplicationEvent,
   addAttemptScreenshot,
@@ -224,6 +224,34 @@ class AttemptRun {
     return { result: "finished", retryInMs: outcome.kind === "retry" ? outcome.delayMs : undefined };
   }
 
+  /**
+   * A careers page with the form in an iframe (Betterment's Greenhouse board)
+   * or a listing with an Apply link out to the ATS (Built In): open the form
+   * itself, up to two steps away, and remember its link on the job. Returns
+   * why it can't be opened, or null to carry on with the current page.
+   */
+  private async openFormBehindPage(jobId: string): Promise<string | null> {
+    const page = this.page!;
+    for (let step = 0; step < 2; step++) {
+      await page.waitForLoadState("networkidle", { timeout: 5000 }).catch(() => undefined);
+      const form = findApplicationForm(await snapshotPage(page));
+      if (!form || listingSite(form.url)) return null;
+      const from = new URL(page.url()).hostname;
+      const site = await checkSite(form.url, this.deps.config);
+      if (!site.allowed) return `The application form is on ${new URL(form.url).hostname}. ${site.reason}`;
+      const how = form.via === "link" ? "linked from" : "embedded in";
+      await this.log("NOTE", `Opened the ${form.platform === "GENERIC" ? "" : `${enumLabel(form.platform)} `}application form ${how} ${from}: ${form.url}`);
+      const response = await page.goto(form.url, { waitUntil: "domcontentloaded" });
+      const blocked = response ? failureForHttpStatus(response.status(), response.headers()["retry-after"]) : null;
+      if (blocked) throw blocked;
+      const landed = await checkSite(page.url(), this.deps.config);
+      if (!landed.allowed) return `The application form redirected to ${new URL(page.url()).hostname}. ${landed.reason}`;
+      this.domain = new URL(page.url()).hostname;
+      await setJobApplicationUrl(jobId, form.url, detectPlatformFromUrl(form.url).platform);
+    }
+    return null;
+  }
+
   private attention(status: "WAITING_FOR_USER" | "REVIEW_REQUIRED" | "READY", reason: AttentionReason, detail: string) {
     return this.finish({ kind: "attention", status, reason, detail });
   }
@@ -270,13 +298,26 @@ class AttemptRun {
       await this.log("BROWSER_LAUNCHED", saved ? `Browser launched with your saved session for ${this.domain}` : "Browser launched");
       await this.progress.done("browser", "Browser launched");
 
-      const response = await this.page.goto(url, { waitUntil: "domcontentloaded" });
+      let response = await this.page.goto(url, { waitUntil: "commit" });
+      // A Greenhouse job that forwards to the employer's own careers page (Betterment, Stripe): open Greenhouse's copy of the form instead.
+      const embed = greenhouseEmbedForRedirect(url, this.page.url());
+      if (embed) {
+        await this.log("NOTE", `The Greenhouse link forwards to ${new URL(this.page.url()).hostname}; opened the same job's form on Greenhouse instead: ${embed}`);
+        url = embed;
+        response = await this.page.goto(url, { waitUntil: "domcontentloaded" });
+        this.domain = new URL(url).hostname;
+        await setJobApplicationUrl(data.job.id, url, "GREENHOUSE");
+      } else {
+        await this.page.waitForLoadState("domcontentloaded");
+      }
       // An outage, a rate limit or a closed posting: don't try to fill an error page.
       const blocked = response ? failureForHttpStatus(response.status(), response.headers()["retry-after"]) : null;
       if (blocked) throw blocked;
       await deps.siteHealth.recordSuccess(this.domain);
       const landed = await checkSite(this.page.url(), deps.config);
       if (!landed.allowed) return this.attention("WAITING_FOR_USER", "UNSUPPORTED_SITE", `The link redirected to ${new URL(this.page.url()).hostname}. ${landed.reason}`);
+      const blockedForm = await this.openFormBehindPage(data.job.id);
+      if (blockedForm) return this.attention("WAITING_FOR_USER", "UNSUPPORTED_SITE", blockedForm);
 
       const { adapter, detection } = await deps.registry.resolve(this.page.url(), await this.page.content());
       if (!adapter) return this.attention("WAITING_FOR_USER", "UNSUPPORTED_SITE", `No adapter can fill ${enumLabel(detection.platform)} applications yet.`);
@@ -440,6 +481,11 @@ class AttemptRun {
 
   private async decideAndSubmit(adapter: ApplicationAdapter<Page>, ctx: AdapterContext<Page>, mappings: FieldMapping[], detected: Platform, humanSubmitOnly = false): Promise<RunResult> {
     const { data } = this;
+    // A page where nothing could be filled isn't a finished application (a job page mistaken for the form, say), so it's never offered for submission.
+    if (!mappings.some((m) => m.status === "ANSWERED")) {
+      await ctx.screenshot("Nothing filled");
+      return this.attention("WAITING_FOR_USER", "UNSUPPORTED_SITE", "Applyance found nothing it could fill at this link, so it hasn't treated it as an application. Add the direct application link to the job, or apply yourself.");
+    }
     const contradictions = findContradictions({ mappings, profile: this.facts, library: data.library, job: data.job, rule: data.rule });
     const decision = decideSubmission({
       mode: data.application.mode,
@@ -681,3 +727,24 @@ class AttemptRun {
     }
   }
 }
+
+/** What findApplicationForm needs from a loaded page: its HTML, frames, links and how many fields it has itself. */
+async function snapshotPage(page: Page): Promise<PageSnapshot> {
+  const main = page.mainFrame();
+  // Only web pages can hold a form; an about:blank frame (reCAPTCHA's badge) never finishes loading, so it isn't read.
+  const readable = page.frames().filter((f) => f !== main && /^https?:\/\//i.test(f.url())).slice(0, 12);
+  const frames = await Promise.all(readable.map(async (f) => ({ url: f.url(), html: await withTimeout(f.content(), 3000).catch(() => "") })));
+  const { links, fieldCount } = (await page.evaluate(SNAPSHOT_SCRIPT)) as Pick<PageSnapshot, "links" | "fieldCount">;
+  return { url: page.url(), html: await page.content(), frames, links, fieldCount };
+}
+
+function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
+  return Promise.race([promise, new Promise<T>((_, reject) => setTimeout(() => reject(new Error("timed out")), ms).unref())]);
+}
+
+const SNAPSHOT_SCRIPT = `(() => {
+  const visible = (el) => !!(el.offsetWidth || el.offsetHeight || el.getClientRects().length);
+  const links = Array.from(document.querySelectorAll("a[href]")).slice(0, 1500).map((a) => ({ text: (a.innerText || a.getAttribute("aria-label") || "").trim().slice(0, 80), href: a.href }));
+  const fieldCount = Array.from(document.querySelectorAll("input, select, textarea")).filter((el) => visible(el) && !/^(hidden|submit|button|search|image|reset)$/i.test(el.type || "")).length;
+  return { links, fieldCount };
+})()`;

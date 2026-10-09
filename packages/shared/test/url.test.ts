@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { listingSite } from "../src/listing-sites";
 import { canonicalizeJobUrl, extractLinkedInJobId } from "../src/url";
 
 describe("canonicalizeJobUrl", () => {
@@ -27,5 +28,14 @@ describe("canonicalizeJobUrl", () => {
 describe("extractLinkedInJobId", () => {
   it("returns null for other hosts", () => {
     expect(extractLinkedInJobId("https://example.com/jobs/view/3987654321")).toBeNull();
+  });
+});
+
+describe("listingSite", () => {
+  it("knows Built In's city sites, which need a Built In account to apply", () => {
+    expect(listingSite("https://www.builtinnyc.com/job/entry-level-marketing-specialist/11379736")).toBe("builtin");
+    expect(listingSite("https://builtin.com/job/account-executive/123")).toBe("builtin");
+    expect(listingSite("https://www.builtinchicago.org/job/x/1")).toBe("builtin");
+    expect(listingSite("https://careers.builtinsoftware.com/jobs/1")).toBeNull();
   });
 });
