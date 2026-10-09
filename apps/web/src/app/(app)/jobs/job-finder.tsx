@@ -44,7 +44,7 @@ function PreferencesBox({ text, isDefault }: { text: string; isDefault: boolean 
         label="Your job preferences"
         htmlFor="search-preferences"
         error={state.errors?.preferences}
-        hint="Roles, industries, keywords and places, separated by commas, e.g. Account Executive, SaaS, FinTech, Entry Level, NYC. Recommendations follow whatever is here."
+        hint="Roles, industries, keywords and places, separated by commas, e.g. Account Executive, SaaS, FinTech, Entry Level, NYC. New openings need one of your roles or keywords in the title and, if you list places, must be in one of them. Searches list jobs that fit more of these first."
       >
         <Textarea id="search-preferences" name="preferences" rows={5} defaultValue={text} autoFocus />
       </Field>
@@ -73,7 +73,7 @@ function NewOpenings() {
     return (
       <div className="grid gap-2" aria-label="Looking for new openings">
         <p className="text-muted-foreground flex items-center gap-2 text-xs">
-          <Loader2 className="size-3.5 animate-spin" /> Looking across company job boards…
+          <Loader2 className="size-3.5 animate-spin" /> Looking across company job boards and job sites…
         </p>
         <Skeleton className="h-14" />
         <Skeleton className="h-14" />
@@ -84,7 +84,13 @@ function NewOpenings() {
   return <FoundJobsList rows={result.data.results} idPrefix="openings" emptyText="No new openings fit your preferences right now. Try adding roles or keywords." />;
 }
 
-export function JobFinder({ preferences, saved, searchesLinkedIn }: { preferences: { text: string; isDefault: boolean }; saved: RecommendedRow[]; searchesLinkedIn: boolean }) {
+/** "Searches … plus The Muse, Himalayas and Jobicy", naming whichever outside sources are switched on. */
+function coverage(searchesLinkedIn: boolean, searchesAdzuna: boolean) {
+  const outside = [...(searchesLinkedIn ? ["LinkedIn, Indeed, Glassdoor"] : []), ...(searchesAdzuna ? ["Adzuna"] : []), "The Muse", "Himalayas", "Jobicy"];
+  return `Searches hundreds of company job boards (Greenhouse, Lever, Ashby, Workday, Workable, SmartRecruiters, Recruitee) plus ${outside.slice(0, -1).join(", ")} and ${outside.at(-1)}, all at once. Results that fit your preferences come first.`;
+}
+
+export function JobFinder({ preferences, saved, searchesLinkedIn, searchesAdzuna }: { preferences: { text: string; isDefault: boolean }; saved: RecommendedRow[]; searchesLinkedIn: boolean; searchesAdzuna: boolean }) {
   const [query, setQuery] = useState("");
   const [location, setLocation] = useState("");
   const [search, setSearch] = useState<ActionResult<FoundJobsData> | null>(null);
@@ -118,11 +124,7 @@ export function JobFinder({ preferences, saved, searchesLinkedIn }: { preference
               {searching ? "Searching…" : "Search"}
             </Button>
           </div>
-          <p className="text-muted-foreground text-xs">
-            {searchesLinkedIn
-              ? "Searches hundreds of company job boards (Greenhouse, Lever, Ashby, Workday, Workable, SmartRecruiters, Recruitee) plus LinkedIn, Indeed and more, all at once."
-              : "Searches hundreds of company job boards at once: Greenhouse, Lever, Ashby, Workday, Workable, SmartRecruiters and Recruitee."}
-          </p>
+          <p className="text-muted-foreground text-xs">{coverage(searchesLinkedIn, searchesAdzuna)}</p>
           {search && !search.ok && <p className="text-destructive text-[13px]">{search.message}</p>}
         </form>
 

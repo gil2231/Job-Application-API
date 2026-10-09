@@ -67,11 +67,29 @@ export class AggregatorError extends Error {
   }
 }
 
+/** The same search within this time reuses the last answer, so repeat searches don't spend the plan's requests. */
+const CACHE_TTL_MS = 60 * 60_000;
+const CACHE_MAX_ENTRIES = 200;
+const caches = new WeakMap<HttpFetcher, Map<string, { at: number; hits: AggregatorHit[] }>>();
+
 /** Search JSearch for the query. One request (about 10 listings), so the free plan's allowance lasts. */
 export async function searchAggregator(input: { query: string; location?: string | null; remoteOnly?: boolean }, apiKey: string, http: HttpFetcher = safeFetch): Promise<AggregatorHit[]> {
   const where = input.location?.trim() && !/^remote$/i.test(input.location.trim()) ? ` in ${input.location.trim()}` : "";
   const params = new URLSearchParams({ query: `${input.query}${where}`.slice(0, 300), page: "1", num_pages: "1", date_posted: "month" });
   if (input.remoteOnly || /^remote$/i.test(input.location?.trim() ?? "")) params.set("work_from_home", "true");
+  let cache = caches.get(http);
+  if (!cache) caches.set(http, (cache = new Map()));
+  const cacheKey = `${apiKey.slice(0, 8)}|${params}`;
+  const cached = cache.get(cacheKey);
+  if (cached && Date.now() - cached.at < CACHE_TTL_MS) return cached.hits;
+  const hits = await fetchAggregator(params, apiKey, http);
+  cache.delete(cacheKey);
+  cache.set(cacheKey, { at: Date.now(), hits });
+  if (cache.size > CACHE_MAX_ENTRIES) cache.delete(cache.keys().next().value!);
+  return hits;
+}
+
+async function fetchAggregator(params: URLSearchParams, apiKey: string, http: HttpFetcher): Promise<AggregatorHit[]> {
   let text: string;
   try {
     const response = await http(`https://${HOST}/search?${params}`, {

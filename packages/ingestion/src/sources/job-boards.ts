@@ -3,6 +3,7 @@ import { JOB_BOARD_SOURCE_NAME } from "@autoapply/database";
 import {
   canonicalizeJobUrl,
   isEmptyKeywordQuery,
+  locationMatchesPlace,
   matchesKeywordQuery,
   mentionsKeyword,
   parseHttpUrl,
@@ -547,7 +548,8 @@ export function matchesLocation(job: RawJob, location: string): boolean {
   if (!wanted) return true;
   if (/^(remote|anywhere|work from home|wfh)$/i.test(wanted)) return job.workArrangement === "REMOTE" || mentionsKeyword(job.location ?? "", "remote");
   if (!job.location) return false;
-  return job.location.toLowerCase().includes(wanted.toLowerCase()) || mentionsKeyword(job.location, wanted);
+  // locationMatchesPlace knows nicknames, so "NYC" finds "New York, NY".
+  return job.location.toLowerCase().includes(wanted.toLowerCase()) || mentionsKeyword(job.location, wanted) || locationMatchesPlace(job.location, wanted);
 }
 
 export function matchKeywords(job: RawJob, descriptionText: string, query: KeywordQuery, options: { searchDescriptions: boolean; matchAny: boolean }): BoardSearchHit["matchedIn"] | null {
