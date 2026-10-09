@@ -19,7 +19,7 @@ const WORKABLE = "https://apply.workable.com/api/v1/widget/accounts/hooli";
 const SMART = "https://api.smartrecruiters.com/v1/companies/Umbrella/postings?limit=100";
 const RECRUITEE = "https://piedpiper.recruitee.com/api/offers/";
 const GREENHOUSE = "https://boards-api.greenhouse.io/v1/boards/acme/jobs";
-const JSEARCH = (q: string) => `https://jsearch.p.rapidapi.com/search?${new URLSearchParams({ query: q, page: "1", num_pages: "1", date_posted: "month" })}`;
+const JSEARCH = (q: string) => `https://jsearch.p.rapidapi.com/search-v2?${new URLSearchParams({ query: q, page: "1", num_pages: "1", date_posted: "month" })}`;
 
 const routes: Record<string, Route> = {
   [GREENHOUSE]: { jobs: [{ id: 1, title: "Account Executive", company_name: "Acme", location: { name: "New York, NY" } }] },
@@ -32,28 +32,30 @@ const routes: Record<string, Route> = {
   [SMART]: { content: [{ id: "744000", name: "Account Executive", company: { name: "Umbrella Corp" }, releasedDate: "2026-09-29T00:00:00Z", location: { city: "Remote", country: "us", remote: true } }] },
   [RECRUITEE]: { offers: [{ id: 9, title: "Account Executive", careers_url: "https://piedpiper.recruitee.com/o/account-executive", location: "Palo Alto", company_name: "Pied Piper", description: "<p>Sell compression.</p>" }] },
   [JSEARCH("account executive")]: {
-    data: [
-      // Also on Greenhouse: shown once, with LinkedIn added to where it was found.
-      { job_id: "a", employer_name: "Acme", job_title: "Account Executive", job_city: "New York", job_state: "NY", job_publisher: "LinkedIn", job_apply_link: "https://www.linkedin.com/jobs/view/1", apply_options: [{ publisher: "LinkedIn", apply_link: "https://www.linkedin.com/jobs/view/1" }] },
-      // Only on the aggregator: keeps the company's direct link over LinkedIn and Indeed.
-      {
-        job_id: "b",
-        employer_name: "Globex",
-        job_title: "Account Executive",
-        job_location: "New York, NY",
-        job_publisher: "Indeed",
-        job_apply_link: "https://www.indeed.com/viewjob?jk=1",
-        apply_options: [
-          { publisher: "Indeed", apply_link: "https://www.indeed.com/viewjob?jk=1" },
-          { publisher: "Globex Careers", apply_link: "https://careers.globex.com/jobs/77", is_direct: true },
-        ],
-        job_description: BDR_DESCRIPTION,
-        job_min_salary: 70000,
-        job_max_salary: 80000,
-        job_salary_period: "YEAR",
-      },
-      { job_id: "c", employer_name: "Hooli", job_title: "Office Manager", job_location: "New York, NY", job_apply_link: "https://hooli.com/jobs/3" },
-    ],
+    data: {
+      jobs: [
+        // Also on Greenhouse: shown once, with LinkedIn added to where it was found.
+        { job_id: "a", employer_name: "Acme", job_title: "Account Executive", job_city: "New York", job_state: "NY", job_publisher: "LinkedIn", job_apply_link: "https://www.linkedin.com/jobs/view/1", apply_options: [{ publisher: "LinkedIn", apply_link: "https://www.linkedin.com/jobs/view/1" }] },
+        // Only on the aggregator: keeps the company's direct link over LinkedIn and Indeed.
+        {
+          job_id: "b",
+          employer_name: "Globex",
+          job_title: "Account Executive",
+          job_location: "New York, NY",
+          job_publisher: "Indeed",
+          job_apply_link: "https://www.indeed.com/viewjob?jk=1",
+          apply_options: [
+            { publisher: "Indeed", apply_link: "https://www.indeed.com/viewjob?jk=1" },
+            { publisher: "Globex Careers", apply_link: "https://careers.globex.com/jobs/77", is_direct: true },
+          ],
+          job_description: BDR_DESCRIPTION,
+          job_min_salary: 70000,
+          job_max_salary: 80000,
+          job_salary_period: "YEAR",
+        },
+        { job_id: "c", employer_name: "Hooli", job_title: "Office Manager", job_location: "New York, NY", job_apply_link: "https://hooli.com/jobs/3" },
+      ],
+    },
   },
 };
 
