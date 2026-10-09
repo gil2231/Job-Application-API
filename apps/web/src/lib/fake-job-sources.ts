@@ -44,6 +44,15 @@ const ROUTES: Array<[RegExp, unknown | ((body: string | undefined) => unknown)]>
       ],
     },
   ],
+  // The free feeds: one New York listing on The Muse; the rest have nothing new.
+  [
+    /^https:\/\/www\.themuse\.com\/api\/public\/jobs\?.*page=0/,
+    { results: [{ id: 501, name: "Account Executive", contents: "<p>Sell paper to New York offices.</p>", publication_date: ago(2), locations: [{ name: "New York, NY" }], refs: { landing_page: "https://www.themuse.com/jobs/kramerica/account-executive" }, company: { name: "Kramerica" } }] },
+  ],
+  [/^https:\/\/www\.themuse\.com\/api\/public\/jobs\?/, { results: [] }],
+  [/^https:\/\/himalayas\.app\/jobs\/api\/search\?/, { jobs: [] }],
+  [/^https:\/\/jobicy\.com\/api\/v2\/remote-jobs\?/, { jobs: [] }],
+  [/^https:\/\/api\.adzuna\.com\/v1\/api\/jobs\/us\/search\/1\?/, { results: [] }],
 ];
 
 export const fakeJobSources: HttpFetcher = async (url, init) => {

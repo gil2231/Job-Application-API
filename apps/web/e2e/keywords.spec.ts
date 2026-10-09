@@ -80,9 +80,10 @@ test("searches every job site at once and adds the picked jobs", async ({ page }
   await page.getByLabel("Search all job sites").fill("account executive");
   await page.getByLabel("Location").fill("New York");
   await page.getByRole("button", { name: "Search", exact: true }).click();
-  await expect(page.getByTestId("search-summary")).toContainText("Found 3 jobs across 6 job boards, LinkedIn, Indeed and more.");
+  await expect(page.getByTestId("search-summary")).toContainText("Found 4 jobs across 6 company job boards, LinkedIn, Indeed, Glassdoor, The Muse and Adzuna.");
   const results = page.getByTestId("found-job");
-  await expect(results).toHaveCount(3);
+  await expect(results).toHaveCount(4);
+  await expect(results.filter({ hasText: "Kramerica" })).toContainText("The Muse");
   // Found on Acme's Greenhouse board and on LinkedIn: listed once, with the company's own link.
   const acme = results.filter({ hasText: "Account Executive, FinTech" });
   await expect(acme).toContainText("Greenhouse");

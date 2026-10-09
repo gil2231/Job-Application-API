@@ -71,3 +71,38 @@ export function splitPreferences(terms: string[]): { keywords: string[]; places:
 export function termsToQuery(terms: string[]): string {
   return terms.map((t) => (/[\s-]/.test(t) ? `"${t.replace(/"/g, "")}"` : t)).join(" ");
 }
+
+export interface PreferenceFit {
+  /** Higher fits better; 0 means nothing in the preferences matched. */
+  score: number;
+  /** Preference terms the job matched, title matches first. */
+  matched: string[];
+  /** Preferred places the job is in. */
+  places: string[];
+}
+
+/** A preference in the title counts most; one only in the company or description counts a little. */
+const TITLE_WEIGHT = 3;
+const OTHER_WEIGHT = 1;
+const PLACE_WEIGHT = 4;
+
+/**
+ * How well a job fits the preference terms, for ranking search results and
+ * new openings: each term in the title, company or description, and whether
+ * the job is in one of the preferred places.
+ */
+export function preferenceFit(
+  job: { title?: string | null; company?: string | null; location?: string | null; description?: string | null; remote?: boolean },
+  preferences: { keywords: string[]; places: string[] },
+): PreferenceFit {
+  const title = job.title ?? "";
+  const other = `${job.company ?? ""}\n${job.description ?? ""}`;
+  const inTitle = preferences.keywords.filter((t) => mentionsKeyword(title, t));
+  const elsewhere = preferences.keywords.filter((t) => !inTitle.includes(t) && mentionsKeyword(other, t));
+  const places = preferences.places.filter((p) => locationMatchesPlace(job.location, p) || (job.remote === true && p.trim().toLowerCase() === "remote"));
+  return {
+    score: inTitle.length * TITLE_WEIGHT + elsewhere.length * OTHER_WEIGHT + (places.length ? PLACE_WEIGHT : 0),
+    matched: [...inTitle, ...elsewhere],
+    places,
+  };
+}

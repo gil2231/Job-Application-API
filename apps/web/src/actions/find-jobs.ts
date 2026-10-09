@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { audit, findKnownJobUrls, getSavedBoardSearch, getSearchPreferences, saveSearchPreferences } from "@autoapply/database";
-import { BoardSearchError, foundJobsSource, parseBoardList, runImport, safeFetch, searchEverywhere, type WideSearchInput, type WideSearchResult } from "@autoapply/ingestion";
+import { BoardSearchError, foundJobsSource, parseBoardList, runImport, safeFetch, searchEverywhere, type FeedKeys, type WideSearchInput, type WideSearchResult } from "@autoapply/ingestion";
 import { canonicalizeJobUrl, foundJobsSchema, jobFinderSchema, parsePreferences, searchPreferencesSchema, splitPreferences, type JobFinderInput } from "@autoapply/shared";
 import { authedAction, formToObject, validationFailed, type ActionResult } from "@/lib/action";
 import { FAKE_DIRECTORY, fakeJobSources } from "@/lib/fake-job-sources";
@@ -20,6 +20,8 @@ export interface FoundJobRow {
   workArrangement: string | null;
   /** Everywhere the job was found, e.g. ["Greenhouse", "LinkedIn"]. */
   sources: string[];
+  /** The user's preferences this job fits, e.g. ["Account Executive", "NYC"]. */
+  fits: string[];
   matchedIn: "title" | "description";
   /** new: not in the list yet; in_list: already saved; removed: deleted earlier, so it won't be re-added. */
   known: "new" | "in_list" | "removed";
@@ -36,19 +38,42 @@ export interface FoundJobsData {
 
 const plural = (n: number, word: string) => `${n.toLocaleString("en-US")} ${word}${n === 1 ? "" : "s"}`;
 
+/** ", LinkedIn, Indeed, The Muse and Himalayas": the outside sources this search used. */
+function sourcesSummary(result: WideSearchResult): string {
+  const names = [...(result.aggregator.status === "used" ? ["LinkedIn", "Indeed", "Glassdoor"] : []), ...result.feeds.filter((f) => f.status === "used").map((f) => f.label)];
+  if (!names.length) return "";
+  return `, ${names.length === 1 ? names[0] : `${names.slice(0, -1).join(", ")} and ${names.at(-1)}`}`;
+}
+
 /** Stand-in boards for end-to-end tests and demos; never in production. */
 const fake = process.env.E2E_FAKE_JOB_SOURCES === "1" && process.env.NODE_ENV !== "production";
 
-function sources(): { http: typeof safeFetch; directory?: readonly string[]; aggregatorKey: string | null } {
-  if (fake) return { http: fakeJobSources, directory: FAKE_DIRECTORY, aggregatorKey: "fake" };
-  return { http: safeFetch, aggregatorKey: process.env.JSEARCH_API_KEY?.trim() || null };
+function feedKeys(): FeedKeys {
+  const appId = process.env.ADZUNA_APP_ID?.trim();
+  const appKey = process.env.ADZUNA_APP_KEY?.trim();
+  return {
+    theMuse: process.env.THEMUSE_API_KEY?.trim() || null,
+    adzuna: appId && appKey ? { appId, appKey, country: process.env.ADZUNA_COUNTRY?.trim() || "us" } : null,
+  };
 }
 
-async function runSearch(userId: string, input: Omit<WideSearchInput, "directory" | "aggregatorKey" | "boards"> & { aggregator: boolean }) {
-  const { http, directory, aggregatorKey } = sources();
+function sources(): { http: typeof safeFetch; directory?: readonly string[]; aggregatorKey: string | null; feeds: FeedKeys } {
+  if (fake) return { http: fakeJobSources, directory: FAKE_DIRECTORY, aggregatorKey: "fake", feeds: { adzuna: { appId: "fake", appKey: "fake" } } };
+  return { http: safeFetch, aggregatorKey: process.env.JSEARCH_API_KEY?.trim() || null, feeds: feedKeys() };
+}
+
+/** The user's preferences, split into roles and keywords versus places. */
+async function preferencesOf(userId: string) {
+  const { text } = await getSearchPreferences(userId);
+  const terms = parsePreferences(text);
+  return { terms, ...splitPreferences(terms) };
+}
+
+async function runSearch(userId: string, input: Omit<WideSearchInput, "directory" | "aggregatorKey" | "boards" | "feeds"> & { aggregator: boolean }) {
+  const { http, directory, aggregatorKey, feeds } = sources();
   const saved = await getSavedBoardSearch(userId);
   const boards = parseBoardList((saved?.boards ?? []).join("\n")).boards;
-  return searchEverywhere({ ...input, boards, directory, aggregatorKey: input.aggregator ? aggregatorKey : null }, http);
+  return searchEverywhere({ ...input, boards, directory, aggregatorKey: input.aggregator ? aggregatorKey : null, feeds }, http);
 }
 
 async function toData(userId: string, result: WideSearchResult): Promise<FoundJobsData> {
@@ -64,6 +89,7 @@ async function toData(userId: string, result: WideSearchResult): Promise<FoundJo
     ...result.userBoardErrors.map((b) => `${b.label}: ${b.error}`),
     ...result.issues.filter((i) => i.kind === "limit").map((i) => i.message),
     ...(result.aggregator.status === "failed" ? [`LinkedIn and Indeed listings weren't included this time: ${result.aggregator.error}.`] : []),
+    ...result.feeds.filter((f) => f.status === "failed").map((f) => `${f.label} listings weren't included this time: ${f.reason}.`),
   ];
   return {
     results: result.jobs.map((j, i): FoundJobRow => {
@@ -77,6 +103,7 @@ async function toData(userId: string, result: WideSearchResult): Promise<FoundJo
         salaryText: j.salaryText ?? null,
         workArrangement: j.workArrangement ?? null,
         sources: j.sources,
+        fits: j.fits,
         matchedIn: j.matchedIn,
         known: !k ? "new" : k.removed ? "removed" : "in_list",
       };
@@ -98,25 +125,42 @@ export async function findJobsAction(input: JobFinderInput): Promise<ActionResul
     if (!limit.allowed) return { ok: false, message: `Search limit reached. Try again in ${Math.ceil(limit.retryAfterSeconds / 60)} minutes.` };
     let result: WideSearchResult;
     try {
-      result = await runSearch(user.id, { query: parsed.data.query, location: parsed.data.location ?? null, aggregator: true });
+      const prefs = await preferencesOf(user.id);
+      // Typed searches stay as wide as typed; preferences only decide the order.
+      result = await runSearch(user.id, { query: parsed.data.query, location: parsed.data.location ?? null, aggregator: true, preferences: prefs, feedHints: prefs.terms });
     } catch (error) {
       if (error instanceof BoardSearchError) return { ok: false, message: error.message, errors: { query: error.message } };
       throw error;
     }
     const data = await toData(user.id, result);
-    return { ok: true, message: `Found ${plural(result.totalMatches, "job")} across ${plural(result.boardsAnswered, "job board")}${result.aggregator.status === "used" ? ", LinkedIn, Indeed and more" : ""}.`, data };
+    return { ok: true, message: `Found ${plural(result.totalMatches, "job")} across ${plural(result.boardsAnswered, "company job board")}${sourcesSummary(result)}.`, data };
   });
 }
 
-/** New openings that fit the user's preferences, shown under the search bar. Company boards only, so it costs no JSearch requests. */
+/**
+ * New openings that fit the user's preferences, shown under the search bar.
+ * A job needs a preference in its title, is ranked by how many it fits, and
+ * must be in a preferred place when the preferences name any. JSearch is
+ * asked too; its answers are cached, so this rarely spends a request.
+ */
 export async function recommendedOpeningsAction(): Promise<ActionResult<FoundJobsData>> {
   return authedAction<FoundJobsData>(async (user) => {
-    const { text } = await getSearchPreferences(user.id);
-    const { keywords, places } = splitPreferences(parsePreferences(text));
+    const prefs = await preferencesOf(user.id);
+    const { keywords, places } = prefs;
     if (!keywords.length) return { ok: true, data: { results: [], totalMatches: 0, notices: [], boardsSearched: 0, seconds: 0 } };
     const limit = await rateLimit(`recommended-openings:${user.id}`, LIMITS.boardSearch.limit * 2, LIMITS.boardSearch.windowMs);
     if (!limit.allowed) return { ok: false, message: "New openings refresh again in a few minutes." };
-    const result = await runSearch(user.id, { query: "", terms: { include: keywords, exclude: [] }, matchAny: true, preferPlaces: places, aggregator: false });
+    const city = places.find((p) => p.toLowerCase() !== "remote") ?? places[0] ?? null;
+    const result = await runSearch(user.id, {
+      query: "",
+      terms: { include: keywords, exclude: [] },
+      matchAny: true,
+      preferences: prefs,
+      onlyPreferredPlaces: true,
+      searchNear: city,
+      feedHints: prefs.terms,
+      aggregator: true,
+    });
     const data = await toData(user.id, result);
     // Only openings not already in the list; the saved ones are recommended above.
     data.results = data.results.filter((r) => r.known === "new").slice(0, 50);

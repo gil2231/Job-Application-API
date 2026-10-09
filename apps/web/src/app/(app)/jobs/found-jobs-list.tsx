@@ -90,6 +90,12 @@ export function FoundJobsList({ rows, idPrefix, emptyText }: { rows: FoundJobRow
                     </Badge>
                   ))}
                   {r.postedAt && <span>· posted {formatRelative(r.postedAt)}</span>}
+                  {r.fits.length > 0 && (
+                    <span className="text-primary" title="Your preferences this job fits">
+                      · fits {r.fits.slice(0, 4).join(", ")}
+                      {r.fits.length > 4 && ` +${r.fits.length - 4}`}
+                    </span>
+                  )}
                   {r.matchedIn === "description" && <span>· keywords in the description</span>}
                 </div>
               </div>

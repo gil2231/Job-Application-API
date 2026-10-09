@@ -45,7 +45,9 @@ export default async function JobsPage({ searchParams }: { searchParams: Promise
     titleKeywords: r.titleKeywords,
     descriptionKeywords: r.descriptionKeywords,
   }));
-  const searchesLinkedIn = !!process.env.JSEARCH_API_KEY?.trim() || process.env.E2E_FAKE_JOB_SOURCES === "1";
+  const fakeSources = process.env.E2E_FAKE_JOB_SOURCES === "1";
+  const searchesLinkedIn = !!process.env.JSEARCH_API_KEY?.trim() || fakeSources;
+  const searchesAdzuna = !!(process.env.ADZUNA_APP_ID?.trim() && process.env.ADZUNA_APP_KEY?.trim()) || fakeSources;
   const hasFilters = ["q", "status", "platform", "remote", "minMatch", "company", "location", "minSalary", "savedFrom", "savedTo"].some((k) => raw[k]);
 
   // minmax(0, 1fr) keeps the wide table scrolling inside its container instead of widening the page.
@@ -76,7 +78,7 @@ export default async function JobsPage({ searchParams }: { searchParams: Promise
           </ActionButton>
         </div>
       )}
-      <JobFinder preferences={preferences} saved={saved} searchesLinkedIn={searchesLinkedIn} />
+      <JobFinder preferences={preferences} saved={saved} searchesLinkedIn={searchesLinkedIn} searchesAdzuna={searchesAdzuna} />
       <h2 className="-mb-2 text-sm font-semibold">Your jobs</h2>
       <JobsToolbar companies={options.companies} platforms={options.platforms} />
       <JobsTable data={data} hasFilters={hasFilters} />

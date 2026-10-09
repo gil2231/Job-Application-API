@@ -14,13 +14,18 @@ export const DIRECTORY_BOARDS: readonly string[] = [
     "carta", "anthropic", "scaleai", "duolingo", "roblox", "gemini", "webflow", "grammarly", "flexport", "nerdwallet",
     "betterment", "marqeta", "doordashusa", "hubspotjobs", "vercel", "mixpanel", "amplitude", "braze", "intercom", "zscaler",
     "calendly", "point72", "twosigma", "oscar", "peloton", "etsy", "warbyparker", "seatgeek", "compass",
+    // Trading, finance and fintech
+    "wehrtyou", "towerresearchcapital", "jumptrading", "akunacapital", "imc", "optiverus", "addepar1", "bitgo", "justworks",
+    // Tech, media and more
+    "thetradedesk", "klaviyo", "zocdoc", "voxmedia", "axios", "yext", "andurilindustries", "spacex", "waymo", "fivetran",
+    "lattice", "dataiku", "abnormalsecurity", "verkada", "faire", "pagerduty", "launchdarkly", "sproutsocial", "gleanwork",
   ].map((b) => `greenhouse:${b}`),
   // Lever
   ...["palantir", "spotify", "plaid", "zoox", "wealthsimple", "attentive", "matchgroup", "ro"].map((b) => `lever:${b}`),
   // Ashby
   ...[
     "openai", "ramp", "notion", "linear", "mercury", "deel", "retool", "replit", "perplexity", "supabase",
-    "posthog", "harvey", "vanta", "runway", "elevenlabs", "cohere", "snowflake", "anysphere",
+    "posthog", "harvey", "vanta", "runway", "elevenlabs", "cohere", "snowflake", "anysphere", "kalshi", "writer", "hex", "drata",
   ].map((b) => `ashby:${b}`),
   // Workday
   ...[

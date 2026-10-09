@@ -117,10 +117,11 @@ export const HELP_ARTICLES: HelpArticle[] = [
     title: "Search for jobs and set your preferences",
     summary: "Search company job boards everywhere at once, and get jobs recommended from one box of preferences.",
     category: "Finding jobs",
-    keywords: ["search", "keyword", "greenhouse", "lever", "ashby", "workday", "workable", "smartrecruiters", "linkedin", "indeed", "boards", "preferences", "recommended"],
+    keywords: ["search", "keyword", "greenhouse", "lever", "ashby", "workday", "workable", "smartrecruiters", "linkedin", "indeed", "handshake", "the muse", "adzuna", "remote", "boards", "preferences", "recommended"],
     blocks: [
-      { p: "The search bar at the top of Jobs searches the public job boards of hundreds of companies on Greenhouse, Lever, Ashby, Workday, Workable, SmartRecruiters and Recruitee at once. When your Applyance has a JSearch key, it also includes listings from LinkedIn, Indeed and other sites. A job found in several places is listed once." },
-      { p: "Under the search bar, Recommended for you lists jobs that fit your preferences: one box of roles, industries, keywords and places separated by commas (for example Account Executive, SaaS, FinTech, NYC). Edit it whenever what you want changes." },
+      { p: "The search bar at the top of Jobs searches the public job boards of hundreds of companies on Greenhouse, Lever, Ashby, Workday, Workable, SmartRecruiters and Recruitee at once. It also searches The Muse and the remote job boards Himalayas and Jobicy, plus Adzuna when your Applyance has an Adzuna key, and LinkedIn, Indeed and Glassdoor listings when it has a JSearch key. A job found in several places is listed once." },
+      { p: "Under the search bar, Recommended for you lists jobs that fit your preferences: one box of roles, industries, keywords and places separated by commas (for example Account Executive, SaaS, FinTech, NYC). New openings need one of your roles or keywords in the job title and, when you list places, must be in one of them. Jobs that fit more of your preferences come first, in recommendations and in searches, marked with what they fit." },
+      { p: "Handshake isn't searched: its jobs are only visible to signed-in students, and Applyance never signs in to Handshake or LinkedIn for you. You can still save a Handshake or LinkedIn job with the browser extension or by pasting its link." },
       { steps: [
         "Open Jobs and type a job title or keywords in the search bar, with a place if you like.",
         "Use quotes for exact phrases, and a minus sign to leave jobs out (for example -commission).",

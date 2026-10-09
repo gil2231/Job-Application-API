@@ -6,6 +6,7 @@ import { jobBoardSearchSource } from "./job-boards";
 export { searchEverywhere, type WideSearchInput, type WideSearchHit, type WideSearchResult } from "./wide-search";
 export { searchAggregator, AGGREGATOR_NAME, AggregatorError, type AggregatorHit } from "./aggregator";
 export { DIRECTORY_BOARDS } from "./board-directory";
+export { searchFeeds, museQuery, adzunaQuery, FEEDS, FEED_LABELS, type FeedName, type FeedKeys, type FeedSearch, type FeedStatus } from "./feeds";
 export { foundJobsSource, type FoundJob } from "./found-jobs";
 import { urlListSource } from "./url-list";
 
