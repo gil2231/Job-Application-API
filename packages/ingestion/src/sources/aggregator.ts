@@ -12,6 +12,8 @@ import type { RawJob } from "../types";
 
 export const AGGREGATOR_NAME = "JSearch";
 const HOST = "jsearch.p.rapidapi.com";
+/** JSearch v5 answers at /search-v2; /search now returns 404 "Endpoint does not exist". */
+const SEARCH_PATH = "/search-v2";
 
 export interface AggregatorHit extends RawJob {
   /** Where the listing is posted, e.g. ["LinkedIn", "Indeed", "Acme Careers"]. */
@@ -92,7 +94,7 @@ export async function searchAggregator(input: { query: string; location?: string
 async function fetchAggregator(params: URLSearchParams, apiKey: string, http: HttpFetcher): Promise<AggregatorHit[]> {
   let text: string;
   try {
-    const response = await http(`https://${HOST}/search?${params}`, {
+    const response = await http(`https://${HOST}${SEARCH_PATH}?${params}`, {
       accept: "application/json",
       headers: { "x-rapidapi-key": apiKey, "x-rapidapi-host": HOST },
       timeoutMs: 10_000,
@@ -102,14 +104,16 @@ async function fetchAggregator(params: URLSearchParams, apiKey: string, http: Ht
     const message = error instanceof Error ? error.message : "unknown error";
     throw new AggregatorError(/40[13]/.test(message) ? "the JSearch key was refused" : /429/.test(message) ? "the JSearch plan's limit was reached" : message);
   }
-  let data: { data?: JSearchJob[] };
+  // v5 nests the listings under data.jobs; older versions returned them as data itself.
+  let data: { data?: JSearchJob[] | { jobs?: JSearchJob[] } };
   try {
-    data = JSON.parse(text) as { data?: JSearchJob[] };
+    data = JSON.parse(text) as typeof data;
   } catch {
     throw new AggregatorError("JSearch's answer wasn't valid JSON");
   }
   const hits: AggregatorHit[] = [];
-  for (const job of data.data ?? []) {
+  const jobs = Array.isArray(data.data) ? data.data : (data.data?.jobs ?? []);
+  for (const job of jobs) {
     const url = bestLink(job);
     if (!url || !job.job_title || !job.employer_name) continue;
     const location = job.job_location || [job.job_city, job.job_state, job.job_country].filter(Boolean).join(", ") || null;

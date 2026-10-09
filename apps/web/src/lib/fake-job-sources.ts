@@ -36,12 +36,14 @@ const ROUTES: Array<[RegExp, unknown | ((body: string | undefined) => unknown)]>
   [/^https:\/\/api\.smartrecruiters\.com\/v1\/companies\/Hooli\/postings/, { content: [{ id: "744000001", name: "Account Executive", company: { name: "Hooli" }, releasedDate: ago(1), location: { city: "New York", region: "NY", country: "us" } }] }],
   [/^https:\/\/apply\.workable\.com\/api\/v1\/widget\/accounts\/piedpiper/, { name: "Pied Piper", jobs: [{ title: "Revenue Operations Analyst", shortcode: "PP1", url: "https://apply.workable.com/piedpiper/j/PP1/", city: "New York", state: "NY", country: "United States", published_on: ago(3).slice(0, 10) }] }],
   [
-    /^https:\/\/jsearch\.p\.rapidapi\.com\/search/,
+    /^https:\/\/jsearch\.p\.rapidapi\.com\/search-v2\?/,
     {
-      data: [
-        { job_id: "j1", employer_name: "Acme", job_title: "Account Executive, FinTech", job_location: "New York, NY", job_publisher: "LinkedIn", job_apply_link: "https://www.linkedin.com/jobs/view/1", apply_options: [{ publisher: "LinkedIn", apply_link: "https://www.linkedin.com/jobs/view/1" }] },
-        { job_id: "j2", employer_name: "Vandelay Industries", job_title: "Account Executive", job_location: "New York, NY", job_publisher: "Indeed", job_apply_link: "https://www.indeed.com/viewjob?jk=2", apply_options: [{ publisher: "Indeed", apply_link: "https://www.indeed.com/viewjob?jk=2" }, { publisher: "LinkedIn", apply_link: "https://www.linkedin.com/jobs/view/2" }], job_posted_at_datetime_utc: ago(1), job_min_salary: 70000, job_max_salary: 90000, job_salary_period: "YEAR" },
-      ],
+      data: {
+        jobs: [
+          { job_id: "j1", employer_name: "Acme", job_title: "Account Executive, FinTech", job_location: "New York, NY", job_publisher: "LinkedIn", job_apply_link: "https://www.linkedin.com/jobs/view/1", apply_options: [{ publisher: "LinkedIn", apply_link: "https://www.linkedin.com/jobs/view/1" }] },
+          { job_id: "j2", employer_name: "Vandelay Industries", job_title: "Account Executive", job_location: "New York, NY", job_publisher: "Indeed", job_apply_link: "https://www.indeed.com/viewjob?jk=2", apply_options: [{ publisher: "Indeed", apply_link: "https://www.indeed.com/viewjob?jk=2" }, { publisher: "LinkedIn", apply_link: "https://www.linkedin.com/jobs/view/2" }], job_posted_at_datetime_utc: ago(1), job_min_salary: 70000, job_max_salary: 90000, job_salary_period: "YEAR" },
+        ],
+      },
     },
   ],
   // The free feeds: one New York listing on The Muse; the rest have nothing new.

@@ -33,7 +33,7 @@ describe("followToCompany", () => {
 
   it("falls back to JSearch's direct company link when the board can't be guessed", async () => {
     const http = fakeHttp({
-      [`https://jsearch.p.rapidapi.com/search?${new URLSearchParams({ query: "Account Executive Acme, Inc. in New York, NY", page: "1", num_pages: "1", date_posted: "month" })}`]: {
+      [`https://jsearch.p.rapidapi.com/search-v2?${new URLSearchParams({ query: "Account Executive Acme, Inc. in New York, NY", page: "1", num_pages: "1", date_posted: "month" })}`]: {
         data: [
           { employer_name: "Other Co", job_title: "Account Executive", job_apply_link: "https://other.example.com/jobs/1" },
           {
