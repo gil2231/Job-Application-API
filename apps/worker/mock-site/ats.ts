@@ -170,6 +170,27 @@ function checkboxGroup(q: (typeof GROUP_QUESTIONS)[number], values: Values, erro
   return `<fieldset class="checkbox field" id="${name}" aria-required="true"><legend class="label checkbox__description">${esc(q.label)} <span class="required">*</span></legend>${boxes}${error ? `<p class="error" id="${name}-error">${esc(error)}</p>` : ""}</fieldset>`;
 }
 
+/**
+ * Greenhouse's GDPR box under the voluntary survey: optional until a survey
+ * answer is filled, then required (Braze). The page marks it as the answers change.
+ */
+const SURVEY_CONSENT = "gdpr_demographic_data_consent_given";
+const SURVEY_CONSENT_LABEL = "By checking this box, I consent to Example Corp collecting, storing, and processing my responses to the demographic data surveys above.";
+
+function surveyConsent(values: Values, error?: string): string {
+  return `<div class="checkbox--full-width checkbox field" id="${SURVEY_CONSENT}"><div class="checkbox__wrapper"><div class="checkbox__input"><input aria-required="false" type="checkbox" id="${SURVEY_CONSENT}_1" name="${SURVEY_CONSENT}" value="1" aria-invalid="${error ? "true" : "false"}" aria-errormessage="${SURVEY_CONSENT}-error"${values[SURVEY_CONSENT] ? " checked" : ""}></div><label for="${SURVEY_CONSENT}_1" style="display:inline;font-weight:400">${esc(SURVEY_CONSENT_LABEL)}</label></div>${error ? `<p class="error" id="${SURVEY_CONSENT}-error">${esc(error)}</p>` : ""}</div>
+  <script>setInterval(() => {
+    const answered = ["job_application[gender]", "job_application[veteran_status]"].some((n) => document.querySelector('input[type=hidden][name="' + n + '"]')?.value);
+    const box = document.getElementById("${SURVEY_CONSENT}_1");
+    box.required = answered;
+    box.setAttribute("aria-required", String(answered));
+    const label = box.closest(".checkbox").querySelector("label");
+    const mark = label.querySelector(".asterisk");
+    if (answered && !mark) label.insertAdjacentHTML("beforeend", '<span class="asterisk">*</span>');
+    if (!answered && mark) mark.remove();
+  }, 100);</script>`;
+}
+
 function greenhousePage(values: Values = {}, errors: Record<string, string> = {}, badge = false, groups = false): string {
   const action = groups ? GH_GROUPS_PATH : badge ? GH_BADGE_PATH : GH_PATH;
   const text = (id: string, name: string, label: string, type = "text", required = true) =>
@@ -209,7 +230,8 @@ function greenhousePage(values: Values = {}, errors: Record<string, string> = {}
         ${groups ? GROUP_QUESTIONS.map((q) => checkboxGroup(q, values, errors[`${q.id}[]`])).join("") : ""}
         <div class="eeoc"><h2>Voluntary Self-Identification</h2><p>Completing this section is voluntary and won't affect your application.</p>
         ${combo("job_application_gender", "job_application[gender]", "Gender", ["Male", "Female", "Decline To Self Identify"], false)}
-        ${combo("job_application_veteran_status", "job_application[veteran_status]", "Veteran Status", ["I am not a protected veteran", "I identify as one or more of the classifications of protected veteran", "I don't wish to answer"], false)}</div>
+        ${combo("job_application_veteran_status", "job_application[veteran_status]", "Veteran Status", ["I am not a protected veteran", "I identify as one or more of the classifications of protected veteran", "I don't wish to answer"], false)}
+        ${groups ? surveyConsent(values, errors[SURVEY_CONSENT]) : ""}</div>
         <p style="margin-top:28px"><button id="submit_app" type="submit">Submit Application</button></p>
       </form></div></main>${badge ? GH_BADGE_HTML : ""}`,
     WIDGETS_JS,
@@ -271,6 +293,8 @@ async function greenhouse(req: IncomingMessage, res: ServerResponse, path: strin
     const resume = badge ? "attachments[0]" : "resume";
     const groupNames = groups ? GROUP_QUESTIONS.map((q) => `${q.id}[]`) : [];
     const errors = requireAll(["job_application[first_name]", "job_application[last_name]", "job_application[email]", "job_application[phone]", "job_application[location]", resume, "job_application[answers_attributes][1][boolean_value]", "job_application[answers_attributes][2][boolean_value]", ...groupNames], fields, files, [resume]);
+    const surveyed = !blank(fields["job_application[gender]"]) || !blank(fields["job_application[veteran_status]"]);
+    if (groups && surveyed && blank(fields[SURVEY_CONSENT])) errors[SURVEY_CONSENT] = "Please check this box if you want to proceed.";
     if (Object.keys(errors).length) {
       h.send(res, 422, greenhousePage(fields, errors, badge, groups));
       return true;

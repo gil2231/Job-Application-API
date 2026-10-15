@@ -86,6 +86,8 @@ const NO_PARTIAL = new Set(["name", "cell", "street", "state", "region", "apt", 
 const QUESTION_PATTERNS: Array<[RegExp, string]> = [
   // First: these long legal questions also mention pay, employers and work.
   [/\bnon-?compete|\bnon-?solicit|restrictive covenant|bound by (any |an |a )?(agreements?|contracts?|covenants?|obligations?)\b|\b(agreements?|obligations?|covenants?)\b.{0,80}\b(restrict|prevent|limit|prohibit)/, "restrictive_agreements"],
+  // Before the survey questions it mentions. Greenhouse's GDPR box under the voluntary survey; it becomes required once a survey answer is filled.
+  [/\b(consent|agree)\b.{0,160}\b(demographic|self[- ]identification|diversity|eeo)\b/, "demographic_data_consent"],
   [/(legally )?(authori[sz]ed|eligible) to work|work authori[sz]ation|right to work/, "work_authorization"],
   [/(require|need)s? (visa |immigration |employment )?sponsor|sponsorship/, "sponsorship"],
   [/(willing|open|able|prepared) to relocat|consider relocat|relocation (is )?(possible|an option)|^relocat\w*\??$/, "relocation"],
@@ -114,7 +116,7 @@ const QUESTION_PATTERNS: Array<[RegExp, string]> = [
 ];
 
 /** Questions about the applicant even when they mention a former employer, a referral or a manager. */
-const ABOUT_THE_APPLICANT = new Set(["onsite_work", "age_18", "restrictive_agreements", "competitor_employment", "how_did_you_hear", "privacy_acknowledgement", "certify_information"]);
+const ABOUT_THE_APPLICANT = new Set(["demographic_data_consent", "onsite_work", "age_18", "restrictive_agreements", "competitor_employment", "how_did_you_hear", "privacy_acknowledgement", "certify_information"]);
 
 export function matchStandardQuestion(label: string): string | null {
   const text = normalizeLabel(label);

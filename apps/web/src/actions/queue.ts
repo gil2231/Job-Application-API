@@ -3,6 +3,8 @@
 import { revalidatePath } from "next/cache";
 import { audit, prisma, queueAllQualified, setQueueState, type QueueCommand } from "@autoapply/database";
 import { authedAction, type ActionResult } from "@/lib/action";
+import { requireUser } from "@/lib/auth";
+import { jobHuntStatus, startJobHunt, type JobHunt } from "@/lib/job-hunt";
 import { notifyWorker, stopWorker } from "@/lib/worker-queue";
 
 const COMMANDS: QueueCommand[] = ["pause", "resume", "pause_after_current", "stop"];
@@ -31,21 +33,30 @@ const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? "" : "s"}`;
  * The Tasks page's Start button: un-pauses the queue so the worker picks up
  * queued applications. When nothing is queued it first adds the qualified jobs
  * (queueAllQualified), which keeps every safety rule: the user's default mode,
- * Review unless auto-submit is on, and the daily and concurrency limits.
+ * Review unless auto-submit is on, and the daily and concurrency limits. It
+ * also searches for new openings that fit the saved preferences in the
+ * background (startJobHunt); the ones that qualify join the line as they're found.
  */
 export async function startRunAction(): Promise<ActionResult> {
   return authedAction(async (user) => {
     const waiting = await prisma.application.count({ where: { userId: user.id, status: { in: ["QUEUED", "PROCESSING"] } } });
     let added: Awaited<ReturnType<typeof queueAllQualified>> | null = null;
-    if (waiting === 0) {
-      added = await queueAllQualified(user.id);
-      if (added.queued === 0) return { ok: false, message: "Nothing to run yet. Choose Apply on jobs (or let jobs qualify) to add tasks." };
-    }
+    if (waiting === 0) added = await queueAllQualified(user.id);
+    const search = startJobHunt(user.id);
     await setQueueState(user.id, "resume");
     await notifyWorker(user.id);
-    await audit(user.id, "queue.start", { metadata: added ? { queued: added.queued, mode: added.mode } : { waiting } });
+    await audit(user.id, "queue.start", { metadata: { ...(added ? { queued: added.queued, mode: added.mode } : { waiting }), search } });
     revalidatePath("/", "layout");
-    if (added) return { ok: true, message: `Started. ${plural(added.queued, "qualified job")} added in ${added.mode.toLowerCase()} mode.` };
-    return { ok: true, message: `Started. Running ${plural(waiting, "task")}.` };
+    const searching = search === "recent" ? "" : " Looking for new jobs that fit your preferences too.";
+    if (added?.queued) return { ok: true, message: `Started. ${plural(added.queued, "qualified job")} added in ${added.mode.toLowerCase()} mode.${searching}` };
+    if (waiting) return { ok: true, message: `Started. Running ${plural(waiting, "task")}.${searching}` };
+    if (search === "recent") return { ok: true, message: "Nothing in line, and you searched for new jobs a few minutes ago. Press Start again later for new openings." };
+    return { ok: true, message: "Looking for new jobs that fit your preferences. The ones that qualify will join the line." };
   });
+}
+
+/** What Start's job search is doing, for the Tasks page to show while it runs. */
+export async function jobHuntStatusAction(): Promise<ActionResult<JobHunt | null>> {
+  const user = await requireUser();
+  return { ok: true, data: jobHuntStatus(user.id) };
 }

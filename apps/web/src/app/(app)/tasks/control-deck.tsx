@@ -1,10 +1,13 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import Link from "next/link";
-import { Loader2, Pause, Play, PlusCircle, ShieldCheck, Square, TimerReset } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { Loader2, Pause, Play, PlusCircle, Search, ShieldCheck, Square, TimerReset, TriangleAlert } from "lucide-react";
 import { applyToAllQualifiedAction } from "@/actions/jobs";
-import { queueControlAction, startRunAction } from "@/actions/queue";
+import { jobHuntStatusAction, queueControlAction, startRunAction } from "@/actions/queue";
 import { ActionButton, useServerAction } from "@/components/action-button";
+import type { JobHunt } from "@/lib/job-hunt";
 import { cn } from "@/lib/utils";
 
 interface ControlDeckProps {
@@ -13,29 +16,58 @@ interface ControlDeckProps {
   qualifiedWaiting: number;
   usage: { started: number; limit: number };
   worker: { state: "online"; interactive: boolean } | { state: "offline" | "unreachable" };
+  /** Start's search for new jobs, while it runs and for a while after. */
+  hunt: JobHunt | null;
 }
 
-type DeckState = "running" | "idle" | "paused" | "empty";
+type DeckState = "running" | "searching" | "idle" | "paused" | "empty";
 
 const STATE_LABEL: Record<DeckState, string> = {
   running: "Running",
+  searching: "Finding jobs",
   idle: "Ready",
   paused: "Paused",
   empty: "No tasks",
 };
 
+const SEARCHING = new Set<JobHunt["state"]>(["searching", "adding", "checking"]);
+const POLL_MS = 2500;
+
+/** The job search's latest state: polled while it runs, the page's own once the page is newer. */
+function useJobHunt(initial: JobHunt | null) {
+  const router = useRouter();
+  const [polled, setPolled] = useState<JobHunt | null>(null);
+  const hunt = polled && (!initial || polled.startedAt >= initial.startedAt) ? polled : initial;
+  const searching = !!hunt && SEARCHING.has(hunt.state);
+  useEffect(() => {
+    if (!searching) return;
+    const timer = setInterval(async () => {
+      const result = await jobHuntStatusAction().catch(() => null);
+      if (!result?.ok) return;
+      const next = result.data ?? null;
+      setPolled(next);
+      // Jobs that qualified are in line now; refresh the counts and the task list.
+      if (!next || !SEARCHING.has(next.state)) router.refresh();
+    }, POLL_MS);
+    return () => clearInterval(timer);
+  }, [searching, router]);
+  return { hunt, searching };
+}
+
 const plural = (n: number, word: string) => `${n.toLocaleString()} ${word}${n === 1 ? "" : "s"}`;
 
 /**
  * The big Start button and run controls. Start un-pauses the queue (adding the
- * qualified jobs when nothing is queued); Pause, Pause after current and Stop
- * are the same queue commands the dashboard uses.
+ * qualified jobs when nothing is queued) and looks for new jobs that fit the
+ * saved preferences; Pause, Pause after current and Stop are the same queue
+ * commands the dashboard uses.
  */
-export function ControlDeck({ run, counts, qualifiedWaiting, usage, worker }: ControlDeckProps) {
+export function ControlDeck({ run, counts, qualifiedWaiting, usage, worker, hunt: initialHunt }: ControlDeckProps) {
   const { pending, run: runAction } = useServerAction();
+  const { hunt, searching } = useJobHunt(initialHunt);
   const hasWork = counts.queued + counts.running > 0;
-  const state: DeckState = run.paused ? "paused" : hasWork ? "running" : qualifiedWaiting > 0 ? "idle" : "empty";
-  const canStart = state === "paused" ? hasWork || qualifiedWaiting > 0 : state === "idle";
+  const state: DeckState = run.paused ? "paused" : hasWork ? "running" : searching ? "searching" : qualifiedWaiting > 0 ? "idle" : "empty";
+  const canStart = state !== "running" && state !== "searching";
   const isRunning = state === "running";
   const limitReached = usage.started >= usage.limit;
 
@@ -44,15 +76,17 @@ export function ControlDeck({ run, counts, qualifiedWaiting, usage, worker }: Co
       ? run.pauseAfterCurrent
         ? "Pausing after the current application"
         : `${plural(counts.running, "task")} running · ${counts.queued.toLocaleString()} in line`
-      : state === "paused"
-        ? hasWork
-          ? `${plural(counts.queued + counts.running, "task")} waiting to start`
-          : qualifiedWaiting > 0
-            ? `Start adds ${plural(qualifiedWaiting, "qualified job")}`
-            : "Nothing queued"
-        : state === "idle"
-          ? `Start adds ${plural(qualifiedWaiting, "qualified job")}`
-          : "Choose Apply on jobs to add tasks";
+      : state === "searching"
+        ? "Looking for new jobs that fit your preferences"
+        : state === "paused"
+          ? hasWork
+            ? `${plural(counts.queued + counts.running, "task")} waiting to start`
+            : qualifiedWaiting > 0
+              ? `Start adds ${plural(qualifiedWaiting, "qualified job")} and finds more`
+              : "Start finds new jobs that fit your preferences"
+          : state === "idle"
+            ? `Start adds ${plural(qualifiedWaiting, "qualified job")} and finds more`
+            : "Start finds new jobs that fit your preferences";
 
   const onBigButton = () => {
     if (isRunning) runAction(() => queueControlAction("pause"));
@@ -75,7 +109,7 @@ export function ControlDeck({ run, counts, qualifiedWaiting, usage, worker }: Co
             type="button"
             onClick={onBigButton}
             disabled={pending || (!isRunning && !canStart)}
-            aria-label={isRunning ? "Pause" : "Start"}
+            aria-label={isRunning ? "Pause" : searching ? "Finding jobs" : "Start"}
             data-testid="start-button"
             className={cn(
               "group relative grid size-36 place-items-center rounded-full transition-transform outline-none select-none focus-visible:ring-4 focus-visible:ring-[var(--glow)] active:scale-[0.97] disabled:cursor-not-allowed disabled:opacity-50 sm:size-40",
@@ -86,7 +120,7 @@ export function ControlDeck({ run, counts, qualifiedWaiting, usage, worker }: Co
             <span className="absolute inset-0 rounded-full bg-[conic-gradient(from_200deg,#f5f7fb,#8d96a5,#e3e7ed,#6c7583,#f5f7fb)] p-[3px]">
               <span className="block size-full rounded-full bg-[oklch(0.22_0.03_262)]" />
             </span>
-            {isRunning && (
+            {(isRunning || searching) && (
               <span className="absolute inset-1 animate-[spin_2.4s_linear_infinite] rounded-full bg-[conic-gradient(from_0deg,transparent_0deg,transparent_250deg,oklch(0.7_0.17_255)_330deg,transparent_360deg)] [mask:radial-gradient(farthest-side,transparent_calc(100%-4px),#000_calc(100%-3px))]" />
             )}
             <span
@@ -98,8 +132,8 @@ export function ControlDeck({ run, counts, qualifiedWaiting, usage, worker }: Co
               )}
             >
               <span className="flex flex-col items-center gap-1 text-white">
-                {pending ? <Loader2 className="size-7 animate-spin" /> : isRunning ? <Pause className="size-7" /> : <Play className="size-7 fill-current" />}
-                <span className="text-sm font-bold tracking-[0.25em]">{isRunning ? "PAUSE" : "START"}</span>
+                {pending || (searching && !isRunning) ? <Loader2 className="size-7 animate-spin" /> : isRunning ? <Pause className="size-7" /> : <Play className="size-7 fill-current" />}
+                <span className="text-sm font-bold tracking-[0.25em]">{isRunning ? "PAUSE" : searching ? "SEARCHING" : "START"}</span>
               </span>
             </span>
           </button>
@@ -108,7 +142,7 @@ export function ControlDeck({ run, counts, qualifiedWaiting, usage, worker }: Co
               <span
                 className={cn(
                   "size-2 rounded-full",
-                  state === "running" ? "bg-success animate-pulse" : state === "paused" ? "bg-warning" : "bg-muted-foreground",
+                  state === "running" || state === "searching" ? "bg-success animate-pulse" : state === "paused" ? "bg-warning" : "bg-muted-foreground",
                 )}
               />
               {STATE_LABEL[state]}
@@ -118,6 +152,29 @@ export function ControlDeck({ run, counts, qualifiedWaiting, usage, worker }: Co
         </div>
 
         <div className="grid min-w-0 gap-5">
+          {hunt && (
+            <p className="flex items-start gap-2 rounded-xl border border-white/10 bg-white/[0.04] px-3 py-2.5 text-sm text-white" data-testid="job-hunt" role="status">
+              {searching ? (
+                <Loader2 className="text-primary mt-0.5 size-4 shrink-0 animate-spin" />
+              ) : hunt.state === "failed" ? (
+                <TriangleAlert className="text-warning mt-0.5 size-4 shrink-0" />
+              ) : (
+                <Search className="text-primary mt-0.5 size-4 shrink-0" />
+              )}
+              <span>
+                {hunt.message}
+                {searching && "…"}
+                {!searching && hunt.found > 0 && (
+                  <>
+                    {" "}
+                    <Link href="/jobs" className="text-primary hover:underline">
+                      See jobs
+                    </Link>
+                  </>
+                )}
+              </span>
+            </p>
+          )}
           <dl className="grid grid-cols-3 gap-2 sm:grid-cols-5" title="Submitted and Failed count the last 24 hours">
             {[
               { label: "Running", value: counts.running, tone: "text-primary" },

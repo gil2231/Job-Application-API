@@ -13,6 +13,8 @@ export interface FoundJob {
   postedAt?: Date | null;
   salaryText?: string | null;
   workArrangement?: WorkArrangement | null;
+  /** What the search already read (company boards include it); the posting's own page replaces it when it can be read. */
+  description?: string | null;
 }
 
 /** Listing sites Applyance never fetches pages from. Their listings keep what the search returned. */
