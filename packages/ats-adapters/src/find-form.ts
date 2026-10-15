@@ -17,6 +17,8 @@ export interface PageSnapshot {
   links: Array<{ text: string; href: string }>;
   /** Visible fields a person could fill on the page itself. */
   fieldCount: number;
+  /** The start of the page's visible text. */
+  text?: string;
 }
 
 export interface FormLocation {
@@ -100,4 +102,27 @@ export function findApplicationForm(page: PageSnapshot): FormLocation | null {
   const all = [...new Set(candidates.map((l) => l.href))];
   const href = apply.length === 1 ? apply[0] : apply.length === 0 && all.length === 1 ? all[0] : undefined;
   return href ? { url: href, via: "link", platform: detectPlatformFromUrl(href).platform } : null;
+}
+
+const GREENHOUSE_HOST = /^(boards|job-boards)(\.eu)?\.greenhouse\.io$/i;
+const greenhouseJob = (u: URL) => /^\/[^/]+\/jobs\/\d+/.test(u.pathname) || (/^\/embed\/job_app\b/.test(u.pathname) && u.searchParams.has("token"));
+
+/** Wording job sites show for a posting that has closed. */
+const CLOSED_NOTICE = /\bno longer (open|available|active|accepting (applications|applicants|candidates))\b|\b(this|the) (job|position|posting|role|opening|requisition|vacancy) (is closed|has (closed|expired|been (filled|closed|removed)))\b|\b(job|posting|position) (has )?expired\b/i;
+
+/**
+ * Why the page shows a closed posting instead of its form, or null. Greenhouse
+ * sends a closed job's link to the company's list of jobs (with ?error=true);
+ * other sites say so on a page with no form.
+ */
+export function closedPostingReason(requested: string, page: PageSnapshot): string | null {
+  const from = parseHttpUrl(requested);
+  const to = parseHttpUrl(page.url);
+  if (!to) return null;
+  if (from && GREENHOUSE_HOST.test(from.hostname) && GREENHOUSE_HOST.test(to.hostname) && greenhouseJob(from) && (!greenhouseJob(to) || to.searchParams.get("error") === "true")) {
+    return "Greenhouse sent its link to the company's list of open jobs instead";
+  }
+  if (page.fieldCount >= OWN_FORM_FIELDS || hasFormMarkup(page.html)) return null;
+  const notice = CLOSED_NOTICE.exec(page.text ?? "");
+  return notice ? `the page says "${notice[0]}"` : null;
 }

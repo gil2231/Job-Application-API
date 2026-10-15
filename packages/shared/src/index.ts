@@ -2,6 +2,7 @@ export * from "./enums";
 export * from "./salary";
 export * from "./url";
 export * from "./answers";
+export * from "./choices";
 export * from "./profile-fields";
 export * from "./match-weights";
 export * from "./analysis";

@@ -1,9 +1,9 @@
-import { computeYearsOfExperience, deriveAnswerFromProfile, type ProfileFieldKey } from "@autoapply/shared";
+import { answerParts, computeYearsOfExperience, deriveAnswerFromProfile, type ProfileFieldKey } from "@autoapply/shared";
 import { HeuristicFieldClassifier, type Classification, type FieldClassifier } from "./classify";
 import { mayDraft, type AnswerDrafter } from "./drafts";
 import type { DetectedField, FieldMapping } from "./fields";
 import { requiresReview } from "./fields";
-import { answerMeansYes, chooseOption, isPlaceholderOption } from "./options";
+import { answerMeansYes, chooseOption, isConsentStatement, isPlaceholderOption, isUsState } from "./options";
 import { findSimilarAnswer } from "./similarity";
 
 /**
@@ -120,7 +120,8 @@ export function profileValue(key: ProfileFieldKey, p: ProfileFactsForForms): str
     case "masterProfile.city": return v(p.city);
     case "masterProfile.state": return v(p.state);
     case "masterProfile.postalCode": return v(p.postalCode);
-    case "masterProfile.country": return v(p.country);
+    // Someone whose address is in a US state lives in the United States, even with the country left blank.
+    case "masterProfile.country": return v(p.country) ?? (isUsState(p.state) ? "United States" : null);
     case "masterProfile.linkedinUrl": return v(p.linkedinUrl);
     case "masterProfile.portfolioUrl": return v(p.portfolioUrl);
     case "masterProfile.websiteUrl": return v(p.websiteUrl);
@@ -197,7 +198,8 @@ export class FieldResolver {
     }
     const threshold = this.input.fieldConfidenceThreshold;
     const reviewReason = c.method === "ai" && c.confidence < threshold ? `Filled with your ${LABELS[c.mappedField] ?? "profile value"} at ${c.confidence}% confidence (${c.evidence}), below your ${threshold}% review threshold.` : undefined;
-    return this.withOption(this.gate({ ...base, value, confidence: c.confidence, source: "profile", status: "ANSWERED", reviewReason }, threshold));
+    const place = c.mappedField === "masterProfile.city" ? { state: profileValue("masterProfile.state", this.input.profile), country: profileValue("masterProfile.country", this.input.profile) } : undefined;
+    return this.withOption(this.gate({ ...base, value, confidence: c.confidence, source: "profile", status: "ANSWERED", reviewReason, ...(place && { place }) }, threshold));
   }
 
   private async resolveLibrary(field: DetectedField, c: Classification): Promise<FieldMapping> {
@@ -313,7 +315,10 @@ export class FieldResolver {
       return { ...mapping, value: yes ? "Yes" : "No" };
     }
     if (field.kind === "checkbox" && field.multiple) {
-      const wanted = mapping.value.split(/[,;\n]/).map((s) => s.trim()).filter(Boolean);
+      const consents = field.options ?? [];
+      // "Yes" to a group of consents ("you consent to our privacy statement", "…to a background check") ticks each one.
+      if (answerMeansYes(mapping.value) === true && consents.length > 1 && consents.every(isConsentStatement)) return { ...mapping, value: [...consents] };
+      const wanted = answerParts(mapping.value, field.options ?? []);
       const picked = wanted.map((w) => chooseOption(w, field.options ?? [])).filter((m): m is NonNullable<typeof m> => !!m);
       if (!picked.length || picked.length < wanted.length) {
         return { ...mapping, status: "NEEDS_REVIEW", reviewReason: "The saved answer doesn't match the choices on this form." };
@@ -323,6 +328,8 @@ export class FieldResolver {
     if (field.kind !== "select" && field.kind !== "radio") return mapping;
     const options = (field.options ?? []).filter((o) => !isPlaceholderOption(o));
     const match = chooseOption(mapping.value, options);
+    // A searchable list (a school picker) shows only its first choices; the value is searched for when filling.
+    if (!match && field.hints?.widget === "search") return mapping;
     if (!match) {
       return { ...mapping, status: "NEEDS_REVIEW", reviewReason: `"${mapping.value}" doesn't match any of the choices: ${options.slice(0, 8).join(", ")}.` };
     }

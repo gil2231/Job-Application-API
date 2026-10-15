@@ -1,6 +1,6 @@
 import type { Locator, Page } from "playwright-core";
-import { AutomationError, assignFieldKeys, chooseOption, classifyFailure, displayLabel, orderLocators, type DetectedField, type FieldHints, type FieldKind, type FieldLocator, type FieldMapping } from "@autoapply/automation";
-import type { Platform } from "@autoapply/shared";
+import { AutomationError, assignFieldKeys, chooseSuggestion, classifyFailure, displayLabel, orderLocators, type DetectedField, type FieldHints, type FieldKind, type FieldLocator, type FieldMapping } from "@autoapply/automation";
+import { SEARCHABLE_LIST_MIN, type Platform } from "@autoapply/shared";
 import type { AdapterContext, AdapterStatus, ApplicationAdapter, DocumentsToUpload, HumanStep, PageAdvance, ValidationResult } from "../adapter";
 import { buttonsScript, CONFIRMATION_SCRIPT, NATIVE_VALIDITY_SCRIPT, OPEN_OPTIONS_SCRIPT, scanFieldsScript, SECURITY_SCRIPT, VALIDATION_SCRIPT, type ScanOptions } from "./dom-scripts";
 
@@ -125,7 +125,7 @@ export function toDetectedFields(scanned: ScannedField[], pageIndex: number, sta
 
 const tagFor = (field: DetectedField) => {
   if (field.hints?.widget === "listbox") return "button";
-  return field.kind === "select" && field.hints?.widget !== "combobox" ? "select" : field.kind === "textarea" ? "textarea" : "input";
+  return field.kind === "select" && field.hints?.widget !== "combobox" && field.hints?.widget !== "search" ? "select" : field.kind === "textarea" ? "textarea" : "input";
 };
 
 /**
@@ -187,8 +187,11 @@ export class FormAdapter implements ApplicationAdapter<Page> {
       const widget = field.hints?.widget;
       if ((widget === "combobox" || widget === "listbox") && !field.options?.length) {
         const options = await this.readOptions(ctx.page, field).catch(() => []);
-        if (options.length) field.options = options;
-        else if (widget === "combobox") {
+        if (options.length) {
+          field.options = options;
+          // A list this long (Greenhouse's schools) shows only its first choices until you type to search it.
+          if (widget === "combobox" && options.length >= SEARCHABLE_LIST_MIN) field.hints = { ...field.hints, widget: "search" };
+        } else if (widget === "combobox") {
           // Nothing to choose from until you type: a suggestion box (e.g. a city search).
           field.kind = "text";
           field.hints = { ...field.hints, widget: "autocomplete" };
@@ -401,7 +404,7 @@ export class FormAdapter implements ApplicationAdapter<Page> {
   private async pickCustomOption(page: Page, field: DetectedField, value: string) {
     const control = await this.locate(page, field);
     await control.click();
-    if (field.hints?.widget === "combobox") await control.fill(value);
+    if (field.hints?.widget === "combobox" || field.hints?.widget === "search") await control.fill(value);
     const { options } = await this.openOptions(page, control, 3000);
     const option = options.filter({ visible: true }).filter({ hasText: new RegExp(`^\\s*${escapeRegExp(value)}\\s*$`) });
     if ((await option.count()) !== 1) {
@@ -411,20 +414,34 @@ export class FormAdapter implements ApplicationAdapter<Page> {
     await option.click();
   }
 
-  /** Type into a suggestion box and pick the suggestion that matches the value; never an unrelated one. */
-  private async typeAndSuggest(ctx: AdapterContext<Page>, field: DetectedField, value: string) {
+  /**
+   * Type into a suggestion box or searchable list and pick the suggestion that
+   * names the value; never an unrelated one ("Bronxville" for "Bronx"). A long
+   * value is searched again by its first part ("Fordham University, Gabelli
+   * School of Business" finds "Fordham University").
+   */
+  private async typeAndSuggest(ctx: AdapterContext<Page>, field: DetectedField, value: string, place?: FieldMapping["place"]) {
     const { page } = ctx;
     const control = await this.locate(page, field);
-    await control.click();
-    await control.fill(value);
-    // Place searches answer from a server, so give them longer than a dropdown.
-    const { options, texts } = await this.openOptions(page, control, 6000);
-    const match = chooseOption(value, texts);
-    if (match && match.confidence >= 80) {
-      await options.filter({ visible: true }).filter({ hasText: match.option }).first().click();
-      return;
+    // "Fordham University, Gabelli School of Business": the name before the comma is what the list knows.
+    const searches = [...new Set([value.split(",")[0]!.trim(), value.trim()])].filter(Boolean);
+    for (const search of searches) {
+      await control.click();
+      await control.fill(search);
+      // Place and school searches answer from a server, so give them longer than a dropdown.
+      const { options, texts } = await this.openOptions(page, control, 6000);
+      const match = chooseSuggestion(value, texts, place);
+      if (match) {
+        await options.filter({ visible: true }).filter({ hasText: new RegExp(`^\\s*${escapeRegExp(match.option)}\\s*$`) }).first().click();
+        return;
+      }
     }
     await page.keyboard.press("Escape");
+    if (field.hints?.widget === "search") {
+      await control.fill("").catch(() => undefined);
+      await ctx.log({ type: "NOTE", level: "WARNING", message: `Couldn't find "${value}" in the "${displayLabel(field.label)}" list; left for you to choose` });
+      return;
+    }
     await ctx.log({ type: "NOTE", level: "WARNING", message: `"${field.label}" didn't suggest anything matching "${value}"; left as typed` });
   }
 
@@ -433,7 +450,7 @@ export class FormAdapter implements ApplicationAdapter<Page> {
     ctx.signal.throwIfAborted();
     const field = m.field;
     // A saved answer that isn't one of this dropdown's choices can't be picked; the question waits for the person instead.
-    const choice = (field.kind === "select" || field.kind === "radio") && !Array.isArray(m.value);
+    const choice = (field.kind === "select" || field.kind === "radio") && !Array.isArray(m.value) && field.hints?.widget !== "search";
     if (choice && field.options?.length && !field.options.includes(String(m.value))) return;
     const value = m.value;
     if (m.status !== "NEEDS_REVIEW") return this.fillValue(ctx, m, value);
@@ -464,7 +481,11 @@ export class FormAdapter implements ApplicationAdapter<Page> {
         }
         return;
       case "select": {
-        if (widget === "combobox" || widget === "listbox") {
+        if (widget === "search" && !field.options?.includes(String(value))) {
+          await this.typeAndSuggest(ctx, field, String(value));
+          return;
+        }
+        if (widget === "combobox" || widget === "listbox" || widget === "search") {
           await this.pickCustomOption(page, field, String(value));
           return;
         }
@@ -477,7 +498,7 @@ export class FormAdapter implements ApplicationAdapter<Page> {
       default: {
         const text = Array.isArray(value) ? value.join(", ") : value;
         if (widget === "autocomplete") {
-          await this.typeAndSuggest(ctx, field, text);
+          await this.typeAndSuggest(ctx, field, text, m.place);
           return;
         }
         const locator = await this.locate(page, field);

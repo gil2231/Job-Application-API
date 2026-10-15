@@ -5,6 +5,7 @@ import { join } from "node:path";
 import type Redis from "ioredis";
 import type { BrowserContext, Page } from "playwright-core";
 import {
+  AutomationError,
   classifyFailure,
   decideRetry,
   decideSubmission,
@@ -20,7 +21,7 @@ import {
   type ProfileFactsForForms,
 } from "@autoapply/automation";
 import { createApplicationAI, type ApplicationAI } from "@autoapply/ai";
-import { detectPlatformFromUrl, findApplicationForm, greenhouseEmbedForRedirect, type AdapterContext, type PageSnapshot, type AdapterRegistry, type AdapterStatus, type ApplicationAdapter, type DocumentsToUpload, type HumanStep, type ValidationResult } from "@autoapply/ats-adapters";
+import { closedPostingReason, detectPlatformFromUrl, findApplicationForm, greenhouseEmbedForRedirect, type AdapterContext, type PageSnapshot, type AdapterRegistry, type AdapterStatus, type ApplicationAdapter, type DocumentsToUpload, type HumanStep, type ValidationResult } from "@autoapply/ats-adapters";
 import {
   addApplicationEvent,
   addAttemptScreenshot,
@@ -228,13 +229,18 @@ class AttemptRun {
    * A careers page with the form in an iframe (Betterment's Greenhouse board)
    * or a listing with an Apply link out to the ATS (Built In): open the form
    * itself, up to two steps away, and remember its link on the job. Returns
-   * why it can't be opened, or null to carry on with the current page.
+   * why it can't be opened, or null to carry on with the current page. Throws
+   * POSTING_CLOSED when the page shows the job has closed.
    */
-  private async openFormBehindPage(jobId: string): Promise<string | null> {
+  private async openFormBehindPage(jobId: string, requested: string): Promise<string | null> {
     const page = this.page!;
-    for (let step = 0; step < 2; step++) {
+    for (let step = 0; ; step++) {
       await page.waitForLoadState("networkidle", { timeout: 5000 }).catch(() => undefined);
-      const form = findApplicationForm(await snapshotPage(page));
+      const snapshot = await snapshotPage(page);
+      const closed = closedPostingReason(requested, snapshot);
+      if (closed) throw new AutomationError("POSTING_CLOSED", `This job is no longer open: ${closed}. There's nothing to retry, so skip this application`);
+      if (step === 2) return null;
+      const form = findApplicationForm(snapshot);
       if (!form || listingSite(form.url)) return null;
       const from = new URL(page.url()).hostname;
       const site = await checkSite(form.url, this.deps.config);
@@ -248,8 +254,8 @@ class AttemptRun {
       if (!landed.allowed) return `The application form redirected to ${new URL(page.url()).hostname}. ${landed.reason}`;
       this.domain = new URL(page.url()).hostname;
       await setJobApplicationUrl(jobId, form.url, detectPlatformFromUrl(form.url).platform);
+      requested = form.url;
     }
-    return null;
   }
 
   private attention(status: "WAITING_FOR_USER" | "REVIEW_REQUIRED" | "READY", reason: AttentionReason, detail: string) {
@@ -316,7 +322,7 @@ class AttemptRun {
       await deps.siteHealth.recordSuccess(this.domain);
       const landed = await checkSite(this.page.url(), deps.config);
       if (!landed.allowed) return this.attention("WAITING_FOR_USER", "UNSUPPORTED_SITE", `The link redirected to ${new URL(this.page.url()).hostname}. ${landed.reason}`);
-      const blockedForm = await this.openFormBehindPage(data.job.id);
+      const blockedForm = await this.openFormBehindPage(data.job.id, url);
       if (blockedForm) return this.attention("WAITING_FOR_USER", "UNSUPPORTED_SITE", blockedForm);
 
       const { adapter, detection } = await deps.registry.resolve(this.page.url(), await this.page.content());
@@ -734,8 +740,8 @@ async function snapshotPage(page: Page): Promise<PageSnapshot> {
   // Only web pages can hold a form; an about:blank frame (reCAPTCHA's badge) never finishes loading, so it isn't read.
   const readable = page.frames().filter((f) => f !== main && /^https?:\/\//i.test(f.url())).slice(0, 12);
   const frames = await Promise.all(readable.map(async (f) => ({ url: f.url(), html: await withTimeout(f.content(), 3000).catch(() => "") })));
-  const { links, fieldCount } = (await page.evaluate(SNAPSHOT_SCRIPT)) as Pick<PageSnapshot, "links" | "fieldCount">;
-  return { url: page.url(), html: await page.content(), frames, links, fieldCount };
+  const { links, fieldCount, text } = (await page.evaluate(SNAPSHOT_SCRIPT)) as Pick<PageSnapshot, "links" | "fieldCount" | "text">;
+  return { url: page.url(), html: await page.content(), frames, links, fieldCount, text };
 }
 
 function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
@@ -746,5 +752,6 @@ const SNAPSHOT_SCRIPT = `(() => {
   const visible = (el) => !!(el.offsetWidth || el.offsetHeight || el.getClientRects().length);
   const links = Array.from(document.querySelectorAll("a[href]")).slice(0, 1500).map((a) => ({ text: (a.innerText || a.getAttribute("aria-label") || "").trim().slice(0, 80), href: a.href }));
   const fieldCount = Array.from(document.querySelectorAll("input, select, textarea")).filter((el) => visible(el) && !/^(hidden|submit|button|search|image|reset)$/i.test(el.type || "")).length;
-  return { links, fieldCount };
+  const text = ((document.body && document.body.innerText) || "").slice(0, 5000);
+  return { links, fieldCount, text };
 })()`;

@@ -75,6 +75,14 @@ const WIDGETS_JS = String.raw`<script>
     input.addEventListener("click", () => openList(input, options, pick));
     input.addEventListener("input", () => { hidden.value = ""; openList(input, options.filter((o) => o.toLowerCase().includes(input.value.toLowerCase())), pick); });
   }
+  // A long list (Greenhouse's schools): the first 100 when opened, any of them by typing.
+  for (const input of document.querySelectorAll("input[role=combobox][data-search]")) {
+    const all = JSON.parse(input.dataset.search);
+    const hidden = hiddenFor(input);
+    const pick = (o) => { input.value = o; hidden.value = o; clearError(input); };
+    input.addEventListener("click", () => openList(input, all.slice(0, 100), pick));
+    input.addEventListener("input", () => { hidden.value = ""; const q = input.value.toLowerCase(); openList(input, all.filter((o) => o.toLowerCase().includes(q)).slice(0, 100), pick); });
+  }
   // Suggestion box: nothing until you type, then matches arrive a moment later.
   for (const input of document.querySelectorAll("input[role=combobox][data-suggest]")) {
     const all = JSON.parse(input.dataset.suggest);
@@ -118,7 +126,11 @@ function requireAll(required: string[], fields: Values, files: Files, fileFields
 
 const SPONSOR_Q = "Will you now or in the future require sponsorship to work in the United States?";
 const AUTH_Q = "Are you legally authorized to work in the United States?";
-const CITIES = ["New York, New York, United States", "Newark, New Jersey, United States", "New Orleans, Louisiana, United States", "Boston, Massachusetts, United States", "Austin, Texas, United States"];
+// Greenhouse's place search really offers "Bronx, Idaho" and "Bronxville" for "Bronx", and no "Bronx, New York".
+const CITIES = ["New York, New York, United States", "Newark, New Jersey, United States", "New Orleans, Louisiana, United States", "Boston, Massachusetts, United States", "Austin, Texas, United States", "Bronxville, New York, United States", "Bronx, Idaho, United States", "Bronx, United States"];
+/** Greenhouse's school list: 100 choices shown when opened, the rest only by searching. */
+const SCHOOLS = [...Array.from({ length: 140 }, (_, i) => `A${String(i).padStart(3, "0")} College`), "Columbia University", "Fordham University", "New York University"];
+const DEGREES = ["Associate's Degree", "Bachelor's Degree", "Doctor of Medicine (M.D.)", "Doctor of Philosophy (Ph.D.)", "Engineer's Degree", "High School", "Juris Doctor (J.D.)", "Master of Business Administration (M.B.A.)", "Master's Degree", "Other"];
 
 // ─── Greenhouse ─────────────────────────────────────────────────────────────
 
@@ -132,8 +144,34 @@ const GH_BADGE_PATH = "/greenhouse/examplecorp/jobs/4012399";
 const GH_BADGE_HTML = `<div class="g-recaptcha" data-sitekey="mock-site-key" data-size="invisible" data-callback="onSubmit"></div>
   <div class="grecaptcha-badge" data-style="bottomright" style="width:256px;height:60px;position:fixed;bottom:14px;right:-186px;box-shadow:0 0 5px gray;border-radius:2px;overflow:hidden"><div class="grecaptcha-logo"><iframe title="reCAPTCHA" src="about:blank#recaptcha/api2/anchor?ar=1&size=invisible" width="256" height="60" style="border:0"></iframe></div></div>`;
 
-function greenhousePage(values: Values = {}, errors: Record<string, string> = {}, badge = false): string {
-  const action = badge ? GH_BADGE_PATH : GH_PATH;
+/**
+ * Greenhouse's newer boards draw "pick any" questions as a group of checkboxes
+ * with every box marked required, even a Yes / No pair; the form checks the
+ * group itself (novalidate). Choices can be whole sentences with commas.
+ */
+const GH_GROUPS_PATH = "/greenhouse/examplecorp/jobs/4012346";
+const NYC_Q = "Are you currently based in the NYC metro area?";
+const PRIVACY_Q = "Applicant Privacy Statement";
+const PRIVACY_CHOICES = [
+  "By clicking this box and submitting your application, you consent to our Applicant Privacy Statement.",
+  "By clicking this box and submitting your application, you consent to Example Corp conducting third-party background checks as part of your application process.",
+];
+const GROUP_QUESTIONS = [
+  { id: "question_69126794", label: NYC_Q, choices: [["751192943", "Yes"], ["751192944", "No"]] },
+  { id: "question_68291685", label: PRIVACY_Q, choices: PRIVACY_CHOICES.map((c, i) => [String(738502255 + i), c]) },
+];
+
+function checkboxGroup(q: (typeof GROUP_QUESTIONS)[number], values: Values, error?: string): string {
+  const name = `${q.id}[]`;
+  const ticked = ([] as string[]).concat(values[name] ?? []);
+  const boxes = q.choices
+    .map(([value, text]) => `<div class="checkbox__wrapper"><div class="checkbox__input"><input type="checkbox" id="${name}_${value}" name="${name}" value="${value}" required aria-invalid="${error ? "true" : "false"}" aria-errormessage="${name}-error"${ticked.includes(value!) ? " checked" : ""}></div><label for="${name}_${value}" style="display:inline;font-weight:400">${esc(text!)}</label></div>`)
+    .join("");
+  return `<fieldset class="checkbox field" id="${name}" aria-required="true"><legend class="label checkbox__description">${esc(q.label)} <span class="required">*</span></legend>${boxes}${error ? `<p class="error" id="${name}-error">${esc(error)}</p>` : ""}</fieldset>`;
+}
+
+function greenhousePage(values: Values = {}, errors: Record<string, string> = {}, badge = false, groups = false): string {
+  const action = groups ? GH_GROUPS_PATH : badge ? GH_BADGE_PATH : GH_PATH;
   const text = (id: string, name: string, label: string, type = "text", required = true) =>
     `<div class="field"><label for="${id}">${esc(label)}${required ? '<span class="asterisk">*</span>' : ""}</label><input type="${type}" id="${id}" name="${name}" value="${esc(str(values[name]))}"${required ? ' aria-required="true"' : ""}${invalidAttr(id, errors[name])}>${errorHtml(id, errors[name])}</div>`;
   const combo = (id: string, name: string, label: string, options: string[], required: boolean) =>
@@ -162,9 +200,13 @@ function greenhousePage(values: Values = {}, errors: Record<string, string> = {}
         <div class="field"><label id="job_application_location-label">Location (City)<span class="asterisk">*</span></label><input id="job_application_location" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="location-listbox" aria-labelledby="job_application_location-label" aria-required="true" data-target="job_application[location]" data-suggest="${esc(JSON.stringify(CITIES))}" autocomplete="off" value="${esc(str(values["job_application[location]"]))}"${invalidAttr("job_application_location", errors["job_application[location]"])}><input type="hidden" name="job_application[location]" value="${esc(str(values["job_application[location]"]))}">${errorHtml("job_application_location", errors["job_application[location]"])}</div>
         ${upload("resume", badge ? "attachments[0]" : "resume", "Resume/CV", true)}
         ${upload("cover_letter", badge ? "attachments[1]" : "cover_letter", "Cover Letter", false)}
+        <h2>Education</h2>
+        <div class="field"><label id="education_school-label">School</label><div class="select__control"><input id="education_school" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="education_school-listbox" aria-labelledby="education_school-label" data-target="job_application[education][school]" data-search="${esc(JSON.stringify(SCHOOLS))}" value="${esc(str(values["job_application[education][school]"]))}" autocomplete="off"><input type="hidden" name="job_application[education][school]" value="${esc(str(values["job_application[education][school]"]))}"></div></div>
+        ${combo("education_degree", "job_application[education][degree]", "Degree", DEGREES, false)}
         ${text("question_7001", "job_application[answers_attributes][0][text_value]", "LinkedIn Profile", "text", false)}
         ${combo("question_8012", "job_application[answers_attributes][1][boolean_value]", AUTH_Q, ["Yes", "No"], true)}
         ${combo("question_8013", "job_application[answers_attributes][2][boolean_value]", SPONSOR_Q, ["Yes", "No"], true)}
+        ${groups ? GROUP_QUESTIONS.map((q) => checkboxGroup(q, values, errors[`${q.id}[]`])).join("") : ""}
         <div class="eeoc"><h2>Voluntary Self-Identification</h2><p>Completing this section is voluntary and won't affect your application.</p>
         ${combo("job_application_gender", "job_application[gender]", "Gender", ["Male", "Female", "Decline To Self Identify"], false)}
         ${combo("job_application_veteran_status", "job_application[veteran_status]", "Veteran Status", ["I am not a protected veteran", "I identify as one or more of the classifications of protected veteran", "I don't wish to answer"], false)}</div>
@@ -181,6 +223,20 @@ function greenhousePage(values: Values = {}, errors: Record<string, string> = {}
  */
 const GH_CAREERS_PATH = "/careers/examplecorp/business-development-representative";
 
+/** A job that has closed: Greenhouse sends its link to the company's job list with a notice. */
+const GH_CLOSED_PATH = "/greenhouse/examplecorp/jobs/4012300";
+const GH_BOARD_PATH = "/greenhouse/examplecorp";
+
+function greenhouseBoardPage(): string {
+  return shell(
+    "Jobs at Example Corp",
+    "main{max-width:900px;margin:0 auto;padding:24px 32px} .flash{background:#fdecea;padding:10px 12px;border-radius:6px} select{width:auto;margin-right:8px}",
+    `<main><div class="flash" role="status">The job you are looking for is no longer open.</div><h1>Current openings at Example Corp</h1>
+      <p><input type="search" placeholder="Search jobs" aria-label="Search jobs"> <select aria-label="Department"><option>All departments</option><option>Sales</option></select><select aria-label="Office"><option>All offices</option><option>New York</option></select></p>
+      <ul><li><a href="${GH_PATH}">Business Development Representative</a></li><li><a href="${GH_BADGE_PATH}">Account Executive</a></li></ul></main>`,
+  );
+}
+
 function greenhouseCareersPage(): string {
   return shell(
     "Business Development Representative | Example Corp Careers",
@@ -191,6 +247,14 @@ function greenhouseCareersPage(): string {
 }
 
 async function greenhouse(req: IncomingMessage, res: ServerResponse, path: string, h: AtsHelpers): Promise<boolean> {
+  if (path === GH_CLOSED_PATH) {
+    h.redirect(res, `${GH_BOARD_PATH}?error=true`);
+    return true;
+  }
+  if (path === GH_BOARD_PATH) {
+    h.send(res, 200, greenhouseBoardPage());
+    return true;
+  }
   if (path === GH_CAREERS_PATH) {
     h.send(res, 200, greenhouseCareersPage());
     return true;
@@ -199,21 +263,23 @@ async function greenhouse(req: IncomingMessage, res: ServerResponse, path: strin
     h.send(res, 200, shell("Thank you for applying", "main{max-width:640px;margin:64px auto;padding:0 24px}", `<main><h1>Thank you for applying.</h1><p>Your application has been received. If your application seems like a good fit for the position we will contact you soon.</p><p>Application ID: ${esc(String(new URL(req.url ?? "/", "http://x").searchParams.get("id") ?? ""))}</p></main>`));
     return true;
   }
-  if (path !== GH_PATH && path !== GH_BADGE_PATH) return false;
+  if (path !== GH_PATH && path !== GH_BADGE_PATH && path !== GH_GROUPS_PATH) return false;
   const badge = path === GH_BADGE_PATH;
+  const groups = path === GH_GROUPS_PATH;
   if (req.method === "POST") {
     const { fields, files } = await h.readForm(req);
     const resume = badge ? "attachments[0]" : "resume";
-    const errors = requireAll(["job_application[first_name]", "job_application[last_name]", "job_application[email]", "job_application[phone]", "job_application[location]", resume, "job_application[answers_attributes][1][boolean_value]", "job_application[answers_attributes][2][boolean_value]"], fields, files, [resume]);
+    const groupNames = groups ? GROUP_QUESTIONS.map((q) => `${q.id}[]`) : [];
+    const errors = requireAll(["job_application[first_name]", "job_application[last_name]", "job_application[email]", "job_application[phone]", "job_application[location]", resume, "job_application[answers_attributes][1][boolean_value]", "job_application[answers_attributes][2][boolean_value]", ...groupNames], fields, files, [resume]);
     if (Object.keys(errors).length) {
-      h.send(res, 422, greenhousePage(fields, errors, badge));
+      h.send(res, 422, greenhousePage(fields, errors, badge, groups));
       return true;
     }
     const id = h.record("greenhouse", fields, files);
     h.redirect(res, `${GH_PATH}/confirmation?id=${encodeURIComponent(id)}`);
     return true;
   }
-  h.send(res, 200, greenhousePage({}, {}, badge));
+  h.send(res, 200, greenhousePage({}, {}, badge, groups));
   return true;
 }
 
@@ -743,10 +809,14 @@ async function smartRecruiters(req: IncomingMessage, res: ServerResponse, path: 
 }
 
 /** Entry pages for each mock ATS, as a job's application link would point to them. */
+export const PRIVACY_CONSENTS = PRIVACY_CHOICES;
+
 export const ATS_ENTRY_POINTS = {
   greenhouse: GH_PATH,
   greenhouseBadge: GH_BADGE_PATH,
   greenhouseCareersPage: GH_CAREERS_PATH,
+  greenhouseClosed: GH_CLOSED_PATH,
+  greenhouseCheckboxGroups: GH_GROUPS_PATH,
   lever: `/lever/examplecorp/${LEVER_ID}`,
   leverGuarded: `/lever/examplecorp/${LEVER_GUARDED_ID}`,
   ashby: `/ashby/examplecorp/${ASHBY_ID}`,

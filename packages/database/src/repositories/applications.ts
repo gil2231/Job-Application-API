@@ -1,5 +1,6 @@
 import type { Prisma } from "@prisma/client";
 import {
+  answerFitsChoices,
   ATTENTION_APPLICATION_STATUSES,
   HIDDEN_ANSWER_CATEGORIES,
   type ApplicationFilters,
@@ -279,6 +280,11 @@ export async function approveQuestionAnswer(userId: string, questionId: string, 
   const sensitive = (question.answer?.libraryAnswer?.isSensitive ?? false) || options.sensitive === true;
   const raw = editedValue ?? (question.answer ? decryptString(question.answer.value) : undefined);
   if (raw == null || raw.trim() === "") throw new ConflictError("Enter an answer before approving");
+  // An answer the form has no choice for would only be asked again on the next run.
+  const choices = Array.isArray(question.options) ? question.options.filter((o): o is string => typeof o === "string") : [];
+  if (!answerFitsChoices(question.fieldType, choices, raw)) {
+    throw new ConflictError(question.fieldType === "CHECKBOX" && choices.length < 2 ? "Choose Yes or No for this checkbox" : "Choose one of the form's own choices for this question");
+  }
   const value = sensitive ? encryptString(raw) : raw;
   await prisma.$transaction(async (tx) => {
     await tx.applicationAnswerInstance.upsert({

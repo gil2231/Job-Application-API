@@ -331,11 +331,20 @@ export const VALIDATION_SCRIPT = withOptions(
 export const NATIVE_VALIDITY_SCRIPT = withOptions(
   String.raw`
   const out = [];
+  // Greenhouse marks every box of a group required; the group is answered once any box is ticked.
+  const boxesOf = (el) => {
+    const name = el.getAttribute("name");
+    const root = el.form || el.getRootNode();
+    return name && root.querySelectorAll ? Array.from(root.querySelectorAll('input[type="checkbox"]')).filter((x) => x.getAttribute("name") === name) : [el];
+  };
   for (const el of deepAll(document, "input, select, textarea")) {
     if (el.type === "hidden" || el.disabled) continue;
     if (!visible(el) && el.type !== "radio" && el.type !== "checkbox" && el.type !== "file") continue;
     if (el.validity && !el.validity.valid) {
-      const lab = labelOf(el) || groupLabelOf(el);
+      const group = el.type === "checkbox" ? boxesOf(el) : [el];
+      // Only where the site checks the form itself (novalidate); otherwise the browser holds the form back.
+      if (group.length > 1 && group.some((x) => x.checked) && (!el.form || el.form.noValidate)) continue;
+      const lab = group.length > 1 ? groupLabelOf(el) || labelOf(el) : labelOf(el) || groupLabelOf(el);
       out.push({ label: lab ? lab.text : el.getAttribute("name") || "Field", message: el.validationMessage || "Invalid value", name: el.getAttribute("name") || "" });
     }
   }

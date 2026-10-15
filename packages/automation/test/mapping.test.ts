@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { assignFieldKeys, displayLabel, HeuristicFieldClassifier, matchStandardQuestion } from "../src/classify";
 import type { DetectedField } from "../src/fields";
-import { chooseOption, isPlaceholderOption } from "../src/options";
+import { answerParts } from "@autoapply/shared";
+import { chooseOption, chooseSuggestion, isPlaceholderOption } from "../src/options";
 import { FieldResolver, type ResolverInput } from "../src/resolve";
 
 const field = (label: string, extra: Partial<DetectedField> = {}): DetectedField => ({ label, kind: "text", required: true, pageIndex: 0, locators: [{ strategy: "label", value: label }], ...extra });
@@ -68,7 +69,7 @@ describe("field classification", () => {
   });
 
   it("doesn't fill a yes/no question with the profile value its wording mentions", () => {
-    expect(classify("Will you be able to regularly commute and work in an office in job posting location?", { kind: "select", options: ["Yes", "No"] }).mappedField).toBe("unknown");
+    expect(classify("Will you be able to regularly commute and work in an office in job posting location?", { kind: "select", options: ["Yes", "No"] })).toMatchObject({ mappedField: "answer.library", questionKey: "onsite_work" });
     expect(classify("Are you currently located in the New York City area?").mappedField).toBe("unknown");
     expect(classify("Current location").mappedField).toBe("masterProfile.city");
   });
@@ -180,5 +181,100 @@ describe("displayLabel", () => {
     expect(displayLabel("Full name✱")).toBe("Full name");
     expect(displayLabel("Rate us 5* or more")).toBe("Rate us 5* or more");
     expect(displayLabel("*")).toBe("*");
+  });
+});
+
+describe("matching saved answers to the choices real forms offer", () => {
+  const VETERAN = ["I am not a protected veteran", "I identify as one or more of the classifications of a protected veteran", "I don't wish to answer"];
+  const DEGREES = ["Associate's Degree", "Bachelor's Degree", "Doctor of Medicine (M.D.)", "Doctor of Philosophy (Ph.D.)", "Engineer's Degree", "High School", "Juris Doctor (J.D.)", "Master of Business Administration (M.B.A.)", "Master's Degree", "Other"];
+
+  it("reads a veteran answer as no, not as declining", () => {
+    expect(chooseOption("Not a current or past veteran", VETERAN)?.option).toBe("I am not a protected veteran");
+    expect(chooseOption("Not a current or past veteran", VETERAN.map((o) => o.toUpperCase()))?.option).toBe("I AM NOT A PROTECTED VETERAN");
+    expect(chooseOption("Prefer not to say", VETERAN)?.option).toBe("I don't wish to answer");
+  });
+
+  it("matches a degree by its level", () => {
+    expect(chooseOption("Bachelor of Science", DEGREES)?.option).toBe("Bachelor's Degree");
+    expect(chooseOption("BA", DEGREES)?.option).toBe("Bachelor's Degree");
+    expect(chooseOption("MS", DEGREES)?.option).toBe("Master's Degree");
+  });
+
+  it("picks the suggested place in the person's own state, never a lookalike name", () => {
+    const suggestions = ["Bronxville, New York, United States", "Bronx, Idaho, United States", "Bronx, United States"];
+    expect(chooseSuggestion("Bronx", suggestions, { state: "NY", country: "United States" })?.option).toBe("Bronx, United States");
+    expect(chooseSuggestion("Bronx", ["Bronxville, New York, United States"], { state: "NY" })).toBeNull();
+    expect(chooseSuggestion("New York", ["New York, New York, United States", "Newark, New Jersey, United States"], { state: "NY" })?.option).toBe("New York, New York, United States");
+    expect(chooseSuggestion("Fordham University", ["Fordham University"])?.option).toBe("Fordham University");
+  });
+
+  it.each([
+    ["School", "education.school"],
+    ["Degree", "education.degree"],
+    ["Discipline", "education.major"],
+    ["Highest level of education", "education.degree"],
+  ])("maps the education field %s", (label, key) => {
+    expect(classify(label, { kind: "select" }).mappedField).toBe(key);
+  });
+
+  it("keeps school and degree words from claiming other questions", () => {
+    expect(classify("Do you have a bachelor's degree?", { kind: "select", options: ["Yes", "No"] }).mappedField).toBe("unknown");
+    expect(classify("Name of your college roommate").mappedField).not.toBe("education.school");
+  });
+
+  it("splits a group answer on whole choices, even ones with commas", () => {
+    const consents = ["By clicking this box and submitting your application, you consent to our Applicant Privacy Statement.", "By clicking this box, you consent to a background check."];
+    expect(answerParts(consents[1]!, consents)).toEqual([consents[1]]);
+    expect(answerParts(`${consents[0]}, ${consents[1]}`, consents)).toEqual(consents);
+    expect(answerParts("Yes", ["Yes", "No"])).toEqual(["Yes"]);
+    expect(answerParts("Email, Phone", ["Email", "Phone", "Text"])).toEqual(["Email", "Phone"]);
+  });
+
+  it.each([
+    ["Are you at least 18 years of age?", "age_18"],
+    ["Are you bound by any agreements with a former employer, such as a non-compete, that would restrict your work here?", "restrictive_agreements"],
+    ["Are you currently employed by a client or competitor of the company?", "competitor_employment"],
+    ["How did you hear about this job?", "how_did_you_hear"],
+    ["Applicant Privacy Statement", "privacy_acknowledgement"],
+    ["I certify that the information I have provided is true and complete.", "certify_information"],
+    ["Are you open to working in person in our San Francisco or New York office 3 times a week?", "onsite_work"],
+    ["Are you able to commute to our office in New York?", "onsite_work"],
+  ])("recognizes %s", (label, key) => {
+    expect(matchStandardQuestion(label)).toBe(key);
+    expect(classify(label)).toMatchObject({ mappedField: "answer.library", questionKey: key });
+  });
+});
+
+describe("FieldResolver on checkbox groups and long lists", () => {
+  const input: ResolverInput = {
+    profile: { firstName: "Gil", lastName: "C", email: "g@example.com", city: "Bronx", state: "NY", employment: [], education: [] },
+    library: [{ id: "p1", questionKey: "privacy_acknowledgement", question: "Privacy?", answer: "Yes", confidence: 100, autoSubmitAllowed: true, requiresHumanReview: false, isSensitive: false }],
+    stored: [],
+    documents: {},
+    fieldConfidenceThreshold: 85,
+    answerConfidenceThreshold: 85,
+  };
+  const consents = ["By clicking this box and submitting your application, you consent to our Applicant Privacy Statement.", "By clicking this box and submitting your application, you consent to Example Corp conducting third-party background checks."];
+  const group = (label: string, options: string[]) => field(label, { kind: "checkbox", multiple: true, options, key: label.toLowerCase().replace(/\W+/g, "_") });
+
+  it("ticks every consent when the saved answer is yes", async () => {
+    expect(await new FieldResolver(input).resolve(group("Applicant Privacy Statement", consents))).toMatchObject({ value: consents, status: "ANSWERED" });
+  });
+
+  it("keeps an approved choice that contains commas", async () => {
+    const f = group("Applicant Privacy Statement", consents);
+    const stored = [{ pageIndex: 0, normalizedKey: f.key!, status: "APPROVED" as const, answer: { value: consents[1]!, approvedByUser: true } }];
+    expect(await new FieldResolver({ ...input, stored }).resolve(f)).toMatchObject({ value: [consents[1]], status: "ANSWERED" });
+  });
+
+  it("fills a country from the person's US state", async () => {
+    expect(await new FieldResolver(input).resolve(field("Country"))).toMatchObject({ value: "United States", status: "ANSWERED" });
+  });
+
+  it("searches a cut-off list for the profile's school instead of flagging it", async () => {
+    const schools = Array.from({ length: 100 }, (_, i) => `A${i} College`);
+    const f = field("School", { kind: "select", options: schools, hints: { widget: "search" } });
+    const profile = { ...input.profile, education: [{ school: "Fordham University", degree: "Bachelor of Science" }] } as ResolverInput["profile"];
+    expect(await new FieldResolver({ ...input, profile }).resolve(f)).toMatchObject({ value: "Fordham University", status: "ANSWERED" });
   });
 });
