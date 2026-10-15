@@ -60,6 +60,9 @@ export const FIELD_LABEL_SYNONYMS: Partial<Record<ProfileFieldKey, string[]>> = 
   "masterProfile.currentTitle": ["current title", "current job title", "current position"],
   "masterProfile.currentCompany": ["current company", "current employer", "employer"],
   "masterProfile.yearsExperience": ["years of experience", "total years of experience", "how many years of experience"],
+  "education.school": ["school", "school/university", "university", "college", "college/university", "university/college", "institution", "educational institution"],
+  "education.degree": ["degree", "degree type", "highest degree", "highest degree earned", "level of education", "highest level of education", "education level"],
+  "education.major": ["discipline", "major", "field of study", "area of study", "major/field of study"],
   "documents.resume": ["resume", "cv", "resume/cv", "upload resume"],
   "documents.coverLetter": ["cover letter", "upload cover letter"],
 };

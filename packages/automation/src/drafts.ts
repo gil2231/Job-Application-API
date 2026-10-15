@@ -33,6 +33,8 @@ const NEVER_DRAFT = new RegExp(
 );
 
 export function mayDraft(field: DetectedField): boolean {
-  if (field.kind === "file" || field.kind === "checkbox" || field.kind === "date" || field.kind === "unknown") return false;
+  if (field.kind === "file" || field.kind === "date" || field.kind === "unknown") return false;
+  // A lone checkbox is a consent; a group of them ("Yes" / "No") is a question like any other.
+  if (field.kind === "checkbox" && (field.options?.length ?? 0) < 2) return false;
   return !NEVER_DRAFT.test(normalizeLabel(field.label));
 }

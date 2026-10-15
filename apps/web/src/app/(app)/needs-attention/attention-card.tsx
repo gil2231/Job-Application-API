@@ -4,8 +4,7 @@ import Link from "next/link";
 import { useState } from "react";
 import { Check, ExternalLink, KeyRound, Pencil, RefreshCw, RotateCcw, Send, ShieldAlert, SkipForward, Sparkles, TriangleAlert, Upload, UserCheck } from "lucide-react";
 import type { AttentionItem } from "@autoapply/database";
-import { isPlaceholderOption } from "@autoapply/automation";
-import { enumLabel } from "@autoapply/shared";
+import { answerFitsChoices, answerParts, enumLabel, isPlaceholderOption, SEARCHABLE_LIST_MIN } from "@autoapply/shared";
 import {
   approveAnswerAction,
   approveSubmissionAction,
@@ -50,7 +49,7 @@ function AnswerInput({ question, value, onChange }: { question: Question; value:
   const options = questionOptions(question);
   const label = `Answer for ${question.label}`;
   if (question.fieldType === "CHECKBOX" && options.length > 1) {
-    const picked = new Set(value.split(/[,;\n]/).map((s) => s.trim()).filter(Boolean));
+    const picked = new Set(answerParts(value, options));
     return (
       <div className="grid gap-1.5" role="group" aria-label={label}>
         {options.map((o) => (
@@ -70,7 +69,9 @@ function AnswerInput({ question, value, onChange }: { question: Question; value:
       </div>
     );
   }
-  const choices = question.fieldType === "CHECKBOX" ? ["Yes", "No"] : (question.fieldType === "SELECT" || question.fieldType === "RADIO") && options.length ? options : null;
+  // A list this long was only partly read (a school picker), so the answer is typed and searched for on the form.
+  const listed = (question.fieldType === "SELECT" || question.fieldType === "RADIO") && options.length && options.length < SEARCHABLE_LIST_MIN;
+  const choices = question.fieldType === "CHECKBOX" ? ["Yes", "No"] : listed ? options : null;
   if (choices) {
     return (
       <Select value={choices.includes(value) ? value : ""} onValueChange={onChange}>
@@ -97,6 +98,8 @@ function QuestionRow({ question }: { question: Question }) {
   const { pending, run } = useServerAction();
   const suggestion = question.answer?.value;
   const isFile = question.fieldType === "FILE";
+  // A suggestion that isn't one of the form's choices can't be approved as is; the person picks a choice instead.
+  const fits = !!suggestion && answerFitsChoices(question.fieldType, questionOptions(question), suggestion);
 
   return (
     <div className="grid gap-2 rounded-lg border p-3">
@@ -151,13 +154,13 @@ function QuestionRow({ question }: { question: Question }) {
           </>
         ) : (
           <>
-            {suggestion && (
+            {fits && (
               <Button size="xs" disabled={pending} onClick={() => run(() => approveAnswerAction(question.id, undefined, remember))}>
                 <Check /> Approve
               </Button>
             )}
-            <Button size="xs" variant="outline" disabled={pending} onClick={() => setEditing(true)}>
-              <Pencil /> {suggestion ? "Edit" : "Answer"}
+            <Button size="xs" variant={fits ? "outline" : "default"} disabled={pending} onClick={() => setEditing(true)}>
+              <Pencil /> {fits ? "Edit" : suggestion ? "Choose an answer" : "Answer"}
             </Button>
           </>
         )}

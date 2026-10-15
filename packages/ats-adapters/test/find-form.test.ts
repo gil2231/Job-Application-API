@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { findApplicationForm, greenhouseEmbedForRedirect, isAtsApplicationUrl, type PageSnapshot } from "../src/find-form";
+import { closedPostingReason, findApplicationForm, greenhouseEmbedForRedirect, isAtsApplicationUrl, type PageSnapshot } from "../src/find-form";
 
 const page = (over: Partial<PageSnapshot>): PageSnapshot => ({ url: "https://careers.example.com/jobs/bdr", html: "<main><h1>BDR</h1></main>", frames: [], links: [], fieldCount: 0, ...over });
 
@@ -71,5 +71,25 @@ describe("greenhouseEmbedForRedirect", () => {
     expect(greenhouseEmbedForRedirect("https://boards.greenhouse.io/stripe/jobs/8246785", "https://stripe.com/jobs/search?gh_jid=8246785")).toBe("https://boards.greenhouse.io/embed/job_app?for=stripe&token=8246785");
     expect(greenhouseEmbedForRedirect("https://job-boards.greenhouse.io/scaleai/jobs/4012345", "https://job-boards.greenhouse.io/scaleai/jobs/4012345")).toBeNull();
     expect(greenhouseEmbedForRedirect("https://careers.acme.com/jobs/1", "https://www.acme.com/jobs/1")).toBeNull();
+  });
+});
+
+describe("closedPostingReason", () => {
+  const job = "https://job-boards.greenhouse.io/acme/jobs/4012345";
+
+  it("knows Greenhouse sends a closed job's link to the company's job list", () => {
+    expect(closedPostingReason(job, page({ url: "https://job-boards.greenhouse.io/acme?error=true", fieldCount: 3 }))).toContain("list of open jobs");
+    expect(closedPostingReason(job, page({ url: "https://job-boards.greenhouse.io/acme/jobs/4012345?error=true" }))).toContain("list of open jobs");
+  });
+
+  it("reads a closed notice on a page without a form", () => {
+    expect(closedPostingReason("https://careers.example.com/jobs/1", page({ text: "Sorry, this position has been filled." }))).toBe('the page says "this position has been filled"');
+    expect(closedPostingReason("https://careers.example.com/jobs/1", page({ text: "The job you are looking for is no longer open." }))).toContain("no longer open");
+  });
+
+  it("leaves open postings and pages with a form alone", () => {
+    expect(closedPostingReason(job, page({ url: job, fieldCount: 12 }))).toBeNull();
+    expect(closedPostingReason(job, page({ url: job, fieldCount: 12, text: "This job is no longer open to agencies." }))).toBeNull();
+    expect(closedPostingReason("https://careers.example.com/jobs/1", page({ text: "Apply now" }))).toBeNull();
   });
 });

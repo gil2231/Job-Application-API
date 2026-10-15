@@ -80,10 +80,12 @@ const NEGATIVE = /\b(reference|referee|referr|emergency|manager|supervisor|previ
 const YES_NO_QUESTION = /^\s*(are|do|does|did|will|would|have|has|can|could|is|were|should|may)\b/;
 
 /** Single words too generic to match inside a longer label. */
-const NO_PARTIAL = new Set(["name", "cell", "street", "state", "region", "apt", "suite", "employer", "website", "address", "town", "mobile", "phone", "email", "city", "country", "portfolio", "zip"]);
+const NO_PARTIAL = new Set(["name", "cell", "street", "state", "region", "apt", "suite", "employer", "website", "address", "town", "mobile", "phone", "email", "city", "country", "portfolio", "zip", "school", "university", "college", "institution", "degree", "major", "discipline"]);
 
 /** Standard questions recognized by wording, keyed like STANDARD_QUESTIONS. */
 const QUESTION_PATTERNS: Array<[RegExp, string]> = [
+  // First: these long legal questions also mention pay, employers and work.
+  [/\bnon-?compete|\bnon-?solicit|restrictive covenant|bound by (any |an |a )?(agreements?|contracts?|covenants?|obligations?)\b|\b(agreements?|obligations?|covenants?)\b.{0,80}\b(restrict|prevent|limit|prohibit)/, "restrictive_agreements"],
   [/(legally )?(authori[sz]ed|eligible) to work|work authori[sz]ation|right to work/, "work_authorization"],
   [/(require|need)s? (visa |immigration |employment )?sponsor|sponsorship/, "sponsorship"],
   [/(willing|open|able|prepared) to relocat|consider relocat|relocation (is )?(possible|an option)|^relocat\w*\??$/, "relocation"],
@@ -103,7 +105,16 @@ const QUESTION_PATTERNS: Array<[RegExp, string]> = [
   [/veteran/, "demographic_veteran"],
   [/\b(active|current(ly)?|serv(e|ed|ing)|member of|in) (the )?(us |u s )?(military|armed forces|national guard|reserves?)\b|\bactive duty\b|\bactive-duty\b|\bmilitary (service|status|member|experience)\b/, "military_status"],
   [/disabilit/, "demographic_disability"],
+  [/\b(18|eighteen) ?(years )?(of age|years old|or older|or over|\+)|\bat least (18|eighteen)\b|\bover (the age of )?(18|eighteen)\b|\blegal (working )?age\b/, "age_18"],
+  [/\b(employed|working|work) (by|for|at) (a |an |any )?(current )?(client|customer|partner|competitor|vendor|supplier)s?\b/, "competitor_employment"],
+  [/how did you (first |initially |originally )?(hear|learn|find out) (about|of)|where did you (first )?(hear|learn|find out) about|how did you find (this|our|the) (job|role|position|opening)/, "how_did_you_hear"],
+  [/\bprivacy (notice|statement|policy|disclosure)\b/, "privacy_acknowledgement"],
+  [/\b(certify|attest|affirm|declare)\b.{0,120}\b(true|accurate|correct|complete)\b|\binformation (i have |i've )?(provided|submitted|given)\b.{0,40}\b(true|accurate|correct|complete)\b/, "certify_information"],
+  [/\b(work|working|be|report)\b.{0,40}\b(in[- ]person|on[- ]?site|in (the |our |an )?office|from (the |our )?office|hybrid)\b|\b(in[- ]office|in[- ]person|on[- ]?site|hybrid)\b.{0,60}\b(days?|times?) (a|per|each) week\b|\bcommute to (the |our |this )?office\b/, "onsite_work"],
 ];
+
+/** Questions about the applicant even when they mention a former employer, a referral or a manager. */
+const ABOUT_THE_APPLICANT = new Set(["onsite_work", "age_18", "restrictive_agreements", "competitor_employment", "how_did_you_hear", "privacy_acknowledgement", "certify_information"]);
 
 export function matchStandardQuestion(label: string): string | null {
   const text = normalizeLabel(label);
@@ -131,7 +142,7 @@ export class HeuristicFieldClassifier implements FieldClassifier {
     const negative = NEGATIVE.test(label);
     // Questions about authorization, sponsorship, salary, etc. come from the Answer Library, never the profile.
     const question = matchStandardQuestion(field.label);
-    if (question && !negative) {
+    if (question && (!negative || ABOUT_THE_APPLICANT.has(question))) {
       return { mappedField: "answer.library", confidence: 90, questionKey: question, evidence: `Recognized as the standard "${question}" question` };
     }
 

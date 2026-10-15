@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { approveForSubmission, markHumanStepComplete, prisma } from "@autoapply/database";
-import { ATS_ENTRY_POINTS } from "../mock-site/ats";
+import { ATS_ENTRY_POINTS, PRIVACY_CONSENTS } from "../mock-site/ats";
 import { startMockSite, type MockSite } from "../mock-site/server";
 import { loadApplication, makeApplicant, makeEngine, queueFor, resetDatabase, runOnce, VisibleBrowserPool, type ApplicantOptions } from "./helpers";
 import { decryptString, isEncrypted } from "@autoapply/database/crypto";
@@ -78,6 +78,48 @@ describe("Greenhouse with a saved answer that isn't one of the dropdown's choice
     expect(site.submissions).toHaveLength(0);
     expect(after.questions.find((q) => q.label === "Gender")).toMatchObject({ status: "NEEDS_REVIEW", reviewReason: expect.stringContaining("doesn't match") });
     expect(after.questions.find((q) => q.label === "First Name")).toMatchObject({ status: "ANSWERED" });
+  });
+});
+
+describe("Greenhouse matching what people really have on file", () => {
+  it("picks the Bronx in New York, the person's school and degree, and the veteran choice their saved answer means", async () => {
+    const library = [...STANDARD_LIBRARY, { key: "demographic_veteran", question: "Veteran status (voluntary self-identification)", answer: "Not a current or past veteran", category: "DEMOGRAPHIC" as const }];
+    const { after } = await apply(ATS_ENTRY_POINTS.greenhouse, {
+      library,
+      profile: { city: "Bronx", state: "NY", country: null },
+      education: { school: "Fordham University, Gabelli School of Business", degree: "Bachelor of Science" },
+    });
+    expect(after.status, why(after)).toBe("SUBMITTED");
+    expect(site.submissions[0]!.fields).toMatchObject({
+      "job_application[location]": "Bronx, United States",
+      "job_application[education][school]": "Fordham University",
+      "job_application[education][degree]": "Bachelor's Degree",
+      "job_application[veteran_status]": "I am not a protected veteran",
+    });
+  });
+});
+
+describe("Greenhouse questions drawn as groups of checkboxes", () => {
+  it("ticks Yes for the NYC question and every privacy consent, and isn't fooled by each box being marked required", async () => {
+    const library = [
+      ...STANDARD_LIBRARY,
+      { key: "are_you_currently_based_in_the_nyc_metro_area", question: "Are you currently based in the NYC metro area?", answer: "Yes", category: "OTHER" as const },
+      { key: "privacy_acknowledgement", question: "Do you acknowledge the company's applicant privacy notice?", answer: "Yes", category: "OTHER" as const },
+    ];
+    const { after } = await apply(ATS_ENTRY_POINTS.greenhouseCheckboxGroups, { library });
+    expect(after.status, why(after)).toBe("SUBMITTED");
+    expect(site.submissions[0]!.fields).toMatchObject({ "question_69126794[]": "751192943", "question_68291685[]": ["738502255", "738502256"] });
+    expect(PRIVACY_CONSENTS).toHaveLength(2);
+  });
+});
+
+describe("A Greenhouse job that has closed", () => {
+  it("is marked closed instead of retried, and nothing is filled", async () => {
+    const { after } = await apply(ATS_ENTRY_POINTS.greenhouseClosed);
+    expect(after.status, why(after)).toBe("FAILED");
+    expect(after.failureType).toBe("POSTING_CLOSED");
+    expect(after.lastError).toContain("no longer open");
+    expect(site.submissions).toHaveLength(0);
   });
 });
 

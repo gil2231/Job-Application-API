@@ -135,7 +135,8 @@ describe("form patterns", () => {
     expect(after.attentionReason).toBe("QUESTION_REVIEW");
     const review = after.questions.filter((q) => q.status === "NEEDS_REVIEW");
     expect(review.map((q) => q.label)).toEqual([expect.stringContaining("privacy notice")]);
-    expect(review[0]!.reviewReason).toContain("won't guess");
+    // A privacy notice is a standard question: answered once, then reused on every application.
+    expect(review[0]!.reviewReason).toContain("Answer it once");
     expect(site.submissions).toHaveLength(0);
 
     await approveQuestionAnswer(user.id, review[0]!.id, "Yes");

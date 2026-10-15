@@ -151,6 +151,20 @@ describe("applications", () => {
     expect(after.events.map((e) => e.type)).toContain("HUMAN_INPUT_RECEIVED");
   });
 
+  it("only approves an answer the form has a choice for, so it isn't asked again", async () => {
+    const user = await makeUser();
+    const j = await createManualJob(user.id, job("https://example.com/1"), "GENERIC");
+    await queueApplications(user.id, [j.id]);
+    const app = await prisma.application.update({ where: { jobId: j.id }, data: { status: "REVIEW_REQUIRED", attentionReason: "QUESTION_REVIEW" } });
+    const veteran = await prisma.applicationQuestion.create({
+      data: { applicationId: app.id, label: "Veteran Status", normalizedKey: "veteran_status", required: true, status: "NEEDS_REVIEW", fieldType: "SELECT", options: ["I am not a protected veteran", "I don't wish to answer"],
+        answer: { create: { value: "Not a current or past veteran", source: "USER", confidence: 90 } } },
+    });
+    await expect(approveQuestionAnswer(user.id, veteran.id)).rejects.toThrow(/form's own choices/);
+    await approveQuestionAnswer(user.id, veteran.id, "I am not a protected veteran");
+    expect((await prisma.application.findUniqueOrThrow({ where: { id: app.id } })).status).toBe("QUEUED");
+  });
+
   it("resumes after a CAPTCHA is completed and refuses other users", async () => {
     const user = await makeUser();
     const other = await makeUser();

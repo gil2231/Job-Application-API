@@ -23,9 +23,10 @@ export interface FieldHints {
   /**
    * How the control is operated when it isn't a native element: a typeahead
    * dropdown (combobox), a button that opens a list (listbox), a row of answer
-   * buttons, or a text box that suggests values as you type (autocomplete).
+   * buttons, a text box that suggests values as you type (autocomplete), or a
+   * typeahead dropdown too long to show every choice until you search (search).
    */
-  widget?: "native" | "combobox" | "listbox" | "buttons" | "autocomplete";
+  widget?: "native" | "combobox" | "listbox" | "buttons" | "autocomplete" | "search";
 }
 
 /** A form field as detected on an application page. */
@@ -73,6 +74,8 @@ export interface FieldMapping {
   autoSubmitAllowed: boolean;
   /** Which classifier mapped the field. */
   mappedBy?: "heuristic" | "ai";
+  /** For a typed place (a city), where it is, so the right search suggestion is picked. */
+  place?: { state?: string | null; country?: string | null };
 }
 
 /** Sort locators by the preferred strategy order. */

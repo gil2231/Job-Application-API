@@ -1,5 +1,5 @@
 import { createDefaultRegistry } from "@autoapply/ats-adapters";
-import { claimApplication, createAnswer, createDocument, createManualJob, getUserSettings, prisma, queueApplications, updatePersonal, updateProfessional } from "@autoapply/database";
+import { claimApplication, createAnswer, createDocument, createEducation, createManualJob, getUserSettings, prisma, queueApplications, updatePersonal, updateProfessional } from "@autoapply/database";
 import { buildStorageKey, getStorage, sha256Hex } from "@autoapply/documents";
 import type { AnswerCategory, AutomationMode } from "@autoapply/shared";
 import { resetDatabase, makeUser } from "../../../packages/database/test/helpers";
@@ -40,6 +40,7 @@ export interface ApplicantOptions {
   coverLetter?: boolean;
   profile?: Partial<Parameters<typeof updatePersonal>[1]>;
   library?: Array<{ key: string; question: string; answer: string; category: AnswerCategory; review?: boolean; auto?: boolean; confidence?: number }>;
+  education?: { school: string; degree?: string };
 }
 
 /** A user with a filled-in profile, a resume, and Answer Library entries for the usual questions. */
@@ -67,6 +68,7 @@ export async function makeApplicant(options: ApplicantOptions = {}) {
     { key: "work_authorization", question: "Are you legally authorized to work in this country?", answer: "Yes", category: "WORK_AUTHORIZATION" as const },
     { key: "sponsorship", question: "Will you now or in the future require visa sponsorship?", answer: "No", category: "SPONSORSHIP" as const },
   ];
+  if (options.education) await createEducation(user.id, { degree: null, major: null, concentrations: [], minor: null, gpa: null, gpaScale: null, startDate: null, graduationDate: null, ...options.education } as unknown as Parameters<typeof createEducation>[1]);
   for (const a of library) {
     await createAnswer(user.id, { questionKey: a.key, question: a.question, answer: a.answer, category: a.category, confidence: a.confidence ?? 100, autoSubmitAllowed: a.auto ?? true, requiresHumanReview: a.review ?? false });
   }

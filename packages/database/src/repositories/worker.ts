@@ -232,6 +232,9 @@ export async function finishAttempt(input: { applicationId: string; attemptId: s
           status: outcome.status,
           attentionReason: outcome.reason,
           attentionDetail: outcome.detail.slice(0, 2000),
+          // This attempt got as far as needing the person; an earlier attempt's error no longer applies.
+          failureType: null,
+          lastError: null,
           ...(outcome.keepLease ? { lockedUntil: new Date(now.getTime() + outcome.keepLease.leaseMs) } : { lockedBy: null, lockedUntil: null }),
         };
         attempt = { status: "PAUSED", attentionReason: outcome.reason, endedAt: outcome.keepLease ? null : now };
