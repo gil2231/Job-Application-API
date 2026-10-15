@@ -363,29 +363,47 @@ export class FormAdapter implements ApplicationAdapter<Page> {
     if (pressed === "false") throw new AutomationError("SELECTOR_ERROR", `"${value}" didn't stay selected for "${field.label}"`);
   }
 
+  /**
+   * The options of the list an open dropdown controls (aria-controls), so
+   * another list on the page (Greenhouse's hidden phone-country picker) is
+   * never read or clicked instead. Falls back to every option on the page.
+   */
+  private async optionsOf(page: Page, control: Locator): Promise<Locator> {
+    const ids = ((await control.getAttribute("aria-controls").catch(() => null)) || (await control.getAttribute("aria-owns").catch(() => null)) || "").split(/\s+/).filter(Boolean);
+    for (const id of ids) {
+      const list = page.locator(`[id=${cssString(id)}]`);
+      if ((await list.count()) === 1) return list.getByRole("option");
+    }
+    return page.getByRole("option");
+  }
+
+  /** Wait for the dropdown's options to show (suggestion boxes look them up as you type), then read them. */
+  private async openOptions(page: Page, control: Locator, timeout: number): Promise<{ options: Locator; texts: string[] }> {
+    // Some lists only say which element they are once open, so look again after the wait.
+    let options = await this.optionsOf(page, control);
+    await options.filter({ visible: true }).first().waitFor({ state: "visible", timeout }).catch(() => undefined);
+    options = await this.optionsOf(page, control);
+    const texts = (await options.filter({ visible: true }).allInnerTexts().catch(() => [] as string[])).map(clean).filter(Boolean);
+    return { options, texts: [...new Set(texts)] };
+  }
+
   /** Open a custom dropdown, read its choices, and close it again without picking anything. */
   private async readOptions(page: Page, field: DetectedField): Promise<string[]> {
     const control = await this.locate(page, field);
     await control.click();
-    await page.locator('[role="option"]').first().waitFor({ state: "visible", timeout: 1500 }).catch(() => undefined);
-    const options = (await page.evaluate(OPEN_OPTIONS_SCRIPT)) as string[];
+    let { texts } = await this.openOptions(page, control, 1500);
+    if (!texts.length) texts = (await page.evaluate(OPEN_OPTIONS_SCRIPT)) as string[];
     await page.keyboard.press("Escape");
     await control.blur().catch(() => undefined);
-    return [...new Set(options)];
-  }
-
-  /** The visible option with exactly this text, wherever the site renders its dropdown list. */
-  private async visibleOption(page: Page, text: string): Promise<Locator> {
-    const option = page.getByRole("option", { name: text, exact: true }).filter({ visible: true });
-    await option.first().waitFor({ state: "visible", timeout: 3000 }).catch(() => undefined);
-    return option;
+    return [...new Set(texts)];
   }
 
   private async pickCustomOption(page: Page, field: DetectedField, value: string) {
     const control = await this.locate(page, field);
     await control.click();
     if (field.hints?.widget === "combobox") await control.fill(value);
-    const option = await this.visibleOption(page, value);
+    const { options } = await this.openOptions(page, control, 3000);
+    const option = options.filter({ visible: true }).filter({ hasText: new RegExp(`^\\s*${escapeRegExp(value)}\\s*$`) });
     if ((await option.count()) !== 1) {
       await page.keyboard.press("Escape");
       throw new AutomationError("SELECTOR_ERROR", `Couldn't choose "${value}" for "${field.label}"`);
@@ -399,11 +417,11 @@ export class FormAdapter implements ApplicationAdapter<Page> {
     const control = await this.locate(page, field);
     await control.click();
     await control.fill(value);
-    await page.locator('[role="option"]').first().waitFor({ state: "visible", timeout: 3000 }).catch(() => undefined);
-    const suggestions = (await page.evaluate(OPEN_OPTIONS_SCRIPT)) as string[];
-    const match = chooseOption(value, suggestions);
+    // Place searches answer from a server, so give them longer than a dropdown.
+    const { options, texts } = await this.openOptions(page, control, 6000);
+    const match = chooseOption(value, texts);
     if (match && match.confidence >= 80) {
-      await (await this.visibleOption(page, match.option)).first().click();
+      await options.filter({ visible: true }).filter({ hasText: match.option }).first().click();
       return;
     }
     await page.keyboard.press("Escape");
@@ -413,44 +431,60 @@ export class FormAdapter implements ApplicationAdapter<Page> {
   private async fillOne(ctx: AdapterContext<Page>, m: FieldMapping): Promise<void> {
     if (m.value == null || m.status === "SKIPPED" || (m.status === "NEEDS_REVIEW" && m.source === "none")) return;
     ctx.signal.throwIfAborted();
+    const field = m.field;
+    // A saved answer that isn't one of this dropdown's choices can't be picked; the question waits for the person instead.
+    const choice = (field.kind === "select" || field.kind === "radio") && !Array.isArray(m.value);
+    if (choice && field.options?.length && !field.options.includes(String(m.value))) return;
+    const value = m.value;
+    if (m.status !== "NEEDS_REVIEW") return this.fillValue(ctx, m, value);
+    // Pre-filling an answer the person still has to check is a courtesy: if the site won't take it, leave the field to them.
+    try {
+      await this.fillValue(ctx, m, value);
+    } catch (error) {
+      if (!(error instanceof AutomationError) || error.type !== "SELECTOR_ERROR") throw error;
+      await ctx.log({ type: "NOTE", level: "WARNING", message: `Left "${displayLabel(m.detectedLabel)}" for you to answer: ${error.message}` });
+    }
+  }
+
+  private async fillValue(ctx: AdapterContext<Page>, m: FieldMapping, value: string | string[]): Promise<void> {
     const { page } = ctx;
     const field = m.field;
     const widget = field.hints?.widget ?? "native";
     switch (field.kind) {
       case "radio":
-        if (widget === "buttons") await this.pressAnswerButton(page, field, String(m.value));
-        else await this.pickInGroup(page, field, [String(m.value)], true);
+        if (widget === "buttons") await this.pressAnswerButton(page, field, String(value));
+        else await this.pickInGroup(page, field, [String(value)], true);
         return;
       case "checkbox":
         if (field.multiple) {
-          await this.pickInGroup(page, field, Array.isArray(m.value) ? m.value : [m.value], false);
+          await this.pickInGroup(page, field, Array.isArray(value) ? value : [value], false);
         } else {
           const locator = await this.locate(page, field);
-          await locator.setChecked(m.value === "Yes");
+          await locator.setChecked(value === "Yes");
         }
         return;
       case "select": {
         if (widget === "combobox" || widget === "listbox") {
-          await this.pickCustomOption(page, field, String(m.value));
+          await this.pickCustomOption(page, field, String(value));
           return;
         }
         const locator = await this.locate(page, field);
-        await locator.selectOption({ label: String(m.value) });
+        await locator.selectOption({ label: String(value) });
         return;
       }
       case "file":
         return;
       default: {
-        const value = Array.isArray(m.value) ? m.value.join(", ") : m.value;
+        const text = Array.isArray(value) ? value.join(", ") : value;
         if (widget === "autocomplete") {
-          await this.typeAndSuggest(ctx, field, value);
+          await this.typeAndSuggest(ctx, field, text);
           return;
         }
         const locator = await this.locate(page, field);
-        await locator.fill(value);
+        await locator.fill(text);
         // Some sites reformat or reject input; read it back so a silent mismatch is caught by validation.
         const actual = await locator.inputValue();
-        if (actual.replace(/\D/g, "") !== value.replace(/\D/g, "") && actual.trim() !== value.trim() && field.kind !== "date") {
+        if (actual.replace(/\D/g, "") !== text.replace(/\D/g, "") && actual.trim() !== text.trim() && field.kind !== "date") {
           await ctx.log({ type: "NOTE", level: "WARNING", message: `"${field.label}" shows "${actual.slice(0, 80)}" after filling` });
         }
       }
@@ -561,6 +595,10 @@ export class FormAdapter implements ApplicationAdapter<Page> {
   private async pageText(page: Page): Promise<string> {
     return ((await page.evaluate("document.body ? document.body.innerText.slice(0, 5000) : ''").catch(() => "")) as string) ?? "";
   }
+}
+
+function escapeRegExp(s: string): string {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
 function cssEscapeId(id: string): string {

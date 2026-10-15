@@ -1,4 +1,5 @@
 export * from "./detect";
+export * from "./find-form";
 export * from "./adapter";
 export * from "./registry";
 export { FormAdapter, toDetectedFields, type FormAdapterOptions, type ScannedField } from "./form/form-adapter";

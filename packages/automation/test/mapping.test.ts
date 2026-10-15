@@ -60,6 +60,19 @@ describe("field classification", () => {
     expect(classify("Are you an active military member?")).toMatchObject({ mappedField: "answer.library", questionKey: "military_status" });
   });
 
+  it("keeps the Hispanic/Latino question apart from race", () => {
+    expect(matchStandardQuestion("Are you Hispanic/Latino?")).toBe("demographic_hispanic");
+    expect(matchStandardQuestion("Do you identify as Hispanic or Latinx?")).toBe("demographic_hispanic");
+    expect(matchStandardQuestion("Race")).toBe("demographic_race");
+    expect(matchStandardQuestion("Race/Ethnicity (Hispanic or Latino, White, ...)")).toBe("demographic_race");
+  });
+
+  it("doesn't fill a yes/no question with the profile value its wording mentions", () => {
+    expect(classify("Will you be able to regularly commute and work in an office in job posting location?", { kind: "select", options: ["Yes", "No"] }).mappedField).toBe("unknown");
+    expect(classify("Are you currently located in the New York City area?").mappedField).toBe("unknown");
+    expect(classify("Current location").mappedField).toBe("masterProfile.city");
+  });
+
   it("classifies uploads", () => {
     expect(classify("Resume/CV", { kind: "file" }).mappedField).toBe("documents.resume");
     expect(classify("Cover Letter", { kind: "file" }).mappedField).toBe("documents.coverLetter");

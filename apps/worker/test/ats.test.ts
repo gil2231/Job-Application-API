@@ -68,6 +68,32 @@ describe("Greenhouse", () => {
   });
 });
 
+describe("Greenhouse with a saved answer that isn't one of the dropdown's choices", () => {
+  it("leaves that question for the person and fills the rest, instead of failing the attempt", async () => {
+    const library = [...STANDARD_LIBRARY, { key: "demographic_gender", question: "Gender (voluntary self-identification)", answer: "Non-binary", category: "DEMOGRAPHIC" as const }];
+    const { after } = await apply(ATS_ENTRY_POINTS.greenhouse, { library });
+    expect(after.status, why(after)).toBe("REVIEW_REQUIRED");
+    expect(after.attentionDetail).toContain('"Gender"');
+    expect(after.lastError ?? "").not.toContain("Couldn't choose");
+    expect(site.submissions).toHaveLength(0);
+    expect(after.questions.find((q) => q.label === "Gender")).toMatchObject({ status: "NEEDS_REVIEW", reviewReason: expect.stringContaining("doesn't match") });
+    expect(after.questions.find((q) => q.label === "First Name")).toMatchObject({ status: "ANSWERED" });
+  });
+});
+
+describe("Greenhouse inside an employer's careers page", () => {
+  it("opens the form from the iframe, remembers its link on the job, and submits", async () => {
+    const { app, after } = await apply(ATS_ENTRY_POINTS.greenhouseCareersPage);
+    expect(after.status, why(after)).toBe("SUBMITTED");
+    expect(after.platform).toBe("GREENHOUSE");
+    expect(after.events.find((e) => e.type === "NOTE" && e.message.includes("embedded in"))?.message).toContain(`${ATS_ENTRY_POINTS.greenhouse}?embed=true`);
+    expect(site.submissions).toHaveLength(1);
+    expect(site.submissions[0]!.fields["job_application[email]"]).toBe("jordan@example.com");
+    const job = await prisma.job.findUniqueOrThrow({ where: { id: app.jobId } });
+    expect(job.applicationUrl).toBe(`${site.url}${ATS_ENTRY_POINTS.greenhouse}?embed=true`);
+  });
+});
+
 describe("Greenhouse with Google's invisible reCAPTCHA badge", () => {
   it("fills the form and attaches files labelled only \"Attach\", but leaves the final Submit to the person even in Auto mode", async () => {
     const { user, app, after } = await apply(ATS_ENTRY_POINTS.greenhouseBadge, { coverLetter: true });

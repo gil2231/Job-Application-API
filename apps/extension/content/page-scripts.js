@@ -85,7 +85,8 @@ scanFields: (OPTIONS) => {
       let node = start;
       for (let depth = 0; node && depth < 6; depth++, node = node.parentElement) {
         for (const sel of selectors) {
-          const heading = node.querySelector(sel);
+          // Not another field's own label: Ashby puts the Phone box and its text-message consent radios in one entry.
+          const heading = Array.from(node.querySelectorAll(sel)).find((h) => !(h.tagName === "LABEL" && h.control && h.control.type !== "radio" && h.control.type !== "checkbox"));
           if (heading && !heading.querySelector("input, button") && clean(heading.textContent)) return { text: clean(heading.textContent), via: "dom" };
         }
       }
@@ -304,7 +305,8 @@ security: (OPTIONS) => {
       let node = start;
       for (let depth = 0; node && depth < 6; depth++, node = node.parentElement) {
         for (const sel of selectors) {
-          const heading = node.querySelector(sel);
+          // Not another field's own label: Ashby puts the Phone box and its text-message consent radios in one entry.
+          const heading = Array.from(node.querySelectorAll(sel)).find((h) => !(h.tagName === "LABEL" && h.control && h.control.type !== "radio" && h.control.type !== "checkbox"));
           if (heading && !heading.querySelector("input, button") && clean(heading.textContent)) return { text: clean(heading.textContent), via: "dom" };
         }
       }
@@ -447,7 +449,8 @@ confirmation: (OPTIONS) => {
       let node = start;
       for (let depth = 0; node && depth < 6; depth++, node = node.parentElement) {
         for (const sel of selectors) {
-          const heading = node.querySelector(sel);
+          // Not another field's own label: Ashby puts the Phone box and its text-message consent radios in one entry.
+          const heading = Array.from(node.querySelectorAll(sel)).find((h) => !(h.tagName === "LABEL" && h.control && h.control.type !== "radio" && h.control.type !== "checkbox"));
           if (heading && !heading.querySelector("input, button") && clean(heading.textContent)) return { text: clean(heading.textContent), via: "dom" };
         }
       }
