@@ -1,11 +1,11 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { audit, findKnownJobUrls, getSavedBoardSearch, getSearchPreferences, saveSearchPreferences } from "@autoapply/database";
-import { BoardSearchError, foundJobsSource, parseBoardList, runImport, safeFetch, searchEverywhere, type FeedKeys, type WideSearchInput, type WideSearchResult } from "@autoapply/ingestion";
-import { canonicalizeJobUrl, foundJobsSchema, jobFinderSchema, parsePreferences, searchPreferencesSchema, splitPreferences, type JobFinderInput } from "@autoapply/shared";
+import { audit, findKnownJobUrls, saveSearchPreferences } from "@autoapply/database";
+import { BoardSearchError, foundJobsSource, runImport, type WideSearchResult } from "@autoapply/ingestion";
+import { canonicalizeJobUrl, foundJobsSchema, jobFinderSchema, parsePreferences, searchPreferencesSchema, type JobFinderInput } from "@autoapply/shared";
 import { authedAction, formToObject, validationFailed, type ActionResult } from "@/lib/action";
-import { FAKE_DIRECTORY, fakeJobSources } from "@/lib/fake-job-sources";
+import { preferencesOf, runSearch, searchOpenings, usingFakeJobSources } from "@/lib/job-search";
 import { analyzeInBackground } from "@/lib/pipeline";
 import { LIMITS, rateLimit } from "@/lib/rate-limit";
 import type { ImportResultData } from "./ingestion";
@@ -43,37 +43,6 @@ function sourcesSummary(result: WideSearchResult): string {
   const names = [...(result.aggregator.status === "used" ? ["LinkedIn", "Indeed", "Glassdoor"] : []), ...result.feeds.filter((f) => f.status === "used").map((f) => f.label)];
   if (!names.length) return "";
   return `, ${names.length === 1 ? names[0] : `${names.slice(0, -1).join(", ")} and ${names.at(-1)}`}`;
-}
-
-/** Stand-in boards for end-to-end tests and demos; never in production. */
-const fake = process.env.E2E_FAKE_JOB_SOURCES === "1" && process.env.NODE_ENV !== "production";
-
-function feedKeys(): FeedKeys {
-  const appId = process.env.ADZUNA_APP_ID?.trim();
-  const appKey = process.env.ADZUNA_APP_KEY?.trim();
-  return {
-    theMuse: process.env.THEMUSE_API_KEY?.trim() || null,
-    adzuna: appId && appKey ? { appId, appKey, country: process.env.ADZUNA_COUNTRY?.trim() || "us" } : null,
-  };
-}
-
-function sources(): { http: typeof safeFetch; directory?: readonly string[]; aggregatorKey: string | null; feeds: FeedKeys } {
-  if (fake) return { http: fakeJobSources, directory: FAKE_DIRECTORY, aggregatorKey: "fake", feeds: { adzuna: { appId: "fake", appKey: "fake" } } };
-  return { http: safeFetch, aggregatorKey: process.env.JSEARCH_API_KEY?.trim() || null, feeds: feedKeys() };
-}
-
-/** The user's preferences, split into roles and keywords versus places. */
-async function preferencesOf(userId: string) {
-  const { text } = await getSearchPreferences(userId);
-  const terms = parsePreferences(text);
-  return { terms, ...splitPreferences(terms) };
-}
-
-async function runSearch(userId: string, input: Omit<WideSearchInput, "directory" | "aggregatorKey" | "boards" | "feeds"> & { aggregator: boolean }) {
-  const { http, directory, aggregatorKey, feeds } = sources();
-  const saved = await getSavedBoardSearch(userId);
-  const boards = parseBoardList((saved?.boards ?? []).join("\n")).boards;
-  return searchEverywhere({ ...input, boards, directory, aggregatorKey: input.aggregator ? aggregatorKey : null, feeds }, http);
 }
 
 async function toData(userId: string, result: WideSearchResult): Promise<FoundJobsData> {
@@ -145,22 +114,12 @@ export async function findJobsAction(input: JobFinderInput): Promise<ActionResul
  */
 export async function recommendedOpeningsAction(): Promise<ActionResult<FoundJobsData>> {
   return authedAction<FoundJobsData>(async (user) => {
-    const prefs = await preferencesOf(user.id);
-    const { keywords, places } = prefs;
+    const { keywords } = await preferencesOf(user.id);
     if (!keywords.length) return { ok: true, data: { results: [], totalMatches: 0, notices: [], boardsSearched: 0, seconds: 0 } };
     const limit = await rateLimit(`recommended-openings:${user.id}`, LIMITS.boardSearch.limit * 2, LIMITS.boardSearch.windowMs);
     if (!limit.allowed) return { ok: false, message: "New openings refresh again in a few minutes." };
-    const city = places.find((p) => p.toLowerCase() !== "remote") ?? places[0] ?? null;
-    const result = await runSearch(user.id, {
-      query: "",
-      terms: { include: keywords, exclude: [] },
-      matchAny: true,
-      preferences: prefs,
-      onlyPreferredPlaces: true,
-      searchNear: city,
-      feedHints: prefs.terms,
-      aggregator: true,
-    });
+    const result = await searchOpenings(user.id);
+    if (!result) return { ok: true, data: { results: [], totalMatches: 0, notices: [], boardsSearched: 0, seconds: 0 } };
     const data = await toData(user.id, result);
     // Only openings not already in the list; the saved ones are recommended above.
     data.results = data.results.filter((r) => r.known === "new").slice(0, 50);
@@ -175,7 +134,7 @@ export async function addFoundJobsAction(input: { jobs: Array<Pick<FoundJobRow, 
     if (!parsed.success) return validationFailed(parsed.error);
     const limit = await rateLimit(`import:${user.id}`, LIMITS.jobImport.limit, LIMITS.jobImport.windowMs);
     if (!limit.allowed) return { ok: false, message: `Import limit reached. Try again in ${Math.ceil(limit.retryAfterSeconds / 60)} minutes.` };
-    const summary = await runImport(user.id, foundJobsSource, { jobs: parsed.data.jobs }, fake ? { context: { fetchPosting: async () => null } } : {});
+    const summary = await runImport(user.id, foundJobsSource, { jobs: parsed.data.jobs }, usingFakeJobSources ? { context: { fetchPosting: async () => null } } : {});
     await audit(user.id, "jobs.imported", { entityType: "JobImport", entityId: summary.importId, metadata: { source: "job_search", created: summary.created, duplicates: summary.duplicates } });
     if (summary.created || summary.enrichedJobIds.length) analyzeInBackground(user.id);
     revalidatePath("/jobs");

@@ -111,6 +111,28 @@ describe("Greenhouse questions drawn as groups of checkboxes", () => {
     expect(site.submissions[0]!.fields).toMatchObject({ "question_69126794[]": "751192943", "question_68291685[]": ["738502255", "738502256"] });
     expect(PRIVACY_CONSENTS).toHaveLength(2);
   });
+
+  const GROUP_ANSWERS = [
+    ...STANDARD_LIBRARY,
+    { key: "are_you_currently_based_in_the_nyc_metro_area", question: "Are you currently based in the NYC metro area?", answer: "Yes", category: "OTHER" as const },
+    { key: "privacy_acknowledgement", question: "Do you acknowledge the company's applicant privacy notice?", answer: "Yes", category: "OTHER" as const },
+    { key: "demographic_gender", question: "Gender (voluntary self-identification)", answer: "Male", category: "DEMOGRAPHIC" as const },
+  ];
+
+  it("ticks the survey consent that turns required once a survey answer is filled, from the saved answer", async () => {
+    const library = [...GROUP_ANSWERS, { key: "demographic_data_consent", question: "Do you consent to the company processing your answers to its voluntary demographic survey?", answer: "Yes", category: "OTHER" as const }];
+    const { after } = await apply(ATS_ENTRY_POINTS.greenhouseCheckboxGroups, { library });
+    expect(after.status, why(after)).toBe("SUBMITTED");
+    expect(site.submissions[0]!.fields).toMatchObject({ "job_application[gender]": "Male", gdpr_demographic_data_consent_given: "1" });
+  });
+
+  it("asks once about the survey consent when there's no saved answer, before the site can reject it", async () => {
+    const { after } = await apply(ATS_ENTRY_POINTS.greenhouseCheckboxGroups, { library: GROUP_ANSWERS });
+    expect(after.status, why(after)).toBe("REVIEW_REQUIRED");
+    expect(after.attentionReason).toBe("QUESTION_REVIEW");
+    expect(after.questions.filter((q) => q.status === "NEEDS_REVIEW").map((q) => q.reviewReason)).toEqual([expect.stringContaining("Answer it once")]);
+    expect(site.submissions).toHaveLength(0);
+  });
 });
 
 describe("A Greenhouse job that has closed", () => {

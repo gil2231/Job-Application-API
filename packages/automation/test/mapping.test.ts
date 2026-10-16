@@ -239,6 +239,7 @@ describe("matching saved answers to the choices real forms offer", () => {
     ["I certify that the information I have provided is true and complete.", "certify_information"],
     ["Are you open to working in person in our San Francisco or New York office 3 times a week?", "onsite_work"],
     ["Are you able to commute to our office in New York?", "onsite_work"],
+    ["By checking this box, I consent to Braze collecting, storing, and processing my responses to the demographic data surveys above.", "demographic_data_consent"],
   ])("recognizes %s", (label, key) => {
     expect(matchStandardQuestion(label)).toBe(key);
     expect(classify(label)).toMatchObject({ mappedField: "answer.library", questionKey: key });

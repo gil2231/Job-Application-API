@@ -34,6 +34,7 @@ export const STANDARD_QUESTIONS: StandardQuestion[] = [
   { key: "competitor_employment", question: "Do you currently work for a competitor, client or partner of the company?", category: "OTHER", requiresHumanReview: false, autoSubmitAllowed: true, sensitive: false },
   { key: "how_did_you_hear", question: "How did you hear about this job?", category: "OTHER", requiresHumanReview: false, autoSubmitAllowed: true, sensitive: false },
   { key: "privacy_acknowledgement", question: "Do you acknowledge the company's applicant privacy notice?", category: "OTHER", requiresHumanReview: false, autoSubmitAllowed: true, sensitive: false },
+  { key: "demographic_data_consent", question: "Do you consent to the company processing your answers to its voluntary demographic survey?", category: "OTHER", requiresHumanReview: false, autoSubmitAllowed: true, sensitive: false },
   { key: "certify_information", question: "Do you certify that the information in your application is true and complete?", category: "OTHER", requiresHumanReview: false, autoSubmitAllowed: true, sensitive: false },
   { key: "demographic_gender", question: "Gender (voluntary self-identification)", category: "DEMOGRAPHIC", requiresHumanReview: false, autoSubmitAllowed: true, sensitive: true },
   { key: "demographic_hispanic", question: "Are you Hispanic or Latino? (voluntary self-identification)", category: "DEMOGRAPHIC", requiresHumanReview: false, autoSubmitAllowed: true, sensitive: true },

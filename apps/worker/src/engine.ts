@@ -446,7 +446,11 @@ class AttemptRun {
     const seen = new Map<string, FieldMapping>();
     let { mappings } = await adapter.mapFields(ctx);
     for (let round = 0; round < MAX_CONDITIONAL_ROUNDS; round++) {
-      const fresh = mappings.filter((m) => !seen.has(m.field.key ?? m.detectedLabel));
+      const fresh = mappings.filter((m) => {
+        const before = seen.get(m.field.key ?? m.detectedLabel);
+        // A box left blank while optional that an earlier answer made required (Greenhouse's survey consent) is resolved again.
+        return !before || (before.status === "SKIPPED" && !before.field.required && m.field.required);
+      });
       if (!fresh.length) break;
       for (const m of fresh) seen.set(m.field.key ?? m.detectedLabel, m);
       if (round > 0) await this.log("NOTE", `${fresh.length} more question${fresh.length === 1 ? "" : "s"} appeared after earlier answers`);

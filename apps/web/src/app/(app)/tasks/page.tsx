@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { getDailyUsage, getTaskBoard } from "@autoapply/database";
 import { requireUser } from "@/lib/auth";
+import { jobHuntStatus } from "@/lib/job-hunt";
 import { getWorkerStatus } from "@/lib/worker-status";
 import { PageHeader } from "@/components/page-header";
 import { ActivityLog } from "./activity-log";
@@ -16,13 +17,14 @@ export default async function TasksPage() {
     <div className="grid gap-5">
       <PageHeader
         title="Tasks"
-        description="Every application is a task. Press Start and Applyance works through the queue, stopping for you at anything only a person should do."
+        description="Every application is a task. Press Start and Applyance finds new jobs that fit your preferences and works through the queue, stopping for you at anything only a person should do."
       />
       <ControlDeck
         run={board.run}
         counts={board.counts}
         qualifiedWaiting={board.qualifiedWaiting}
         usage={usage}
+        hunt={jobHuntStatus(user.id)}
         worker={worker.state === "online" ? { state: "online", interactive: worker.heartbeat.interactive ?? false } : { state: worker.state }}
       />
       <div className="grid items-start gap-4 xl:grid-cols-[minmax(0,1fr)_360px]">
