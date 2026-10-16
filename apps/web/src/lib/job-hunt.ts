@@ -3,7 +3,7 @@ import { after } from "next/server";
 import { detectPlatformFromUrl } from "@autoapply/ats-adapters";
 import { audit, findKnownJobUrls, prisma, queueApplications } from "@autoapply/database";
 import { analyzeJobs, foundJobsSource, runImport, type FoundJob } from "@autoapply/ingestion";
-import { canonicalizeJobUrl, createLogger, isCompanyApplicationUrl, parseHttpUrl } from "@autoapply/shared";
+import { canonicalizeJobUrl, createLogger, isCompanyApplicationUrl } from "@autoapply/shared";
 import { searchOpenings, usingFakeJobSources } from "./job-search";
 import { notifyWorker } from "./worker-queue";
 
@@ -71,12 +71,9 @@ function finish(userId: string, state: "done" | "failed", message: string, patch
   update(userId, { ...patch, state, message, finishedAt: Date.now() });
 }
 
-/** Listing sites and job aggregators Applyance can't apply through on its own. */
-const AGGREGATOR = /(^|\.)(jooble\.org|simplyhired\.com|monster\.com|careerbuilder\.com|talent\.com)$/i;
-
-/** Jobs Applyance can apply to by itself, the ones on hiring software it knows first. */
+/** Jobs Applyance can apply to by itself (not on a listing site or job aggregator), the ones on hiring software it knows first. */
 function applicable<T extends { url: string }>(jobs: T[]): T[] {
-  const own = jobs.filter((j) => isCompanyApplicationUrl(j.url) && !AGGREGATOR.test(parseHttpUrl(j.url)?.hostname ?? ""));
+  const own = jobs.filter((j) => isCompanyApplicationUrl(j.url));
   const known = (j: T) => {
     const platform = detectPlatformFromUrl(j.url).platform;
     // Workday usually needs an account, so its jobs go after the ones that don't.

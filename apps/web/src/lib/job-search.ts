@@ -1,7 +1,7 @@
 import "server-only";
 import { getSavedBoardSearch, getSearchPreferences } from "@autoapply/database";
 import { parseBoardList, safeFetch, searchEverywhere, type FeedKeys, type WideSearchInput, type WideSearchResult } from "@autoapply/ingestion";
-import { parsePreferences, splitPreferences } from "@autoapply/shared";
+import { isSeniorTitle, parsePreferences, splitPreferences, wantsEarlyCareer } from "@autoapply/shared";
 import { FAKE_DIRECTORY, fakeJobSources } from "./fake-job-sources";
 
 /** Stand-in boards for end-to-end tests and demos; never in production. */
@@ -46,7 +46,7 @@ export async function searchOpenings(userId: string): Promise<WideSearchResult |
   const { keywords, places } = prefs;
   if (!keywords.length) return null;
   const city = places.find((p) => p.toLowerCase() !== "remote") ?? places[0] ?? null;
-  return runSearch(userId, {
+  const result = await runSearch(userId, {
     query: "",
     terms: { include: keywords, exclude: [] },
     matchAny: true,
@@ -56,4 +56,7 @@ export async function searchOpenings(userId: string): Promise<WideSearchResult |
     feedHints: prefs.terms,
     aggregator: true,
   });
+  // Someone looking for entry-level or new-graduate jobs doesn't want the Director and Senior Manager openings "Sales" also finds.
+  if (wantsEarlyCareer(prefs.terms)) result.jobs = result.jobs.filter((j) => !isSeniorTitle(j.title ?? ""));
+  return result;
 }

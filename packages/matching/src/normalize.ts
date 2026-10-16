@@ -72,12 +72,18 @@ function placeTokens(location: string): Set<string> {
   for (const rawPart of cleaned.split(/[,/|;]| - | or /)) {
     const part = rawPart.replace(/\b(metropolitan area|metro area|area|greater|hq|office)\b/g, "").replace(/\s+/g, " ").trim();
     if (!part) continue;
-    const alias = CITY_ALIASES[part];
-    out.add(alias ?? part);
-    if (alias) continue;
-    if (STATES[part]) out.add(STATES[part]);
-    const stateName = Object.entries(STATES).find(([, code]) => code === part)?.[0];
-    if (stateName) out.add(stateName);
+    out.add(CITY_ALIASES[part] ?? part);
+    // Job sites' codes like "US-NYC" or "NY-New York" name the place in pieces.
+    for (const piece of part.includes("-") ? [part, ...part.split(/\s*-\s*/)] : [part]) {
+      const alias = CITY_ALIASES[piece];
+      if (alias) {
+        out.add(alias);
+        continue;
+      }
+      if (STATES[piece]) out.add(STATES[piece]);
+      const stateName = Object.entries(STATES).find(([, code]) => code === piece)?.[0];
+      if (stateName) out.add(stateName);
+    }
   }
   return out;
 }

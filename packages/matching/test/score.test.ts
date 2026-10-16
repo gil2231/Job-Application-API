@@ -109,6 +109,11 @@ describe("normalizers", () => {
     expect(locationMatches("Portland, OR", "Oregon")).toBe(true);
     expect(locationMatches("Newark, NJ", "New York")).toBe(false);
     expect(locationMatches("Los Angeles, CA", "LA")).toBe(true);
+    // Job sites' location codes.
+    expect(locationMatches("US-NYC", "New York")).toBe(true);
+    expect(locationMatches("NY-New York", "NYC")).toBe(true);
+    expect(locationMatches("US-SF", "New York")).toBe(false);
+    expect(locationMatches("Winston-Salem, NC", "New York")).toBe(false);
   });
 
   it("degree levels from free text", () => {

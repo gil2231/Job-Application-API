@@ -62,6 +62,20 @@ export function locationMatchesPlace(location: string | null | undefined, term: 
   return names.some((name) => mentionsKeyword(location, name));
 }
 
+/** Terms asking for jobs early in a career: "Entry-Level", "New Graduate", "Graduate Program", "Junior". */
+const EARLY_CAREER = /\b(entry[- ]?level|new grad(uate)?s?|recent grad(uate)?s?|graduate (program|programme|scheme|analyst)|early[- ]career|junior|intern(ship)?s?|apprentice(ship)?s?|trainee|beginner)\b/i;
+
+export function wantsEarlyCareer(terms: string[]): boolean {
+  return terms.some((t) => EARLY_CAREER.test(t));
+}
+
+/** Titles for experienced people: senior and lead roles, heads, directors and executives. "Lead Generation" is a junior job. */
+const SENIOR_TITLE = /\b(senior|sr|principal|directors?|vp|svp|evp|vice president|chief|president|cmo|cro|cfo|ceo|coo)\b|\blead\b(?![- ](gen|generation)\b)|\bhead\b(?=[,\s]+(of|sales|marketing|growth|partnerships|business)\b)/i;
+
+export function isSeniorTitle(title: string): boolean {
+  return SENIOR_TITLE.test(title.replace(/\./g, ""));
+}
+
 /** Preference terms split into roles and keywords versus places. */
 export function splitPreferences(terms: string[]): { keywords: string[]; places: string[] } {
   return { keywords: terms.filter((t) => !isPlaceTerm(t)), places: terms.filter(isPlaceTerm) };

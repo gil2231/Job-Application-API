@@ -7,7 +7,7 @@ import { parseHttpUrl } from "./url";
  * built-in apply). A job saved from one is followed to the company's own
  * application, or left for the user to apply to there themselves.
  */
-export const LISTING_SITES = ["linkedin", "handshake", "indeed", "glassdoor", "ziprecruiter", "builtin"] as const;
+export const LISTING_SITES = ["linkedin", "handshake", "indeed", "glassdoor", "ziprecruiter", "builtin", "jooble", "jobleads", "simplyhired", "monster", "careerbuilder", "talent"] as const;
 export type ListingSite = (typeof LISTING_SITES)[number];
 
 export const LISTING_SITE_LABELS: Record<ListingSite, string> = {
@@ -17,6 +17,12 @@ export const LISTING_SITE_LABELS: Record<ListingSite, string> = {
   glassdoor: "Glassdoor",
   ziprecruiter: "ZipRecruiter",
   builtin: "Built In",
+  jooble: "Jooble",
+  jobleads: "JobLeads",
+  simplyhired: "SimplyHired",
+  monster: "Monster",
+  careerbuilder: "CareerBuilder",
+  talent: "Talent.com",
 };
 
 const HOSTS: Array<[ListingSite, RegExp]> = [
@@ -27,6 +33,13 @@ const HOSTS: Array<[ListingSite, RegExp]> = [
   ["ziprecruiter", /(^|\.)ziprecruiter\.(com|co\.uk)$/i],
   // Built In and its city sites (builtinnyc.com, builtinchicago.org, ...): applying there takes a Built In account.
   ["builtin", /(^|\.)builtin(nyc|chicago|la|sf|boston|austin|colorado|seattle)?\.(com|org)$/i],
+  // Job aggregators: their pages only point on to the employer, or to another aggregator.
+  ["jooble", /(^|\.)jooble\.org$/i],
+  ["jobleads", /(^|\.)jobleads\.com$/i],
+  ["simplyhired", /(^|\.)simplyhired\.(com|ca|co\.uk)$/i],
+  ["monster", /(^|\.)monster\.(com|ca|co\.uk)$/i],
+  ["careerbuilder", /(^|\.)careerbuilder\.com$/i],
+  ["talent", /(^|\.)talent\.com$/i],
 ];
 
 /** The listing site a link belongs to, or null for any other site. */
