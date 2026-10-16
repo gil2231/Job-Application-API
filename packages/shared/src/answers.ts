@@ -35,12 +35,17 @@ export const STANDARD_QUESTIONS: StandardQuestion[] = [
   { key: "how_did_you_hear", question: "How did you hear about this job?", category: "OTHER", requiresHumanReview: false, autoSubmitAllowed: true, sensitive: false },
   { key: "privacy_acknowledgement", question: "Do you acknowledge the company's applicant privacy notice?", category: "OTHER", requiresHumanReview: false, autoSubmitAllowed: true, sensitive: false },
   { key: "demographic_data_consent", question: "Do you consent to the company processing your answers to its voluntary demographic survey?", category: "OTHER", requiresHumanReview: false, autoSubmitAllowed: true, sensitive: false },
+  { key: "talent_community", question: "Would you like to join the company's talent community and hear about future openings?", category: "OTHER", requiresHumanReview: false, autoSubmitAllowed: true, sensitive: false },
+  { key: "background_check", question: "Will you complete a background check and, if asked, provide documents showing your education and employment history?", category: "OTHER", requiresHumanReview: false, autoSubmitAllowed: true, sensitive: false },
+  { key: "previous_employment", question: "Have you worked for this company before?", category: "OTHER", requiresHumanReview: false, autoSubmitAllowed: true, sensitive: false },
   { key: "certify_information", question: "Do you certify that the information in your application is true and complete?", category: "OTHER", requiresHumanReview: false, autoSubmitAllowed: true, sensitive: false },
   { key: "demographic_gender", question: "Gender (voluntary self-identification)", category: "DEMOGRAPHIC", requiresHumanReview: false, autoSubmitAllowed: true, sensitive: true },
   { key: "demographic_hispanic", question: "Are you Hispanic or Latino? (voluntary self-identification)", category: "DEMOGRAPHIC", requiresHumanReview: false, autoSubmitAllowed: true, sensitive: true },
+  { key: "demographic_transgender", question: "Do you identify as transgender? (voluntary self-identification)", category: "DEMOGRAPHIC", requiresHumanReview: false, autoSubmitAllowed: true, sensitive: true },
   { key: "demographic_race", question: "Race / ethnicity (voluntary self-identification)", category: "DEMOGRAPHIC", requiresHumanReview: false, autoSubmitAllowed: true, sensitive: true },
   { key: "military_status", question: "Are you currently serving, or have you served, in the military?", category: "DEMOGRAPHIC", requiresHumanReview: false, autoSubmitAllowed: true, sensitive: true },
   { key: "demographic_veteran", question: "Veteran status (voluntary self-identification)", category: "DEMOGRAPHIC", requiresHumanReview: false, autoSubmitAllowed: true, sensitive: true },
+  { key: "demographic_veteran_spouse", question: "Are you the spouse or domestic partner of a veteran? (voluntary self-identification)", category: "DEMOGRAPHIC", requiresHumanReview: false, autoSubmitAllowed: true, sensitive: true },
   { key: "demographic_disability", question: "Disability status (voluntary self-identification)", category: "DEMOGRAPHIC", requiresHumanReview: false, autoSubmitAllowed: true, sensitive: true },
 ];
 

@@ -38,4 +38,12 @@ describe("listingSite", () => {
     expect(listingSite("https://www.builtinchicago.org/job/x/1")).toBe("builtin");
     expect(listingSite("https://careers.builtinsoftware.com/jobs/1")).toBeNull();
   });
+
+  it("treats job aggregators as listing sites, so their jobs are followed to the employer", () => {
+    expect(listingSite("https://jooble.org/jdp/3141251411449451346")).toBe("jooble");
+    expect(listingSite("https://www.jobleads.com/us/job/entry-level-sales--new-york--ea1fe508d2")).toBe("jobleads");
+    expect(listingSite("https://www.simplyhired.com/job/abc")).toBe("simplyhired");
+    expect(listingSite("https://www.talent.com/view?id=1")).toBe("talent");
+    expect(listingSite("https://job-boards.greenhouse.io/talentcom/jobs/1")).toBeNull();
+  });
 });

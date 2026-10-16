@@ -347,6 +347,7 @@ class AttemptRun {
         documents: { resume: documents.resume ? { fileName: documents.resume.fileName } : null, coverLetter: documents.coverLetter ? { fileName: documents.coverLetter.fileName } : null },
         fieldConfidenceThreshold: data.settings.fieldConfidenceThreshold,
         answerConfidenceThreshold: data.settings.answerConfidenceThreshold,
+        company: data.job.company,
       });
       const ctx: AdapterContext<Page> = {
         page: this.page,

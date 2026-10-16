@@ -40,7 +40,7 @@ export interface ApplicantOptions {
   coverLetter?: boolean;
   profile?: Partial<Parameters<typeof updatePersonal>[1]>;
   library?: Array<{ key: string; question: string; answer: string; category: AnswerCategory; review?: boolean; auto?: boolean; confidence?: number }>;
-  education?: { school: string; degree?: string };
+  education?: { school: string; degree?: string; graduationDate?: Date };
 }
 
 /** A user with a filled-in profile, a resume, and Answer Library entries for the usual questions. */

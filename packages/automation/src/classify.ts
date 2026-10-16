@@ -100,23 +100,30 @@ const QUESTION_PATTERNS: Array<[RegExp, string]> = [
   [/(people )?manage(ment|rial)? experience|years (of )?(managing|management)|direct reports/, "management_experience"],
   [/(how many )?years of (professional |relevant |work )?experience|total experience/, "years_experience"],
   [/start date|when can you start|available to start|earliest start|notice period/, "start_date"],
+  // Before gender, which its wording also mentions.
+  [/\btransgender\b/, "demographic_transgender"],
   [/\bgender\b|\bsex\b/, "demographic_gender"],
   // "Are you Hispanic/Latino?" is its own Yes / No question on US forms, separate from race.
   [/^(?!.*\b(race|racial|ethnicity)\b).*\b(hispanic|latin[oax]|latine)\b/, "demographic_hispanic"],
   [/\brace\b|ethnicity|hispanic|latino/, "demographic_race"],
+  // Before veteran status: whether the applicant is a veteran's spouse or partner is its own question.
+  [/\b(spouse|partner|wife|husband)\b.{0,40}\bveteran|\bveteran'?s? (spouse|partner)\b/, "demographic_veteran_spouse"],
   [/veteran/, "demographic_veteran"],
   [/\b(active|current(ly)?|serv(e|ed|ing)|member of|in) (the )?(us |u s )?(military|armed forces|national guard|reserves?)\b|\bactive duty\b|\bactive-duty\b|\bmilitary (service|status|member|experience)\b/, "military_status"],
   [/disabilit/, "demographic_disability"],
   [/\b(18|eighteen) ?(years )?(of age|years old|or older|or over|\+)|\bat least (18|eighteen)\b|\bover (the age of )?(18|eighteen)\b|\blegal (working )?age\b/, "age_18"],
   [/\b(employed|working|work) (by|for|at) (a |an |any )?(current )?(client|customer|partner|competitor|vendor|supplier)s?\b/, "competitor_employment"],
   [/how did you (first |initially |originally )?(hear|learn|find out) (about|of)|where did you (first )?(hear|learn|find out) about|how did you find (this|our|the) (job|role|position|opening)/, "how_did_you_hear"],
-  [/\bprivacy (notice|statement|policy|disclosure)\b/, "privacy_acknowledgement"],
+  [/\bprivacy (notice|statement|policy|disclosure|laws?|act)\b|\b(your )?data (will be|is) processed\b/, "privacy_acknowledgement"],
   [/\b(certify|attest|affirm|declare)\b.{0,120}\b(true|accurate|correct|complete)\b|\binformation (i have |i've )?(provided|submitted|given)\b.{0,40}\b(true|accurate|correct|complete)\b/, "certify_information"],
-  [/\b(work|working|be|report)\b.{0,40}\b(in[- ]person|on[- ]?site|in (the |our |an )?office|from (the |our )?office|hybrid)\b|\b(in[- ]office|in[- ]person|on[- ]?site|hybrid)\b.{0,60}\b(days?|times?) (a|per|each) week\b|\bcommute to (the |our |this )?office\b/, "onsite_work"],
+  [/\b(work|working|be|report|come|coming)\b.{0,40}\b(in[- ]person|on[- ]?site|in(to)? (the |our |an )?office|from (the |our )?office|hybrid)\b|\b(in[- ]office|in[- ]person|on[- ]?site|hybrid)\b.{0,60}\b(days?|times?) (a|per|each) week\b|\bcommute to (the |our |this )?office\b/, "onsite_work"],
+  [/\b(talent (community|network|pool)|mailing list)\b|\b(contact|email|notify) me\b.{0,40}\b(future|other) (job )?(opportunities|openings|roles)\b/, "talent_community"],
+  [/\bbackground (check|screening|investigation)\b|\b(provide|submit) (any )?(documentation|documents|proof)\b.{0,60}\b(education|employment|work) history\b/, "background_check"],
+  [/\b(have|had) you (ever )?(been )?(previously |formerly )?(employed|worked|interned)\b.{0,60}\b(before|previously|in the past|prior)\b|\b(previously|formerly|ever) (been )?(employed|worked) (by|for|at)\b|\bformer (employee|intern)\b|\bworked (here|for us) before\b/, "previous_employment"],
 ];
 
 /** Questions about the applicant even when they mention a former employer, a referral or a manager. */
-const ABOUT_THE_APPLICANT = new Set(["demographic_data_consent", "onsite_work", "age_18", "restrictive_agreements", "competitor_employment", "how_did_you_hear", "privacy_acknowledgement", "certify_information"]);
+const ABOUT_THE_APPLICANT = new Set(["demographic_data_consent", "onsite_work", "age_18", "restrictive_agreements", "competitor_employment", "how_did_you_hear", "privacy_acknowledgement", "certify_information", "demographic_veteran_spouse", "previous_employment", "talent_community", "background_check"]);
 
 export function matchStandardQuestion(label: string): string | null {
   const text = normalizeLabel(label);

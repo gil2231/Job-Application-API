@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { approveForSubmission, markHumanStepComplete, prisma } from "@autoapply/database";
-import { ATS_ENTRY_POINTS, PRIVACY_CONSENTS } from "../mock-site/ats";
+import { ATS_ENTRY_POINTS, LEVER_CARD_FIELDS, PRIVACY_CONSENTS } from "../mock-site/ats";
 import { startMockSite, type MockSite } from "../mock-site/server";
 import { loadApplication, makeApplicant, makeEngine, queueFor, resetDatabase, runOnce, VisibleBrowserPool, type ApplicantOptions } from "./helpers";
 import { decryptString, isEncrypted } from "@autoapply/database/crypto";
@@ -204,6 +204,24 @@ describe("Lever", () => {
     expect(site.forbidden).toEqual([]);
   });
 
+  it("reads typed custom questions by their question text, picks the country from a location list and accepts the privacy notice", async () => {
+    const { after } = await apply(ATS_ENTRY_POINTS.leverCustomQuestions, { education: { school: "Fordham University", degree: "Bachelor of Science", graduationDate: new Date("2024-05-15T12:00:00Z") } });
+    expect(after.status, why(after)).toBe("SUBMITTED");
+    const { fields, form } = site.submissions[0]!;
+    expect(form).toBe("lever-cards");
+    expect(fields).toMatchObject({
+      [LEVER_CARD_FIELDS.degree]: "Bachelor of Science",
+      [LEVER_CARD_FIELDS.school]: "Fordham University",
+      [LEVER_CARD_FIELDS.graduated]: "May 2024",
+      // The profile's city isn't a country; the profile's country is.
+      [LEVER_CARD_FIELDS.location]: "United States",
+      "consent[store]": "1",
+    });
+    // Hearing about other openings is the person's choice, and they haven't made it.
+    expect(fields["consent[marketing]"]).toBeUndefined();
+    expect(after.questions.map((q) => q.label)).not.toContain("Type your response");
+  });
+
   it("stops for the person when an hCaptcha appears on submit", async () => {
     const { after } = await apply(ATS_ENTRY_POINTS.leverGuarded);
     expect(after.status, why(after)).toBe("WAITING_FOR_USER");
@@ -321,8 +339,10 @@ describe("Workday", () => {
     expect(after.status).toBe("REVIEW_REQUIRED");
     expect(after.attentionReason).toBe("QUESTION_REVIEW");
     expect(after.questions.filter((q) => q.status === "NEEDS_REVIEW").map((q) => q.label)).toEqual(
-      expect.arrayContaining([expect.stringContaining("How Did You Hear"), expect.stringContaining("previously worked"), expect.stringContaining("Phone Device Type")]),
+      expect.arrayContaining([expect.stringContaining("How Did You Hear"), expect.stringContaining("Phone Device Type")]),
     );
+    // Whether they worked for this employer comes from their work history, which doesn't include Example Corp.
+    expect(after.questions.find((q) => q.label.includes("previously worked"))).toMatchObject({ status: "ANSWERED", answer: { value: "No" } });
     const source = after.questions.find((q) => q.label.startsWith("How Did You Hear"))!;
     expect(source.options).toEqual(["Job Board", "LinkedIn", "Company Website", "Referral"]);
     expect(site.submissions).toHaveLength(0);

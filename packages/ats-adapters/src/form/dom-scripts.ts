@@ -112,6 +112,21 @@ const HELPERS = String.raw`
     }
     return null;
   };
+  // A box with no label of its own under a platform's question heading (Lever's custom questions:
+  // li.application-question > .application-label holds the text, the textarea only says "Type your response").
+  const platformLabelOf = (el) => {
+    if (!PLATFORM_GROUP_LABELS.length) return null;
+    let node = el.parentElement;
+    for (let depth = 0; node && depth < 4; depth++, node = node.parentElement) {
+      for (const sel of PLATFORM_GROUP_LABELS) {
+        const heading = node.querySelector(sel);
+        // Not another field's own label.
+        if (!heading || (heading.tagName === "LABEL" && heading.control && heading.control !== el)) continue;
+        if (!heading.querySelector("input, select, textarea, button") && clean(heading.textContent)) return { text: clean(heading.textContent), via: "dom" };
+      }
+    }
+    return null;
+  };
   const cssPathIn = (el) => {
     const parts = [];
     let node = el;
@@ -176,7 +191,7 @@ const SCAN_FIELDS_BODY = String.raw`
   for (const el of customs) {
     if (ignored(el) || el.disabled || el.getAttribute("aria-disabled") === "true" || !visible(el)) continue;
     const isButton = el.tagName === "BUTTON";
-    const lab = labelOf(el);
+    const lab = labelOf(el) || platformLabelOf(el);
     const label = lab ? lab.text : clean(el.getAttribute("placeholder")) || clean(el.getAttribute("name"));
     out.push({ ...base(el, isButton ? "button" : "text"), kind: "select", widget: isButton ? "listbox" : "combobox", label, labelVia: lab ? lab.via : "none", required: isRequired(el, label), options: listboxOptions(el), multiple: false });
   }
@@ -216,7 +231,7 @@ const SCAN_FIELDS_BODY = String.raw`
       groups.get(key).members.push({ label: optionLabel, value: el.value, required: el.required || el.getAttribute("aria-required") === "true", checked: el.checked });
       continue;
     }
-    const lab = labelOf(el);
+    const lab = labelOf(el) || platformLabelOf(el);
     const label = lab ? lab.text : clean(b.placeholder) || clean(b.name);
     let options;
     if (el.tagName === "SELECT") options = Array.from(el.options).map((o) => clean(o.textContent));

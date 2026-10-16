@@ -49,6 +49,32 @@ describe("field classification", () => {
     expect(classify("What are your salary expectations?")).toMatchObject({ mappedField: "answer.library", questionKey: "salary_expectations" });
   });
 
+  it.each([
+    ["Are you based in San Francisco, Austin or New York and will you come into the office three days a week?", "onsite_work"],
+    ["Select 'Yes' to join Braze's Talent Community and receive updates about future opportunities", "talent_community"],
+    ["Contact me about future job opportunities.", "talent_community"],
+    ["If requested, would you be able to provide documentation reflecting the education and employment history you have listed?", "background_check"],
+    ["Are you willing to undergo a background check?", "background_check"],
+    ["Are you a spouse or domestic partner to a veteran?", "demographic_veteran_spouse"],
+    ["Would you describe yourself as transgender?", "demographic_transgender"],
+    ["Have you been employed by Gemini in the past?", "previous_employment"],
+    ["Have you previously worked at Stripe?", "previous_employment"],
+    ["By applying for this position, your data will be processed in accordance to federal data privacy laws.", "privacy_acknowledgement"],
+  ])("recognizes %s", (label, key) => {
+    expect(matchStandardQuestion(label)).toBe(key);
+    expect(classify(label, { kind: "radio", options: ["Yes", "No"] })).toMatchObject({ mappedField: "answer.library", questionKey: key });
+  });
+
+  it.each([
+    ["What is your highest level of completed education?", "education.degree"],
+    ["What is the highest level of education you've obtained?", "education.degree"],
+    ["What is the name of the most recent institution you attended?", "education.school"],
+    ["When did you graduate [Month and Year]?", "education.graduationDate"],
+    ["Personal website or other links", "masterProfile.websiteUrl"],
+  ])("maps %s to %s", (label, key) => {
+    expect(classify(label).mappedField).toBe(key);
+  });
+
   it("recognizes military service questions, separately from veteran self-identification", () => {
     expect(matchStandardQuestion("Are you an active military member?")).toBe("military_status");
     expect(matchStandardQuestion("Are you currently serving in the U.S. Armed Forces?")).toBe("military_status");
@@ -266,6 +292,46 @@ describe("FieldResolver on checkbox groups and long lists", () => {
     const f = group("Applicant Privacy Statement", consents);
     const stored = [{ pageIndex: 0, normalizedKey: f.key!, status: "APPROVED" as const, answer: { value: consents[1]!, approvedByUser: true } }];
     expect(await new FieldResolver({ ...input, stored }).resolve(f)).toMatchObject({ value: [consents[1]], status: "ANSWERED" });
+  });
+
+  it("answers a location list of countries with the country, not the city", async () => {
+    const f = field("What is your location?", { kind: "select", options: ["Select...", "Afghanistan", "Albania", "United States", "Uruguay"] });
+    expect(await new FieldResolver(input).resolve(f)).toMatchObject({ value: "United States", status: "ANSWERED" });
+    const states = field("Location", { kind: "select", options: ["California", "New Jersey", "New York", "Texas"] });
+    expect(await new FieldResolver(input).resolve(states)).toMatchObject({ value: "New York", status: "ANSWERED" });
+  });
+
+  it("acknowledges a privacy notice without asking, and leaves the job-alerts box alone", async () => {
+    const none = { ...input, library: [] };
+    const box = field("By applying for this position, your data will be processed in accordance to federal data privacy laws.", { kind: "checkbox" });
+    expect(await new FieldResolver(none).resolve(box)).toMatchObject({ value: "Yes", status: "ANSWERED" });
+    const single = field("Job Applicant Privacy Notice", { kind: "select", options: ["Acknowledge/Confirm"] });
+    expect(await new FieldResolver(none).resolve(single)).toMatchObject({ value: "Acknowledge/Confirm", status: "ANSWERED" });
+    expect(await new FieldResolver(none).resolve(field("Contact me about future job opportunities.", { kind: "checkbox", required: false }))).toMatchObject({ status: "SKIPPED" });
+    // An optional data box is the person's choice.
+    expect(await new FieldResolver(none).resolve(field("Your data will be processed for marketing purposes.", { kind: "checkbox", required: false }))).toMatchObject({ status: "SKIPPED" });
+  });
+
+  it("answers whether the person worked for this employer from their work history", async () => {
+    const profile = { ...input.profile, employment: [{ company: "Gemini Trust Company, LLC", title: "Intern", startDate: "2023-06-01", endDate: "2023-08-31" }] };
+    const q = (label: string) => field(label, { kind: "radio", options: ["Yes", "No"] });
+    expect(await new FieldResolver({ ...input, profile, company: "Gemini" }).resolve(q("Have you been employed by Gemini in the past?"))).toMatchObject({ value: "Yes", status: "ANSWERED" });
+    expect(await new FieldResolver({ ...input, profile, company: "Stripe" }).resolve(q("Have you previously worked at Stripe?"))).toMatchObject({ value: "No", status: "ANSWERED" });
+    expect(await new FieldResolver({ ...input, profile, company: "Stripe" }).resolve(q("Have you worked for us before?"))).toMatchObject({ value: "No", status: "ANSWERED" });
+    // Not about this employer: left for the person, as before.
+    expect(await new FieldResolver({ ...input, profile, company: "Stripe" }).resolve(q("Have you ever worked at a startup before?"))).toMatchObject({ status: "NEEDS_REVIEW" });
+    expect(await new FieldResolver({ ...input, profile, company: "Stripe" }).resolve(q("Have you previously worked in the US?"))).toMatchObject({ status: "NEEDS_REVIEW" });
+    expect(await new FieldResolver({ ...input, profile, company: "Gemini Trust Company" }).resolve(q("Have you been employed by Gemini in the past?"))).toMatchObject({ value: "Yes" });
+  });
+
+  it("puts LinkedIn in a required website box when there's no website, and writes the graduation month the way it's asked", async () => {
+    const profile = { ...input.profile, linkedinUrl: "https://www.linkedin.com/in/gil", education: [{ school: "Fordham University", degree: "Bachelor of Science", graduationDate: "2024-05-15" }] };
+    expect(await new FieldResolver({ ...input, profile }).resolve(field("Personal website or other links"))).toMatchObject({ value: "https://www.linkedin.com/in/gil", status: "ANSWERED" });
+    expect(await new FieldResolver({ ...input, profile }).resolve(field("Website", { required: false }))).toMatchObject({ status: "SKIPPED" });
+    expect(await new FieldResolver({ ...input, profile }).resolve(field("When did you graduate [Month and Year]?"))).toMatchObject({ value: "May 2024" });
+    expect(await new FieldResolver({ ...input, profile }).resolve(field("Graduation year"))).toMatchObject({ value: "2024" });
+    expect(await new FieldResolver({ ...input, profile }).resolve(field("Graduation date", { kind: "date" }))).toMatchObject({ value: "2024-05-15" });
+    expect(await new FieldResolver({ ...input, profile }).resolve(field("Graduation date (MM/YYYY)"))).toMatchObject({ value: "05/2024" });
   });
 
   it("fills a country from the person's US state", async () => {

@@ -69,6 +69,8 @@ export interface ResolverInput {
   classifier?: FieldClassifier;
   /** Drafts suggestions for required questions nothing else answers. Optional. */
   drafter?: AnswerDrafter;
+  /** The employer the application is for, for questions about it ("Have you worked for us before?"). */
+  company?: string | null;
 }
 
 /** Highest confidence a differently worded saved answer can carry: under the default threshold, so it's a suggestion. */
@@ -100,6 +102,33 @@ const LABELS: Partial<Record<ProfileFieldKey, string>> = {
 };
 
 const looksLikeYesNoQuestion = (label: string) => /^\s*(are|do|does|did|will|would|have|has|can|could|is|were|should|may)\b/i.test(label);
+
+/** A company name reduced to its words, without "Inc", "LLC" and the like. */
+const companyWords = (name: string) =>
+  ` ${name.toLowerCase().replace(/&/g, " and ").replace(/[^a-z0-9]+/g, " ").replace(/\b(inc|incorporated|llc|ltd|limited|corp|corporation|co|company|plc|the)\b/g, " ").replace(/\s+/g, " ").trim()} `;
+const GENERIC_FIRST_WORDS = new Set(["american", "national", "united", "global", "general", "first", "international", "north", "south", "east", "west", "new", "great"]);
+/** Whether the text names the company, by its full name or a distinctive first word ("Gemini" for "Gemini Trust Company"). */
+function mentionsCompany(text: string, company: string): boolean {
+  const name = companyWords(company);
+  if (name.trim().length < 2) return false;
+  const words = companyWords(text);
+  if (words.includes(name)) return true;
+  const first = name.trim().split(" ")[0]!;
+  return first.length >= 4 && !GENERIC_FIRST_WORDS.has(first) && words.includes(` ${first} `);
+}
+
+const MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+
+/** A date the way a text box asks for it: "May 2024" for a month and year, "05/2024" for MM/YYYY, "2024" for a year, else YYYY-MM-DD. */
+function dateForLabel(isoDate: string, label: string): string {
+  const [year, month, day] = isoDate.split("-");
+  if (!year || !month || !day) return isoDate;
+  if (/\bmm\s*\/\s*dd\s*\/\s*yyyy\b/i.test(label)) return `${month}/${day}/${year}`;
+  if (/\bmm\s*\/\s*yyyy\b/i.test(label)) return `${month}/${year}`;
+  if (/\bmonth\b/i.test(label)) return `${MONTHS[Number(month) - 1]} ${year}`;
+  if (/\b(year|yyyy)\b/i.test(label) && !/\b(day|date)\b/i.test(label)) return year;
+  return isoDate;
+}
 
 const iso = (d: Date | string | null | undefined) => (d ? new Date(d).toISOString().slice(0, 10) : null);
 
@@ -190,7 +219,12 @@ export class FieldResolver {
   }
 
   private resolveProfile(field: DetectedField, c: Classification): FieldMapping {
-    const value = profileValue(c.mappedField, this.input.profile);
+    let value = profileValue(c.mappedField, this.input.profile);
+    // A required website or portfolio box takes another link from the profile: most people have only LinkedIn.
+    if (value == null && field.required && (c.mappedField === "masterProfile.websiteUrl" || c.mappedField === "masterProfile.portfolioUrl")) {
+      value = (["masterProfile.portfolioUrl", "masterProfile.websiteUrl", "masterProfile.linkedinUrl", "masterProfile.githubUrl"] as const).map((k) => profileValue(k, this.input.profile)).find((v) => v != null) ?? null;
+    }
+    if (value != null && c.mappedField === "education.graduationDate" && (field.kind === "text" || field.kind === "textarea")) value = dateForLabel(value, field.label);
     const base = { field, detectedLabel: field.label, mappedField: c.mappedField, autoSubmitAllowed: true } as const;
     if (value == null) {
       if (!field.required) return { ...base, value: null, confidence: c.confidence, source: "none", status: "SKIPPED" };
@@ -203,6 +237,14 @@ export class FieldResolver {
   }
 
   private async resolveLibrary(field: DetectedField, c: Classification): Promise<FieldMapping> {
+    if (c.questionKey === "previous_employment") {
+      const company = this.input.company?.trim();
+      // Only a question about this employer can be answered from the work history; "Have you worked at a startup before?" can't.
+      const aboutThem = company && (mentionsCompany(field.label, company) || /\b(for|with|by|at) us\b|\b(this|our) (company|team|organi[sz]ation|firm)\b/i.test(field.label));
+      if (!aboutThem) return this.resolveUnknown(field);
+      const worked = this.input.profile.employment.some((e) => mentionsCompany(e.company, company) || mentionsCompany(company, e.company));
+      return this.withOption({ field, detectedLabel: field.label, mappedField: "answer.library", questionKey: c.questionKey, value: worked ? "Yes" : "No", confidence: 95, source: "profile", status: "ANSWERED", autoSubmitAllowed: true });
+    }
     const key = field.key ?? "";
     const answer = this.input.library.find((a) => a.questionKey === c.questionKey) ?? this.input.library.find((a) => a.questionKey === key);
     const base = { field, detectedLabel: field.label, mappedField: "answer.library" as const, questionKey: c.questionKey };
@@ -226,6 +268,10 @@ export class FieldResolver {
         return { ...gated, status: "NEEDS_REVIEW", reviewReason: "Your Answer Library marks this answer for review before it's sent." };
       }
       return gated;
+    }
+    // A required privacy notice box comes with every application; applying means acknowledging it.
+    if (c.questionKey === "privacy_acknowledgement" && field.required) {
+      return this.withOption({ ...base, value: "Yes", confidence: 95, source: "profile", status: "ANSWERED", autoSubmitAllowed: true });
     }
     const derived = c.questionKey ? deriveAnswerFromProfile(c.questionKey, this.input.profile) : null;
     if (derived) {
@@ -327,7 +373,8 @@ export class FieldResolver {
     }
     if (field.kind !== "select" && field.kind !== "radio") return mapping;
     const options = (field.options ?? []).filter((o) => !isPlaceholderOption(o));
-    const match = chooseOption(mapping.value, options);
+    // A "location" list of states or countries: the city isn't on it, the state or country is.
+    const match = chooseOption(mapping.value, options) ?? [mapping.place?.country, mapping.place?.state].map((p) => (p ? chooseOption(p, options) : null)).find((m) => m && m.confidence >= 90) ?? null;
     // A searchable list (a school picker) shows only its first choices; the value is searched for when filling.
     if (!match && field.hints?.widget === "search") return mapping;
     if (!match) {

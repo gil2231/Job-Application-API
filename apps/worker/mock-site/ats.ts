@@ -311,6 +311,10 @@ async function greenhouse(req: IncomingMessage, res: ServerResponse, path: strin
 
 const LEVER_ID = "5f2e1c9a-7b3d-4e21-9c55-0a1b2c3d4e5f";
 const LEVER_GUARDED_ID = "9d8c7b6a-5e4f-4a3b-8c2d-1e0f9a8b7c6d";
+/** A posting with Lever's typed-answer custom questions, a location list and its privacy consent box. */
+const LEVER_CARDS_ID = "2a6b8c0d-1e3f-4a5b-9c7d-8e9f0a1b2c3d";
+const LEVER_CARD_FIELDS = { degree: `cards[${LEVER_ID}][field3]`, school: `cards[${LEVER_ID}][field4]`, graduated: `cards[${LEVER_ID}][field5]`, location: `cards[${LEVER_ID}][field6]` };
+const LEVER_COUNTRIES = ["Afghanistan", "Albania", "Algeria", "United Kingdom", "United States", "Uruguay"];
 
 function leverJob(id: string): string {
   return shell(
@@ -330,6 +334,25 @@ function leverApply(id: string, values: Values = {}, errors: Record<string, stri
     `<li class="application-question custom-question"><div class="application-label full-width"><div class="text">${esc(label)}${required ? '<span class="required">✱</span>' : ""}</div></div><div class="application-field full-width"><ul data-qa="multiple-choice">${options
       .map((o) => `<li><label><input type="${type}" name="cards[${LEVER_ID}][${field}]" value="${esc(o)}"${required && type === "radio" ? " required" : ""}${str(values[`cards[${LEVER_ID}][${field}]`]).split(", ").includes(o) ? " checked" : ""}><span class="application-answer-alternative">${esc(o)}</span></label></li>`)
       .join("")}</ul>${errors[`cards[${LEVER_ID}][${field}]`] ? `<p class="error">${esc(errors[`cards[${LEVER_ID}][${field}]`]!)}</p>` : ""}</div></li>`;
+  // Lever's typed-answer questions: the question is in .application-label, the box itself only says "Type your response".
+  const typed = (name: string, label: string, tag: "input" | "textarea") =>
+    `<li class="application-question custom-question"><div class="application-label full-width"><div class="text">${esc(label)}<span class="required">✱</span></div></div><div class="application-field full-width required-field">${
+      tag === "textarea"
+        ? `<textarea class="card-field-input" name="${name}" placeholder="Type your response" required>${esc(str(values[name]))}</textarea>`
+        : `<input class="card-field-input" type="text" name="${name}" placeholder="Type your response" value="${esc(str(values[name]))}" required>`
+    }${errors[name] ? `<p class="error">${esc(errors[name]!)}</p>` : ""}</div></li>`;
+  const cards =
+    id === LEVER_CARDS_ID
+      ? `${typed(LEVER_CARD_FIELDS.degree, "What is the highest level of education you've obtained?", "textarea")}
+          ${typed(LEVER_CARD_FIELDS.school, "What is the name of the most recent institution you attended?", "textarea")}
+          ${typed(LEVER_CARD_FIELDS.graduated, "When did you graduate [Month and Year]?", "input")}
+          <li class="application-question custom-question"><div class="application-label full-width"><div class="text">What is your location?<span class="required">✱</span></div></div><div class="application-field full-width required-field"><select name="${LEVER_CARD_FIELDS.location}" required><option value="">Select...</option>${LEVER_COUNTRIES.map((c) => `<option${values[LEVER_CARD_FIELDS.location] === c ? " selected" : ""}>${c}</option>`).join("")}</select></div></li>`
+      : "";
+  const consent =
+    id === LEVER_CARDS_ID
+      ? `<h4>Privacy</h4><ul><li class="application-question"><label><input type="checkbox" name="consent[store]" value="1" required><span class="consent-required">By applying for this position, your data will be processed in accordance to federal data privacy laws.</span></label>${errors["consent[store]"] ? `<p class="error">${esc(errors["consent[store]"]!)}</p>` : ""}</li>
+          <li class="application-question"><label><input type="checkbox" name="consent[marketing]" value="1"><span>Contact me about future job opportunities.</span></label></li></ul>`
+      : "";
   const guarded = id === LEVER_GUARDED_ID;
   return shell(
     "Example Corp - Account Executive",
@@ -357,7 +380,9 @@ function leverApply(id: string, values: Values = {}, errors: Record<string, stri
           ${card("field0", AUTH_Q, ["Yes", "No"], "radio", true)}
           ${card("field1", SPONSOR_Q, ["Yes", "No"], "radio", true)}
           ${card("field2", "Which of these sales tools have you used?", ["Salesforce", "HubSpot", "Outreach"], "checkbox", false)}
+          ${cards}
         </ul>
+        ${consent}
         <h4>Additional information</h4><ul><li class="application-question"><label><div class="application-label">Add a cover letter or anything else you want to share.</div><div class="application-field"><textarea name="comments" rows="4"></textarea></div></label></li></ul>
         <div id="captcha-slot"></div>
         <p><button id="btn-submit" type="submit" class="template-btn-submit postings-btn" data-qa="btn-submit">Submit application</button></p>
@@ -401,12 +426,13 @@ async function lever(req: IncomingMessage, res: ServerResponse, path: string, h:
   }
   if (req.method === "POST") {
     const { fields, files } = await h.readForm(req);
-    const errors = requireAll(["resume", "name", "email", `cards[${LEVER_ID}][field0]`, `cards[${LEVER_ID}][field1]`], fields, files, ["resume"]);
+    const required = ["resume", "name", "email", `cards[${LEVER_ID}][field0]`, `cards[${LEVER_ID}][field1]`, ...(id === LEVER_CARDS_ID ? [...Object.values(LEVER_CARD_FIELDS), "consent[store]"] : [])];
+    const errors = requireAll(required, fields, files, ["resume"]);
     if (Object.keys(errors).length) {
       h.send(res, 422, leverApply(id!, fields, errors));
       return true;
     }
-    h.record(id === LEVER_GUARDED_ID ? "lever-guarded" : "lever", fields, files);
+    h.record(id === LEVER_GUARDED_ID ? "lever-guarded" : id === LEVER_CARDS_ID ? "lever-cards" : "lever", fields, files);
     h.redirect(res, `/lever/examplecorp/${id}/thanks`);
     return true;
   }
@@ -834,6 +860,7 @@ async function smartRecruiters(req: IncomingMessage, res: ServerResponse, path: 
 
 /** Entry pages for each mock ATS, as a job's application link would point to them. */
 export const PRIVACY_CONSENTS = PRIVACY_CHOICES;
+export { LEVER_CARD_FIELDS };
 
 export const ATS_ENTRY_POINTS = {
   greenhouse: GH_PATH,
@@ -843,6 +870,7 @@ export const ATS_ENTRY_POINTS = {
   greenhouseCheckboxGroups: GH_GROUPS_PATH,
   lever: `/lever/examplecorp/${LEVER_ID}`,
   leverGuarded: `/lever/examplecorp/${LEVER_GUARDED_ID}`,
+  leverCustomQuestions: `/lever/examplecorp/${LEVER_CARDS_ID}`,
   ashby: `/ashby/examplecorp/${ASHBY_ID}`,
   workday: WD_BASE,
   workdaySlow: WD_SLOW,

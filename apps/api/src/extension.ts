@@ -261,6 +261,7 @@ export async function extensionRoutes(app: FastifyInstance) {
         documents: { resume: data.resume ? { fileName: data.resume.fileName } : null, coverLetter: data.coverLetter ? { fileName: data.coverLetter.fileName } : null },
         fieldConfidenceThreshold: data.settings.fieldConfidenceThreshold,
         answerConfidenceThreshold: data.settings.answerConfidenceThreshold,
+        company: data.job.company,
       });
       const fields = toDetectedFields(body.fields as ScannedField[], body.pageIndex);
       const plan = [];
