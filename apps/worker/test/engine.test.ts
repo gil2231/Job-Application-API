@@ -89,12 +89,6 @@ describe("automation modes", () => {
     const app = await queueFor(user.id, `${site.url}/checkboxes`, { mode: "AUTO" });
     await prisma.applicationAnswer.updateMany({ where: { userId: user.id }, data: {} });
     await runOnce(engine, workerId, app.id);
-    const after = await loadApplication(app.id);
-    // The privacy checkbox is unknown, so it stops for that first; answer it, then the contradiction shows.
-    expect(after.status).toBe("REVIEW_REQUIRED");
-    const privacy = after.questions.find((q) => q.normalizedKey.startsWith("i_have_read"))!;
-    await approveQuestionAnswer(user.id, privacy.id, "Yes");
-    await runOnce(engine, workerId, app.id);
     const final = await loadApplication(app.id);
     expect(final.status).toBe("REVIEW_REQUIRED");
     expect(final.attentionReason).toBe("CONTRADICTION");
@@ -126,24 +120,14 @@ describe("form patterns", () => {
     expect(site.submissions[0]!.fields).toMatchObject({ country: "United States of America", state: "New York", experience: "3-5 years" });
   });
 
-  it("checkboxes and radios: answers from the library, asks about the consent box, then submits", async () => {
+  it("checkboxes and radios: answers from the library, acknowledges the required privacy notice, and submits", async () => {
     const user = await makeApplicant();
     const app = await queueFor(user.id, `${site.url}/checkboxes`);
     await runOnce(engine, workerId, app.id);
-    let after = await loadApplication(app.id);
-    expect(after.status).toBe("REVIEW_REQUIRED");
-    expect(after.attentionReason).toBe("QUESTION_REVIEW");
-    const review = after.questions.filter((q) => q.status === "NEEDS_REVIEW");
-    expect(review.map((q) => q.label)).toEqual([expect.stringContaining("privacy notice")]);
-    // A privacy notice is a standard question: answered once, then reused on every application.
-    expect(review[0]!.reviewReason).toContain("Answer it once");
-    expect(site.submissions).toHaveLength(0);
-
-    await approveQuestionAnswer(user.id, review[0]!.id, "Yes");
-    expect((await loadApplication(app.id)).status).toBe("QUEUED");
-    await runOnce(engine, workerId, app.id);
-    after = await loadApplication(app.id);
+    const after = await loadApplication(app.id);
     expect(after.status, after.attentionDetail ?? "").toBe("SUBMITTED");
+    // Applying means acknowledging the privacy notice, so it isn't a question for the person.
+    expect(after.questions.find((q) => q.label.includes("privacy notice"))).toMatchObject({ status: "ANSWERED" });
     expect(site.submissions[0]!.fields).toMatchObject({ authorized: "Yes", sponsorship: "No", privacy: "yes" });
   });
 
